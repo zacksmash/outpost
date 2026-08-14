@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zacksmash\Outpost;
 
 use Closure;
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
 
@@ -16,6 +17,7 @@ class Provisioner
     public function __construct(
         protected readonly Runtime $runtime,
         protected readonly Outposts $outposts,
+        protected readonly Repository $config,
     ) {}
 
     /**
@@ -92,9 +94,9 @@ class Provisioner
                 'DB_CONNECTION' => $manifest->database,
                 'DB_HOST' => '127.0.0.1',
                 'DB_PORT' => $manifest->database === 'pgsql' ? '5432' : '3306',
-                'DB_DATABASE' => config()->string('outpost.database.database'),
-                'DB_USERNAME' => config()->string('outpost.database.username'),
-                'DB_PASSWORD' => config()->string('outpost.database.password'),
+                'DB_DATABASE' => $this->credential('database'),
+                'DB_USERNAME' => $this->credential('username'),
+                'DB_PASSWORD' => $this->credential('password'),
             ];
         }
 
@@ -121,6 +123,22 @@ class Provisioner
     }
 
     /**
+     * Read a sandbox database credential, refusing unsafe characters.
+     */
+    protected function credential(string $key): string
+    {
+        $value = $this->config->get("outpost.database.{$key}");
+
+        if (! is_string($value) || preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]*$/D', $value) !== 1) {
+            throw new RuntimeException(
+                "The [outpost.database.{$key}] value must start with a letter or number and may only contain letters, numbers, dots, dashes, and underscores.",
+            );
+        }
+
+        return $value;
+    }
+
+    /**
      * Write the given values into the environment file, replacing in place.
      *
      * @param  array<string, string>  $values
@@ -130,8 +148,8 @@ class Provisioner
         $contents = rtrim(File::get($path));
 
         foreach ($values as $key => $value) {
-            $contents = preg_match("/^{$key}=.*/m", $contents) === 1
-                ? (string) preg_replace("/^{$key}=.*/m", "{$key}={$value}", $contents)
+            $contents = preg_match($pattern = "/^{$key}=.*/m", $contents) === 1
+                ? (string) preg_replace_callback($pattern, fn (): string => "{$key}={$value}", $contents)
                 : $contents."\n{$key}={$value}";
         }
 

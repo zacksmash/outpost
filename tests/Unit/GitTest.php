@@ -29,22 +29,6 @@ it('knows whether the repository has commits', function () {
     expect($this->git->hasCommits())->toBeFalse();
 });
 
-it('reads the current branch', function () {
-    Process::fake([
-        processPattern('git', 'branch', '--show-current') => Process::result("feature/billing\n"),
-    ]);
-
-    expect($this->git->currentBranch())->toBe('feature/billing');
-});
-
-it('reports a detached head as null', function () {
-    Process::fake([
-        processPattern('git', 'branch', '--show-current') => Process::result("\n"),
-    ]);
-
-    expect($this->git->currentBranch())->toBeNull();
-});
-
 it('lists the local branches', function () {
     Process::fake([
         processPattern('git', 'branch', '--format=%(refname:short)') => Process::result("main\nfeature/billing\n\n"),
@@ -61,6 +45,26 @@ it('knows whether a branch exists', function () {
 
     expect($this->git->branchExists('main'))->toBeTrue()
         ->and($this->git->branchExists('missing'))->toBeFalse();
+});
+
+it('lists every branch checked out in a worktree', function () {
+    Process::fake([
+        processPattern('git', 'worktree', 'list', '--porcelain') => Process::result(implode("\n", [
+            'worktree /projects/app',
+            'HEAD abc123',
+            'branch refs/heads/main',
+            '',
+            'worktree /projects/app/.outpost/feature-x/app',
+            'HEAD def456',
+            'branch refs/heads/feature-x',
+            '',
+            'worktree /projects/detached',
+            'HEAD 789abc',
+            'detached',
+        ])),
+    ]);
+
+    expect($this->git->checkedOutBranches())->toBe(['main', 'feature-x']);
 });
 
 it('detects a branch checked out in another worktree', function () {

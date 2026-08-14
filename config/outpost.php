@@ -95,10 +95,10 @@ return [
     | Instance Database
     |--------------------------------------------------------------------------
     |
-    | When an instance runs a database service, Outpost provisions this
-    | database and writes these credentials into the instance's .env
-    | file. They exist only inside the isolated instance, so plain
-    | development credentials are exactly what you want here.
+    | When an instance runs a database service, it uses this database and
+    | these credentials. They are baked into the base image by the
+    | "outpost:build" command and written into each instance's
+    | .env file, so changing them requires an image rebuild.
     |
     */
 
@@ -120,6 +120,6 @@ return [
     |
     */
 
-    'timeout' => env('OUTPOST_TIMEOUT', 60),
+    'timeout' => (int) env('OUTPOST_TIMEOUT', 60),
 
 ];

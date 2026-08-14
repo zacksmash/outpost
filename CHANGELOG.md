@@ -1,8 +1,13 @@
 # Release Notes
 
-## [Unreleased](https://github.com/zacksmash/outpost/compare/v0.1.0...1.x)
+## [Unreleased](https://github.com/zacksmash/outpost/commits/main)
 
+### Added
 
-## [v0.1.0](https://github.com/zacksmash/outpost/compare/...v0.1.0) - 202x-xx-xx
-
-Initial pre-release.
+- `php artisan outpost` — create an isolated instance of any branch: prompt-driven branch and name selection, service detection from the application's own configuration, git worktree checkout, generated nginx and supervisord configuration, container boot with readiness polling, and full provisioning (`.env` seeding from `.env.example`, sandbox database credentials, `composer install`, `key:generate`, `storage:link`, `migrate`, optional `--seed`).
+- `php artisan outpost:build` — build the shared base image (Ubuntu 24.04, nginx, PHP 8.4 + 8.5, MySQL, PostgreSQL, Redis, Mailpit, supervisord) with database credentials and PHP versions supplied from configuration as build arguments.
+- `php artisan outpost:list`, `outpost:start`, `outpost:stop`, `outpost:shell`, `outpost:logs`, and `outpost:remove` for day-to-day instance management.
+- Service detection for MySQL/MariaDB, PostgreSQL, Redis, and Mailpit, with a `config('outpost.services')` override and honest reporting of detected-but-deferred capabilities (Octane, Horizon, external Scout drivers).
+- Per-instance manifest at `.outpost/<name>/outpost.json` recording what was detected and provisioned.
+- Read-only mounting of composer path repositories behind an explicit default-no confirmation; non-interactive runs mount nothing unless `--mount-path-repos` is passed, and sensitive locations (the home directory, its ancestors, hidden directories directly beneath it, and ~/Library) are never mounted.
+- `config/outpost.php` with the instance domain, base image, DNS, instance path, PHP versions, service override, sandbox database credentials, and boot timeout.

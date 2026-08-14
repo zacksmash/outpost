@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Zacksmash\Outpost;
 
-use Composer\Semver\Semver;
+use Composer\Semver\Intervals;
+use Composer\Semver\VersionParser;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
+use UnexpectedValueException;
 
 class Detector
 {
@@ -100,7 +102,7 @@ class Detector
 
         $scout = $this->config->get('scout.driver');
 
-        if (in_array($scout, ['meilisearch', 'typesense'], true)) {
+        if (in_array($scout, ['algolia', 'meilisearch', 'typesense'], true)) {
             $deferred[] = $scout;
         }
 
@@ -155,8 +157,18 @@ class Detector
             return $versions[0];
         }
 
+        $parser = new VersionParser;
+
+        try {
+            $required = $parser->parseConstraints($constraint);
+        } catch (UnexpectedValueException) {
+            throw new RuntimeException(
+                "The application's PHP constraint [{$constraint}] could not be parsed.",
+            );
+        }
+
         foreach ($versions as $version) {
-            if (Semver::satisfies($version.'.0', $constraint)) {
+            if (Intervals::haveIntersections($required, $parser->parseConstraints($version.'.*'))) {
                 return $version;
             }
         }

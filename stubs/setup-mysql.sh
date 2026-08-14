@@ -12,7 +12,11 @@ DB_PASSWORD="${3}"
 mkdir -p /var/run/mysqld
 chown -R mysql:mysql /var/run/mysqld
 
-mysqld --initialize-insecure --user=mysql
+# The mysql-server package may have initialized the data directory already;
+# a second --initialize aborts on the non-empty directory.
+if [ ! -d /var/lib/mysql/mysql ]; then
+    mysqld --initialize-insecure --user=mysql
+fi
 
 mysqld --user=mysql --skip-networking --socket=/var/run/mysqld/mysqld.sock &
 

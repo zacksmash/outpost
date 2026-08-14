@@ -38,7 +38,20 @@ it('passes the configured database credentials as build arguments', function () 
         'DB_DATABASE=outpost',
         'DB_USERNAME=outpost',
         'DB_PASSWORD=password',
-    ], $process->command)) === 3);
+        'PHP_VERSIONS=8.4 8.5',
+    ], $process->command)) === 4);
+});
+
+it('refuses malformed php versions', function () {
+    Process::fake();
+
+    config(['outpost.php' => ['8.4', 'eight-five']]);
+
+    $this->artisan('outpost:build')
+        ->expectsOutputToContain('outpost.php')
+        ->assertFailed();
+
+    Process::assertNothingRan();
 });
 
 it('keeps an existing image when the rebuild is declined', function () {
@@ -75,6 +88,36 @@ it('rebuilds an existing image without asking when forced', function () {
     $this->artisan('outpost:build', ['--force' => true])->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'build');
+});
+
+it('refuses credentials containing shell or sql metacharacters', function (string $key, string $value) {
+    Process::fake();
+
+    config(["outpost.database.{$key}" => $value]);
+
+    $this->artisan('outpost:build')
+        ->expectsOutputToContain("outpost.database.{$key}")
+        ->assertFailed();
+
+    Process::assertNothingRan();
+})->with([
+    'quoted password' => ['password', "pass'word"],
+    'backtick database' => ['database', 'out`post'],
+    'dollar username' => ['username', 'out$post'],
+    'empty password' => ['password', ''],
+    'leading dash database' => ['database', '-outpost'],
+]);
+
+it('refuses an empty php version list', function () {
+    Process::fake();
+
+    config(['outpost.php' => []]);
+
+    $this->artisan('outpost:build')
+        ->expectsOutputToContain('at least one PHP version')
+        ->assertFailed();
+
+    Process::assertNothingRan();
 });
 
 it('fails with the real error when the build breaks', function () {

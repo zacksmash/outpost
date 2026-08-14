@@ -2,27 +2,10 @@
 
 declare(strict_types=1);
 
-use Carbon\CarbonImmutable;
-use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Supervisord;
 
-function supervisordManifest(array $services, string $php = '8.4'): Manifest
-{
-    return new Manifest(
-        name: 'feature-x',
-        container: 'feature-x-app',
-        url: 'http://feature-x-app.outpost',
-        branch: 'feature/x',
-        php: $php,
-        services: $services,
-        deferred: [],
-        database: 'sqlite',
-        createdAt: CarbonImmutable::parse('2026-08-14T09:00:00+00:00'),
-    );
-}
-
 it('always runs php-fpm and nginx', function () {
-    $config = (new Supervisord)->generate(supervisordManifest([]));
+    $config = (new Supervisord)->generate(fakeManifest(services: []));
 
     expect($config)->toContain('[program:php-fpm]')
         ->and($config)->toContain('command=/usr/sbin/php-fpm8.4 --nodaemonize --fpm-config /etc/php/8.4/fpm/php-fpm.conf')
@@ -35,12 +18,12 @@ it('always runs php-fpm and nginx', function () {
 });
 
 it('pins php-fpm to the instance php version', function () {
-    expect((new Supervisord)->generate(supervisordManifest([], '8.5')))
+    expect((new Supervisord)->generate(fakeManifest(php: '8.5', services: [])))
         ->toContain('command=/usr/sbin/php-fpm8.5 --nodaemonize --fpm-config /etc/php/8.5/fpm/php-fpm.conf');
 });
 
 it('runs each detected service', function (string $service, string $needle) {
-    expect((new Supervisord)->generate(supervisordManifest([$service])))->toContain($needle);
+    expect((new Supervisord)->generate(fakeManifest(services: [$service])))->toContain($needle);
 })->with([
     'mysql' => ['mysql', '[program:mysql]'],
     'pgsql' => ['pgsql', '[program:pgsql]'],
@@ -49,13 +32,13 @@ it('runs each detected service', function (string $service, string $needle) {
 ]);
 
 it('runs postgres as the postgres user', function () {
-    $config = (new Supervisord)->generate(supervisordManifest(['pgsql']));
+    $config = (new Supervisord)->generate(fakeManifest(services: ['pgsql']));
 
     expect($config)->toContain('user=postgres');
 });
 
 it('starts services before php-fpm and nginx last', function () {
-    $config = (new Supervisord)->generate(supervisordManifest(['mysql', 'redis', 'mailpit']));
+    $config = (new Supervisord)->generate(fakeManifest(services: ['mysql', 'redis', 'mailpit']));
 
     preg_match_all('/priority=(\d+)/', $config, $matches);
 
@@ -63,7 +46,7 @@ it('starts services before php-fpm and nginx last', function () {
 });
 
 it('sends every program log to the container output', function () {
-    $config = (new Supervisord)->generate(supervisordManifest(['mysql']));
+    $config = (new Supervisord)->generate(fakeManifest(services: ['mysql']));
 
     expect(substr_count($config, 'stdout_logfile=/dev/stdout'))->toBe(3)
         ->and(substr_count($config, 'stderr_logfile=/dev/stderr'))->toBe(3)

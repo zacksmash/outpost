@@ -57,3 +57,7 @@ it('rejects a non-string database', function () {
 it('rejects an invalid created_at date', function () {
     Manifest::fromArray([...fakeManifest()->toArray(), 'created_at' => 'not-a-date']);
 })->throws(InvalidArgumentException::class, 'The manifest [created_at] value is not a valid date.');
+
+it('rejects an empty created_at date', function () {
+    Manifest::fromArray([...fakeManifest()->toArray(), 'created_at' => '']);
+})->throws(InvalidArgumentException::class, 'The manifest [created_at] value is not a valid date.');

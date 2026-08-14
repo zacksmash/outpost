@@ -24,19 +24,6 @@ class Git
     }
 
     /**
-     * Get the currently checked out branch, or null when detached.
-     */
-    public function currentBranch(): ?string
-    {
-        $branch = trim($this->runOrFail(
-            ['git', 'branch', '--show-current'],
-            'Unable to determine the current branch',
-        )->output());
-
-        return $branch === '' ? null : $branch;
-    }
-
-    /**
      * Get every local branch name.
      *
      * @return list<string>
@@ -70,22 +57,34 @@ class Git
     }
 
     /**
-     * Determine if the given branch is checked out in any worktree.
+     * Get every branch currently checked out in a worktree.
+     *
+     * @return list<string>
      */
-    public function branchCheckedOut(string $branch): bool
+    public function checkedOutBranches(): array
     {
         $result = $this->runOrFail(
             ['git', 'worktree', 'list', '--porcelain'],
             'Unable to list the existing worktrees',
         );
 
+        $branches = [];
+
         foreach (explode("\n", $result->output()) as $line) {
-            if (trim($line) === "branch refs/heads/{$branch}") {
-                return true;
+            if (str_starts_with($line = trim($line), 'branch refs/heads/')) {
+                $branches[] = substr($line, strlen('branch refs/heads/'));
             }
         }
 
-        return false;
+        return $branches;
+    }
+
+    /**
+     * Determine if the given branch is checked out in any worktree.
+     */
+    public function branchCheckedOut(string $branch): bool
+    {
+        return in_array($branch, $this->checkedOutBranches(), true);
     }
 
     /**
@@ -108,6 +107,17 @@ class Git
         $this->runOrFail(
             ['git', 'worktree', 'remove', '--force', '--', $path],
             "Unable to remove the worktree at [{$path}]",
+        );
+    }
+
+    /**
+     * Prune worktree registrations whose directories no longer exist.
+     */
+    public function pruneWorktrees(): void
+    {
+        $this->runOrFail(
+            ['git', 'worktree', 'prune'],
+            'Unable to prune the stale worktrees',
         );
     }
 

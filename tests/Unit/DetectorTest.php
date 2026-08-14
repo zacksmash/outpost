@@ -108,7 +108,8 @@ it('defers horizon and octane', function () {
 
 it('defers external scout drivers', function () {
     expect(detectorWith(['scout.driver' => 'meilisearch'])->deferred)->toBe(['meilisearch'])
-        ->and(detectorWith(['scout.driver' => 'typesense'])->deferred)->toBe(['typesense']);
+        ->and(detectorWith(['scout.driver' => 'typesense'])->deferred)->toBe(['typesense'])
+        ->and(detectorWith(['scout.driver' => 'algolia'])->deferred)->toBe(['algolia']);
 });
 
 it('does not defer in-database scout drivers', function () {
@@ -148,7 +149,18 @@ describe('php version selection', function () {
         'caret' => ['^8.2', '8.5'],
         'tilde patch' => ['~8.4.0', '8.4'],
         'exact minor' => ['8.4.*', '8.4'],
+        'patch floor' => ['~8.4.5', '8.4'],
+        'patch minimum' => ['>=8.4.2', '8.5'],
     ]);
+
+    it('refuses a constraint it cannot parse', function () {
+        File::put(
+            $this->composerPath.'/composer.json',
+            json_encode(['require' => ['php' => 'not^a@constraint']], JSON_THROW_ON_ERROR),
+        );
+
+        detectorWith([], $this->composerPath);
+    })->throws(RuntimeException::class, 'could not be parsed');
 
     it('selects the highest configured version without a constraint', function () {
         expect(detectorWith([], $this->composerPath)->php)->toBe('8.5');

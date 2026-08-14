@@ -137,6 +137,63 @@ it('reads container state from the json listing', function () {
         ->and($this->runtime->exists('missing'))->toBeFalse();
 });
 
+it('maps every container to its state', function () {
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+            ['id' => 'feature-y-app', 'status' => ['state' => 'stopped']],
+            ['id' => 'broken', 'status' => []],
+        ], JSON_THROW_ON_ERROR)),
+    ]);
+
+    expect($this->runtime->states())->toBe([
+        'feature-x-app' => 'running',
+        'feature-y-app' => 'stopped',
+    ]);
+});
+
+it('opens a shell and passes the exit code through', function () {
+    $tty = Symfony\Component\Process\Process::isTtySupported();
+
+    Process::fake([
+        processPattern('container', 'exec', '-i').' *' => Process::result('', '', 3),
+    ]);
+
+    expect($this->runtime->shell('feature-x-app'))->toBe(3);
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', '-i', ...($tty ? ['-t'] : []), 'feature-x-app', 'bash',
+    ]);
+});
+
+it('force deletes a container that would not stop', function () {
+    Process::fake();
+
+    $this->runtime->delete('feature-x-app', force: true);
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'delete', '--force', 'feature-x-app',
+    ]);
+});
+
+it('does not treat an interrupted follow as a failure', function () {
+    Process::fake([
+        processPattern('container', 'logs', '--follow', 'feature-x-app') => Process::result('', 'interrupted', 130),
+    ]);
+
+    $this->runtime->logs('feature-x-app', follow: true);
+
+    expect(true)->toBeTrue();
+});
+
+it('fetches logs and throws with the real error on failure', function () {
+    Process::fake([
+        processPattern('container', 'logs', 'feature-x-app') => Process::result('', 'no such container', 1),
+    ]);
+
+    $this->runtime->logs('feature-x-app');
+})->throws(RuntimeException::class, 'no such container');
+
 it('throws when the container list is not valid json', function () {
     Process::fake([
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result('not json'),

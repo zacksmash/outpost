@@ -54,6 +54,10 @@ class Manifest implements Arrayable
         }
 
         try {
+            if (trim($data['created_at']) === '') {
+                throw new InvalidFormatException('Empty date.');
+            }
+
             $createdAt = CarbonImmutable::parse($data['created_at']);
         } catch (InvalidFormatException) {
             throw new InvalidArgumentException('The manifest [created_at] value is not a valid date.');

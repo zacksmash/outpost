@@ -12,27 +12,12 @@ use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\Provisioner;
 use Zacksmash\Outpost\Runtime;
 
-function provisionManifest(array $services, ?string $database, string $php = '8.4'): Manifest
-{
-    return new Manifest(
-        name: 'feature-x',
-        container: 'feature-x-app',
-        url: 'http://feature-x-app.outpost',
-        branch: 'feature/x',
-        php: $php,
-        services: $services,
-        deferred: [],
-        database: $database,
-        createdAt: CarbonImmutable::parse('2026-08-14T09:00:00+00:00'),
-    );
-}
-
 beforeEach(function () {
     Process::preventStrayProcesses();
 
     $this->root = sys_get_temp_dir().'/outpost-provision-'.Str::random(10);
     $this->outposts = new Outposts($this->root);
-    $this->provisioner = new Provisioner(new Runtime, $this->outposts);
+    $this->provisioner = new Provisioner(new Runtime, $this->outposts, app('config'));
 
     File::ensureDirectoryExists($this->root.'/feature-x/app');
     File::put($this->root.'/feature-x/app/.env.example', implode("\n", [
@@ -49,7 +34,7 @@ afterEach(function () {
 it('seeds .env from .env.example when missing', function () {
     Process::fake();
 
-    $this->provisioner->provision(provisionManifest([], 'sqlite'));
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []));
 
     expect(File::get($this->root.'/feature-x/app/.env'))->toContain('APP_NAME=Example');
 });
@@ -59,7 +44,7 @@ it('refuses to provision without an example environment file', function () {
 
     File::delete($this->root.'/feature-x/app/.env.example');
 
-    $this->provisioner->provision(provisionManifest([], 'sqlite'));
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []));
 })->throws(RuntimeException::class, 'no .env.example');
 
 it('preserves an existing .env file', function () {
@@ -67,7 +52,7 @@ it('preserves an existing .env file', function () {
 
     File::put($this->root.'/feature-x/app/.env', "APP_NAME=Existing\n");
 
-    $this->provisioner->provision(provisionManifest([], 'sqlite'));
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []));
 
     expect(File::get($this->root.'/feature-x/app/.env'))->toContain('APP_NAME=Existing');
 });
@@ -75,7 +60,7 @@ it('preserves an existing .env file', function () {
 it('points the environment at the sandbox mysql service', function () {
     Process::fake();
 
-    $this->provisioner->provision(provisionManifest(['mysql'], 'mysql'));
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'mysql', services: ['mysql']));
 
     $env = File::get($this->root.'/feature-x/app/.env');
 
@@ -88,10 +73,41 @@ it('points the environment at the sandbox mysql service', function () {
         ->and($env)->toContain('APP_URL=http://feature-x-app.outpost');
 });
 
+it('refuses credentials containing unsafe characters', function () {
+    Process::fake();
+
+    config(['outpost.database.password' => "pass\nword"]);
+
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'mysql', services: ['mysql']));
+})->throws(RuntimeException::class, 'must start with a letter or number');
+
+it('writes values containing regex replacement characters literally', function () {
+    Process::fake();
+
+    File::put($this->root.'/feature-x/app/.env', "APP_URL=http://localhost\n");
+
+    $manifest = new Manifest(
+        name: 'feature-x',
+        container: 'feature-x-app',
+        url: 'http://feature-x-app.out$1post\\box',
+        branch: 'feature/x',
+        php: '8.4',
+        services: [],
+        deferred: [],
+        database: 'sqlite',
+        createdAt: CarbonImmutable::parse('2026-08-14T09:00:00+00:00'),
+    );
+
+    $this->provisioner->provision($manifest);
+
+    expect(File::get($this->root.'/feature-x/app/.env'))
+        ->toContain('APP_URL=http://feature-x-app.out$1post\\box');
+});
+
 it('uses the postgres port for pgsql instances', function () {
     Process::fake();
 
-    $this->provisioner->provision(provisionManifest(['pgsql'], 'pgsql'));
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'pgsql', services: ['pgsql']));
 
     expect(File::get($this->root.'/feature-x/app/.env'))->toContain('DB_PORT=5432');
 });
@@ -99,7 +115,7 @@ it('uses the postgres port for pgsql instances', function () {
 it('replaces existing keys instead of duplicating them', function () {
     Process::fake();
 
-    $this->provisioner->provision(provisionManifest(['mysql'], 'mysql'));
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'mysql', services: ['mysql']));
 
     $env = File::get($this->root.'/feature-x/app/.env');
 
@@ -111,7 +127,7 @@ it('replaces existing keys instead of duplicating them', function () {
 it('creates the sqlite database file', function () {
     Process::fake();
 
-    $this->provisioner->provision(provisionManifest([], 'sqlite'));
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []));
 
     expect(File::exists($this->root.'/feature-x/app/database/database.sqlite'))->toBeTrue()
         ->and(File::get($this->root.'/feature-x/app/.env'))->toContain('DB_CONNECTION=sqlite');
@@ -120,7 +136,7 @@ it('creates the sqlite database file', function () {
 it('points the environment at redis and mailpit when used', function () {
     Process::fake();
 
-    $this->provisioner->provision(provisionManifest(['redis', 'mailpit'], 'sqlite'));
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: ['redis', 'mailpit']));
 
     $env = File::get($this->root.'/feature-x/app/.env');
 
@@ -137,7 +153,7 @@ it('runs the container steps in order, pinned to the instance php version', func
     $steps = [];
 
     $this->provisioner->provision(
-        provisionManifest([], 'sqlite', '8.5'),
+        fakeManifest(name: 'feature-x', php: '8.5', database: 'sqlite', services: []),
         onStep: function (string $step) use (&$steps) {
             $steps[] = $step;
         },
@@ -166,7 +182,7 @@ it('runs the container steps in order, pinned to the instance php version', func
 it('seeds the database only when asked', function () {
     Process::fake();
 
-    $this->provisioner->provision(provisionManifest([], 'sqlite'), seed: true);
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []), seed: true);
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'exec', 'feature-x-app', 'php8.4', 'artisan', 'db:seed', '--force',
@@ -179,7 +195,7 @@ it('stops at the first failing step and names it', function () {
     ]);
 
     try {
-        $this->provisioner->provision(provisionManifest([], 'sqlite'));
+        $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []));
 
         $this->fail('A provisioning failure should have been thrown.');
     } catch (RuntimeException $e) {

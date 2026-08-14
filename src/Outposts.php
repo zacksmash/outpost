@@ -76,6 +76,22 @@ class Outposts
     }
 
     /**
+     * Write the given runtime configuration files for the instance.
+     *
+     * @param  array<string, string>  $files
+     */
+    public function writeRuntime(string $name, array $files): void
+    {
+        File::ensureDirectoryExists($path = $this->runtimePath($name));
+
+        foreach ($files as $file => $contents) {
+            if (File::put($path.'/'.$file, $contents) === false) {
+                throw new RuntimeException("Unable to write the runtime configuration for instance [{$name}].");
+            }
+        }
+    }
+
+    /**
      * Find the manifest for the given instance.
      */
     public function find(string $name): ?Manifest
@@ -92,11 +108,29 @@ class Outposts
             throw new RuntimeException("The manifest at [{$path}] contains invalid JSON.");
         }
 
-        return Manifest::fromArray($data);
+        $manifest = Manifest::fromArray($data);
+
+        // The manifest lives inside the worktree's parent directory, so it
+        // must be treated as untrusted input: refuse one that claims a
+        // different name or targets an unexpected container.
+        if ($manifest->name !== $name) {
+            throw new RuntimeException("The manifest at [{$path}] does not belong to the [{$name}] instance.");
+        }
+
+        if (Str::slug($manifest->container) !== $manifest->container
+            || ! str_starts_with($manifest->container, "{$name}-")) {
+            throw new RuntimeException("The manifest at [{$path}] names an unexpected container [{$manifest->container}].");
+        }
+
+        return $manifest;
     }
 
     /**
      * Get the manifests of every instance.
+     *
+     * Stray directories and unreadable manifests are skipped so one broken
+     * instance can never make the others unlistable; resolve a broken one
+     * by name to see what is wrong with it.
      *
      * @return list<Manifest>
      */
@@ -109,8 +143,18 @@ class Outposts
         $manifests = [];
 
         foreach (File::directories($this->path) as $directory) {
-            if ($manifest = $this->find(basename($directory))) {
-                $manifests[] = $manifest;
+            $name = basename($directory);
+
+            if ($name === '' || Str::slug($name) !== $name) {
+                continue;
+            }
+
+            try {
+                if ($manifest = $this->find($name)) {
+                    $manifests[] = $manifest;
+                }
+            } catch (InvalidArgumentException|RuntimeException) {
+                continue;
             }
         }
 

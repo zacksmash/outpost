@@ -11,6 +11,9 @@ FROM ubuntu:24.04
 ARG DB_DATABASE=outpost
 ARG DB_USERNAME=outpost
 ARG DB_PASSWORD=password
+ARG PHP_VERSIONS="8.4 8.5"
+ARG MAILPIT_VERSION=v1.30.7
+ARG MAILPIT_SHA256=12c736a73d122c55d3531ac2fc92cad96dbde283af661b6701fe32892bd438c5
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
@@ -22,32 +25,46 @@ RUN apt-get update \
         supervisor nginx redis-server mysql-server postgresql-16 \
     && rm -rf /var/lib/apt/lists/*
 
-# PHP 8.4 and 8.5 with the extensions Laravel applications expect.
+# Every configured PHP version with the extensions Laravel applications
+# expect. The version list arrives from config('outpost.php') via the
+# outpost:build command; changing the config only takes effect at
+# the next rebuild, and instances always pin what they detect.
 RUN add-apt-repository -y ppa:ondrej/php \
     && apt-get update \
-    && apt-get install -y --no-install-recommends \
-        php8.4-cli php8.4-fpm php8.4-bcmath php8.4-curl php8.4-gd php8.4-intl \
-        php8.4-mbstring php8.4-mysql php8.4-pgsql php8.4-redis php8.4-sqlite3 \
-        php8.4-xml php8.4-zip \
-        php8.5-cli php8.5-fpm php8.5-bcmath php8.5-curl php8.5-gd php8.5-intl \
-        php8.5-mbstring php8.5-mysql php8.5-pgsql php8.5-redis php8.5-sqlite3 \
-        php8.5-xml php8.5-zip \
+    && for v in $PHP_VERSIONS; do \
+        apt-get install -y --no-install-recommends \
+            php$v-cli php$v-fpm php$v-bcmath php$v-curl php$v-gd php$v-intl \
+            php$v-mbstring php$v-mysql php$v-pgsql php$v-redis php$v-sqlite3 \
+            php$v-xml php$v-zip; \
+    done \
     && rm -rf /var/lib/apt/lists/*
 
-# Composer, Node, and Mailpit.
+# Composer, Node, and Mailpit — no piping remote scripts to a root shell:
+# Node comes from NodeSource's signed apt repository, and Mailpit is a
+# pinned release verified against its checksum before installation.
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+        | gpg --dearmor -o /usr/share/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" \
+        > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL https://raw.githubusercontent.com/axllent/mailpit/develop/install.sh | bash
+RUN curl -fsSL "https://github.com/axllent/mailpit/releases/download/${MAILPIT_VERSION}/mailpit-linux-arm64.tar.gz" \
+        -o /tmp/mailpit.tar.gz \
+    && echo "${MAILPIT_SHA256}  /tmp/mailpit.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/mailpit.tar.gz -C /usr/local/bin mailpit \
+    && rm /tmp/mailpit.tar.gz
 
 # Sandbox-friendly PHP settings for every version and SAPI.
-COPY php.ini /etc/php/8.4/cli/conf.d/99-outpost.ini
-COPY php.ini /etc/php/8.4/fpm/conf.d/99-outpost.ini
-COPY php.ini /etc/php/8.5/cli/conf.d/99-outpost.ini
-COPY php.ini /etc/php/8.5/fpm/conf.d/99-outpost.ini
+COPY php.ini /tmp/outpost-php.ini
+RUN for v in $PHP_VERSIONS; do \
+        cp /tmp/outpost-php.ini /etc/php/$v/cli/conf.d/99-outpost.ini; \
+        cp /tmp/outpost-php.ini /etc/php/$v/fpm/conf.d/99-outpost.ini; \
+    done \
+    && rm /tmp/outpost-php.ini
 
 # MySQL overrides must live in mysql.conf.d with a name that sorts last,
 # because my.cnf includes conf.d before mysql.conf.d and the last value

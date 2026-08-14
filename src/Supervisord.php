@@ -27,7 +27,7 @@ class Supervisord
         }
 
         if ($manifest->uses('redis')) {
-            $programs[] = $this->program('redis', '/usr/bin/redis-server --protected-mode no', 15);
+            $programs[] = $this->program('redis', '/usr/bin/redis-server --bind 127.0.0.1', 15);
         }
 
         $programs[] = $this->program(

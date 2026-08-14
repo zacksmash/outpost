@@ -33,6 +33,32 @@ class BuildCommand extends Command
     {
         $image = config()->string('outpost.image');
 
+        foreach (['database', 'username', 'password'] as $key) {
+            if (preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]*$/D', config()->string("outpost.database.{$key}")) !== 1) {
+                error("The [outpost.database.{$key}] value must start with a letter or number and may only contain letters, numbers, dots, dashes, and underscores.");
+
+                return self::FAILURE;
+            }
+        }
+
+        $versions = [];
+
+        foreach ((array) config('outpost.php') as $version) {
+            if (! is_string($version) || preg_match('/^\d+\.\d+$/', $version) !== 1) {
+                error('The [outpost.php] versions must look like "8.4".');
+
+                return self::FAILURE;
+            }
+
+            $versions[] = $version;
+        }
+
+        if ($versions === []) {
+            error('The [outpost.php] configuration must list at least one PHP version.');
+
+            return self::FAILURE;
+        }
+
         if (! $this->option('force') && $runtime->hasImage($image)
             && ! confirm("The [{$image}] image already exists. Rebuild it?", false)) {
             info('Keeping the existing image.');
@@ -51,6 +77,7 @@ class BuildCommand extends Command
                     'DB_DATABASE' => config()->string('outpost.database.database'),
                     'DB_USERNAME' => config()->string('outpost.database.username'),
                     'DB_PASSWORD' => config()->string('outpost.database.password'),
+                    'PHP_VERSIONS' => implode(' ', $versions),
                 ],
                 fn (string $type, string $buffer) => $this->output->write($buffer),
             );

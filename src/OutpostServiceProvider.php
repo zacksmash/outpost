@@ -24,13 +24,21 @@ class OutpostServiceProvider extends ServiceProvider
             return new Git($app->basePath());
         });
 
+        $this->app->singleton(PathRepositories::class, function () {
+            $home = $_SERVER['HOME'] ?? null;
+
+            return new PathRepositories(is_string($home) ? $home : null);
+        });
+
         $this->app->singleton(Provisioner::class);
+
+        $this->app->singleton(Runtime::class);
 
         $this->app->singleton(Outposts::class, function (Application $app) {
             $path = $app->make('config')->string('outpost.path');
 
             return new Outposts(
-                str_starts_with($path, DIRECTORY_SEPARATOR) ? $path : $app->basePath($path),
+                str_starts_with($path, '/') ? $path : $app->basePath($path),
             );
         });
     }
@@ -50,6 +58,13 @@ class OutpostServiceProvider extends ServiceProvider
 
         $this->commands([
             Console\Commands\BuildCommand::class,
+            Console\Commands\ListCommand::class,
+            Console\Commands\LogsCommand::class,
+            Console\Commands\OutpostCommand::class,
+            Console\Commands\RemoveCommand::class,
+            Console\Commands\ShellCommand::class,
+            Console\Commands\StartCommand::class,
+            Console\Commands\StopCommand::class,
         ]);
     }
 }

@@ -5,63 +5,136 @@
 <p align="center">
     <a href="https://packagist.org/packages/zacksmash/outpost"><img src="https://img.shields.io/packagist/v/zacksmash/outpost.svg?style=flat-square" alt="Packagist"></a>
     <a href="https://packagist.org/packages/zacksmash/outpost"><img src="https://img.shields.io/packagist/php-v/zacksmash/outpost.svg?style=flat-square" alt="PHP from Packagist"></a>
-    <a href="https://packagist.org/packages/zacksmash/outpost"><img src="https://badge.laravel.cloud/badge/zacksmash/outpost?style=flat" alt="Laravel versions"></a>
+    <a href="https://badge.laravel.cloud/badge/zacksmash/outpost"><img src="https://badge.laravel.cloud/badge/zacksmash/outpost?style=flat" alt="Laravel versions"></a>
     <a href="https://github.com/zacksmash/outpost/actions"><img alt="GitHub Workflow Status (main)" src="https://img.shields.io/github/actions/workflow/status/zacksmash/outpost/tests.yml?branch=main&label=Tests&style=flat-square"></a>
     <a href="https://packagist.org/packages/zacksmash/outpost"><img src="https://img.shields.io/packagist/dt/zacksmash/outpost.svg?style=flat-square" alt="Total Downloads"></a>
 </p>
 
-Spin up any branch of your Laravel app as an isolated instance with its own services and URL.
+Outpost spins up any branch of your Laravel application as an isolated instance with its own container, its own services, and its own URL — powered by Apple's [`container`](https://github.com/apple/container) runtime.
+
+Think `git worktree add`, except the checkout also boots a working stack:
+
+```bash
+php artisan outpost feature/billing
+
+# ⚡ The instance is ready: http://feature-billing-app.outpost
+```
+
+Each instance runs in its own lightweight virtual machine with exactly the services your application needs — MySQL, PostgreSQL, Redis, Mailpit — provisioned, migrated, and reachable in your browser. Your real app, your real database, and your real machine are untouched. Review a pull request while your own branch keeps running. Hand an AI agent a sandbox where a destructive command can't reach anything that matters.
+
+## Requirements
+
+- macOS on Apple silicon
+- Apple's `container` CLI — `brew install container`
+- A Laravel application in a git repository with at least one commit
 
 ## Installation
 
-You can install the package via Composer:
+Install Outpost as a development dependency:
 
 ```bash
-composer require zacksmash/outpost
+composer require zacksmash/outpost --dev
 ```
 
-You may publish all of the package's resources at once:
-
-```bash
-php artisan vendor:publish --tag="outpost"
-```
-
-Or, you may publish each resource individually:
-
-### Publishing the Configuration File
+You may publish the configuration file if you'd like to customize anything:
 
 ```bash
 php artisan vendor:publish --tag="outpost-config"
 ```
 
-### Publishing and Running the Migrations
+## One-Time Setup
+
+First, make sure the container runtime is running:
 
 ```bash
-php artisan vendor:publish --tag="outpost-migrations"
-php artisan migrate
+container system start
 ```
 
-### Publishing the Views
+Next, register the `.outpost` domain so instance URLs resolve from your Mac. Outpost never runs `sudo` on your behalf, so this one is yours to run:
 
 ```bash
-php artisan vendor:publish --tag="outpost-views"
+sudo container system dns create outpost
 ```
 
-### Publishing the Translations
+Finally, build the shared base image. Every instance boots from this single image, so creating an instance never waits on a build. The first build installs everything Outpost supports and takes several minutes:
 
 ```bash
-php artisan vendor:publish --tag="outpost-lang"
+php artisan outpost:build
 ```
 
-### Publishing the Public Assets
+## Creating an Instance
+
+The `outpost` command walks you through everything:
 
 ```bash
-php artisan vendor:publish --tag="outpost-assets"
+php artisan outpost
 ```
 
-## Usage
+You'll pick a branch (or type a new name to create one), confirm the instance's name, and Outpost handles the rest: it checks out the branch into a dedicated worktree, detects which services the app needs, boots a container, writes the instance's `.env`, installs dependencies, runs your migrations, and prints the URL.
 
-<!-- Add a basic usage example here. -->
+Everything can be provided up front when you'd rather not be asked:
+
+```bash
+php artisan outpost feature/billing --name=billing --seed
+```
+
+| Option | Description |
+| --- | --- |
+| `branch` | The branch the instance should run. Created if it doesn't exist. |
+| `--name` | The instance name. Defaults to the branch name, slugged. |
+| `--seed` | Seed the database after migrating. |
+| `--mount-path-repos` | Mount composer path repositories without asking. |
+
+### Service Detection
+
+Outpost inspects your application's own configuration — the same sources `php artisan about` reads — to decide what each instance runs. A SQLite app needs no services at all. A `DB_CONNECTION=mysql` app gets MySQL with a database and credentials already provisioned. Redis appears whenever your cache, session, queue, or broadcasting uses it, and Mailpit appears when your mailer is SMTP.
+
+When detection guesses wrong, set `services` in `config/outpost.php` to skip detection entirely, then remove and recreate the instance. Each instance's manifest at `.outpost/<name>/outpost.json` records what was detected, so you can always see exactly what an instance is running and why.
+
+Octane, Horizon, and external Scout drivers are detected but not run inside instances. Outpost records them in the manifest and tells you at creation time — which means Redis-queued jobs will not process inside an instance. Honest limits beat silent ones.
+
+## Day-to-Day
+
+```bash
+php artisan outpost:list             # every instance, its state, and its URL
+php artisan outpost:start billing    # start a stopped instance
+php artisan outpost:stop billing     # stop it; worktree and data survive
+php artisan outpost:shell billing    # open a shell inside the instance
+php artisan outpost:logs billing     # show the service logs; --follow streams
+php artisan outpost:remove billing   # remove the container, worktree, and data
+```
+
+Stopping an instance preserves its database — the data lives in the container's own writable layer and survives across `stop` and `start`. Removing an instance destroys all of it, which is rather the point. Removal asks first, offers to delete the instance's branch when it's safe to do so, and `--force` skips every question (leaving the branch alone).
+
+## How Instances Work
+
+Instances live under `.outpost/` in your project root (Outpost adds it to your `.gitignore`). Each instance keeps three things there: the git worktree at `app/`, generated nginx and supervisord configuration at `runtime/`, and its manifest at `outpost.json`.
+
+The worktree is bind-mounted into the container, so the instance's code is editable right on your Mac — changes appear instantly, no sync step. The container gets its own IP address on Apple's container network, answers on port 80, and is reachable at `http://<name>-<app>.outpost`. No ports are published, so nothing collides with Herd, Sail, or anything else on your machine.
+
+The instance's `.env` is seeded from your `.env.example` — never from your real `.env`, so real credentials stay out of sandboxes — and pointed at the instance's own services with the sandbox credentials from `config/outpost.php`. Those credentials are baked into the base image when you run `outpost:build`, so changing them afterward requires a rebuild.
+
+## Isolation and Its Limits
+
+An instance is a real virtual machine boundary: a destructive command inside it can't touch your Mac. Two things deliberately cross that boundary, and both are visible:
+
+- **The worktree** is mounted read-write at `/app`. That's the product — you're meant to edit the code.
+- **Composer path repositories** outside the worktree can't resolve inside the container, so Outpost offers to mount them **read-only**, lists every path first, and defaults to *no*. Non-interactive runs mount nothing unless you pass `--mount-path-repos` explicitly. Read-only bounds destruction, not disclosure — that's why a human confirms.
+
+Instances are development sandboxes, not production parity. The database accounts inside them are deliberately permissive, exactly like Sail's — but every service answers only on loopback inside its own container, so one instance can never reach another's database or cache across the container network.
+
+## Configuration
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `domain` | `outpost` | The local domain instance URLs live on. |
+| `image` | `outpost-base` | The shared base image name. |
+| `dns` | `1.1.1.1` | Nameserver injected into builds and instances. |
+| `path` | `.outpost` | Where instances live, relative to your project. |
+| `php` | `['8.4', '8.5']` | PHP versions in the base image. |
+| `services` | `null` | Set an array to skip service detection. |
+| `database` | `outpost` / `outpost` / `password` | Sandbox database credentials. |
+| `timeout` | `60` | Seconds to wait for an instance to answer HTTP. |
 
 ## Changelog
 

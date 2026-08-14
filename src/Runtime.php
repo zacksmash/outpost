@@ -8,6 +8,7 @@ use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Sleep;
 use RuntimeException;
+use Symfony\Component\Process\Process as SymfonyProcess;
 
 class Runtime
 {
@@ -106,12 +107,12 @@ class Runtime
     }
 
     /**
-     * Delete the given container.
+     * Delete the given container, by force when it may still be running.
      */
-    public function delete(string $container): void
+    public function delete(string $container, bool $force = false): void
     {
         $this->runOrFail(
-            ['container', 'delete', $container],
+            ['container', 'delete', ...($force ? ['--force'] : []), $container],
             "Unable to delete the container [{$container}]",
         );
     }
@@ -129,9 +130,11 @@ class Runtime
     }
 
     /**
-     * Get the state of the given container, or null if it does not exist.
+     * Get the state of every container, keyed by container name.
+     *
+     * @return array<string, string>
      */
-    public function state(string $container): ?string
+    public function states(): array
     {
         $result = $this->runOrFail(
             ['container', 'list', '--all', '--format', 'json'],
@@ -144,15 +147,26 @@ class Runtime
             throw new RuntimeException('Unable to parse the container list output as JSON.');
         }
 
-        foreach ($containers as $item) {
-            if (data_get($item, 'id') === $container) {
-                $state = data_get($item, 'status.state');
+        $states = [];
 
-                return is_string($state) ? $state : null;
+        foreach ($containers as $item) {
+            $id = data_get($item, 'id');
+            $state = data_get($item, 'status.state');
+
+            if (is_string($id) && is_string($state)) {
+                $states[$id] = $state;
             }
         }
 
-        return null;
+        return $states;
+    }
+
+    /**
+     * Get the state of the given container, or null if it does not exist.
+     */
+    public function state(string $container): ?string
+    {
+        return $this->states()[$container] ?? null;
     }
 
     /**
@@ -199,6 +213,41 @@ class Runtime
         }
 
         return false;
+    }
+
+    /**
+     * Open an interactive shell inside the given container.
+     *
+     * Only request a remote TTY when a local one exists — the CLI's
+     * TTY path needs a real terminal to enter raw mode.
+     */
+    public function shell(string $container, ?callable $output = null): int
+    {
+        $tty = SymfonyProcess::isTtySupported();
+
+        return Process::forever()
+            ->tty($tty)
+            ->run(['container', 'exec', '-i', ...($tty ? ['-t'] : []), $container, 'bash'], $output)
+            ->exitCode() ?? 1;
+    }
+
+    /**
+     * Fetch the given container's service logs.
+     *
+     * A follow stream ends whenever the container stops or the user
+     * interrupts, so only a plain fetch reports failure.
+     */
+    public function logs(string $container, bool $follow = false, ?callable $output = null): void
+    {
+        $result = Process::forever()->run([
+            'container', 'logs', ...($follow ? ['--follow'] : []), $container,
+        ], $output);
+
+        if (! $follow && ! $result->successful()) {
+            throw new RuntimeException(
+                "Unable to fetch the logs of the container [{$container}]: ".trim($result->errorOutput() ?: $result->output()),
+            );
+        }
     }
 
     /**

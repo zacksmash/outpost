@@ -15,6 +15,18 @@ it('detects services by default', function () {
     expect(config('outpost.services'))->toBeNull();
 });
 
+it('casts the boot timeout to an integer even from the environment', function () {
+    putenv('OUTPOST_TIMEOUT=90');
+
+    try {
+        $config = require dirname(__DIR__, 2).'/config/outpost.php';
+
+        expect($config['timeout'])->toBe(90);
+    } finally {
+        putenv('OUTPOST_TIMEOUT');
+    }
+});
+
 it('ships development-only database credentials', function () {
     expect(config('outpost.database'))->toBe([
         'database' => 'outpost',

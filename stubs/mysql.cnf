@@ -1,8 +1,10 @@
 # Outpost sandbox overrides. The zz- prefix keeps this file sorting last
-# so its values win over the distribution defaults.
+# so its values win over the distribution defaults. The application lives
+# in the same container, so the database only ever answers on loopback —
+# other instances on the container network cannot reach it.
 
 [mysqld]
-bind-address = 0.0.0.0
+bind-address = 127.0.0.1
 skip-name-resolve
 innodb_buffer_pool_size = 256M
 max_connections = 100
