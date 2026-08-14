@@ -105,7 +105,7 @@ Configure long-running Laravel processes as shell-free argument lists. `@php` re
 ],
 ```
 
-Key `config/outpost.php` values: `domain` (default `outpost`), `image` (an exact versioned GHCR reference), `dns`, `path`, `php` (versions baked into the image — rebuild locally after changing), `server` (`auto`, `fpm`, or `octane`), `frontend` (`build`, `vite`, or `none`), `vite`, `https` (`auto`, `true`, or `false`), `tls.path`, `services`, `expose_services`, `processes`, `database` (sandbox credentials baked into the image — rebuild locally after changing; letters, numbers, dots, dashes, underscores only), `timeout`.
+Key `config/outpost.php` values: `domain` (default `outpost`), `image` (an exact versioned GHCR reference), `dns`, `path`, `resources` (4 CPUs and `2G` memory by default), `php` (versions baked into the image — rebuild locally after changing), `server` (`auto`, `fpm`, or `octane`), `frontend` (`build`, `vite`, or `none`), `vite`, `https` (`auto`, `true`, or `false`), `tls.path`, `services`, `expose_services`, `processes`, `database` (sandbox credentials baked into the image — rebuild locally after changing; letters, numbers, dots, dashes, underscores only), `timeout`.
 
 ## Rules, References, and Templates
 

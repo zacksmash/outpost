@@ -124,6 +124,11 @@ class OutpostCommand extends Command
                 return self::FAILURE;
             }
 
+            $resources = $runtime->validatedResources(
+                config('outpost.resources.cpus'),
+                config('outpost.resources.memory'),
+            );
+
             $reference = $pullRequest === null
                 ? $this->branch($git)
                 : "outpost/pr-{$pullRequest}";
@@ -167,9 +172,11 @@ class OutpostCommand extends Command
             );
 
             info(sprintf(
-                'PHP %s (%s) · Frontend: %s · Services: %s · Processes: %s',
+                'PHP %s (%s) · Resources: %d CPU / %s · Frontend: %s · Services: %s · Processes: %s',
                 $detection->php,
                 $detection->server === 'octane' ? 'Octane' : 'PHP-FPM',
+                $resources['cpus'],
+                $resources['memory'],
                 $detection->frontend === 'vite' ? 'Vite' : ucfirst($detection->frontend),
                 $detection->services === [] ? 'none' : implode(', ', $detection->services),
                 $commands === [] ? 'none' : implode(', ', array_keys($commands)),
@@ -193,6 +200,8 @@ class OutpostCommand extends Command
                 processes: array_keys($commands),
                 database: $detection->database,
                 createdAt: CarbonImmutable::now(),
+                cpus: $resources['cpus'],
+                memory: $resources['memory'],
             );
 
             $outposts->save($manifest);
@@ -221,12 +230,19 @@ class OutpostCommand extends Command
             $this->ensureInstancesIgnored();
 
             spin(
-                fn () => $runtime->boot($container, $image, config()->string('outpost.dns'), [
-                    $outposts->worktreePath($name).':/app',
-                    $outposts->runtimePath($name).':/outpost:ro',
-                    ...($secure ? [$certificates->directory().':/outpost-tls:ro'] : []),
-                    ...$mounts,
-                ]),
+                fn () => $runtime->boot(
+                    $container,
+                    $image,
+                    config()->string('outpost.dns'),
+                    [
+                        $outposts->worktreePath($name).':/app',
+                        $outposts->runtimePath($name).':/outpost:ro',
+                        ...($secure ? [$certificates->directory().':/outpost-tls:ro'] : []),
+                        ...$mounts,
+                    ],
+                    cpus: $resources['cpus'],
+                    memory: $resources['memory'],
+                ),
                 'Booting the instance',
             );
 

@@ -58,6 +58,8 @@ it('creates a fully provisioned instance', function () {
     expect($manifest['name'])->toBe('feature-x')
         ->and($manifest['container'])->toBe('feature-x-laravel')
         ->and($manifest['branch'])->toBe('feature-x')
+        ->and($manifest['cpus'])->toBe(4)
+        ->and($manifest['memory'])->toBe('2G')
         ->and($manifest['expose_services'])->toBeTrue()
         ->and($manifest['database'])->toBe('sqlite');
 
@@ -67,6 +69,7 @@ it('creates a fully provisioned instance', function () {
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'run', '--detach', '--name', 'feature-x-laravel', '--dns', '1.1.1.1',
+        '--cpus', '4', '--memory', '2G',
         '--volume', $this->root.'/feature-x/app:/app',
         '--volume', $this->root.'/feature-x/runtime:/outpost:ro',
         'ghcr.io/zacksmash/outpost:0.1.0',
@@ -74,6 +77,24 @@ it('creates a fully provisioned instance', function () {
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === ['dscacheutil', '-flushcache']);
 });
+
+it('rejects invalid resource configuration before creating instance state', function (string $key, mixed $value) {
+    config(["outpost.resources.{$key}" => $value]);
+
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->expectsOutputToContain("outpost.resources.{$key}")
+        ->assertFailed();
+
+    expect(File::exists($this->root.'/feature-x/outpost.json'))->toBeFalse();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'run');
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'worktree');
+})->with([
+    'cpus' => ['cpus', 0],
+    'memory' => ['memory', '1.5G'],
+]);
 
 it('configures and releases application processes after provisioning', function () {
     config(['outpost.processes' => [
@@ -162,6 +183,7 @@ it('boots a trusted https instance with its certificate mounted read only', func
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'run', '--detach', '--name', 'feature-x-laravel', '--dns', '1.1.1.1',
+        '--cpus', '4', '--memory', '2G',
         '--volume', $this->root.'/feature-x/app:/app',
         '--volume', $this->root.'/feature-x/runtime:/outpost:ro',
         '--volume', $tls.':/outpost-tls:ro',

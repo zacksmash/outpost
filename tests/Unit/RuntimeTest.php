@@ -131,11 +131,38 @@ it('boots a detached container with volumes and dns', function () {
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'run', '--detach', '--name', 'feature-x-app', '--dns', '1.1.1.1',
+        '--cpus', '4', '--memory', '2G',
         '--volume', '/host/app:/app',
         '--volume', '/host/runtime:/outpost:ro',
         'outpost-base',
     ]);
 });
+
+it('boots a container with configured resource limits', function () {
+    Process::fake();
+
+    $this->runtime->boot('feature-x-app', 'outpost-base', '1.1.1.1', [], cpus: 6, memory: '3072MiB');
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'run', '--detach', '--name', 'feature-x-app', '--dns', '1.1.1.1',
+        '--cpus', '6', '--memory', '3072MiB',
+        'outpost-base',
+    ]);
+});
+
+it('rejects invalid container resource limits', function (int $cpus, string $memory, string $message) {
+    Process::fake();
+
+    expect(fn () => $this->runtime->boot(
+        'feature-x-app', 'outpost-base', '1.1.1.1', [], $cpus, $memory,
+    ))->toThrow(RuntimeException::class, $message);
+
+    Process::assertNothingRan();
+})->with([
+    'zero cpus' => [0, '2G', 'outpost.resources.cpus'],
+    'fractional memory' => [4, '1.5G', 'outpost.resources.memory'],
+    'memory without a size' => [4, 'large', 'outpost.resources.memory'],
+]);
 
 it('surfaces the real error when a boot fails', function () {
     Process::fake([

@@ -158,9 +158,20 @@ class Runtime
      *
      * @param  list<string>  $volumes
      */
-    public function boot(string $container, string $image, string $dns, array $volumes): void
-    {
-        $command = ['container', 'run', '--detach', '--name', $container, '--dns', $dns];
+    public function boot(
+        string $container,
+        string $image,
+        string $dns,
+        array $volumes,
+        int $cpus = 4,
+        string $memory = '2G',
+    ): void {
+        $this->validatedResources($cpus, $memory);
+
+        $command = [
+            'container', 'run', '--detach', '--name', $container, '--dns', $dns,
+            '--cpus', (string) $cpus, '--memory', $memory,
+        ];
 
         foreach ($volumes as $volume) {
             $command[] = '--volume';
@@ -170,6 +181,27 @@ class Runtime
         $command[] = $image;
 
         $this->runOrFail($command, "Unable to boot the container [{$container}]");
+    }
+
+    /**
+     * Validate and normalize configured per-instance resources.
+     *
+     * @return array{cpus: int, memory: string}
+     */
+    public function validatedResources(mixed $cpus, mixed $memory): array
+    {
+        if (! is_int($cpus) || $cpus < 1) {
+            throw new RuntimeException('The [outpost.resources.cpus] value must be a positive integer.');
+        }
+
+        if (! is_string($memory)
+            || preg_match('/^[1-9][0-9]*(?:[KMGTPE](?:I?B)?)?$/Di', $memory) !== 1) {
+            throw new RuntimeException(
+                'The [outpost.resources.memory] value must be a positive size such as 2048M or 2G.',
+            );
+        }
+
+        return ['cpus' => $cpus, 'memory' => $memory];
     }
 
     /**

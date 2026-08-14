@@ -218,7 +218,7 @@ Stopping an instance preserves its database — the data lives in the container'
 
 Instances live under `.outpost/` in your project root (Outpost adds it to your `.gitignore`). Each instance keeps three things there: the git worktree at `app/`, generated nginx and supervisord configuration at `runtime/`, and its manifest at `outpost.json`.
 
-The worktree is bind-mounted into the container, so the instance's code is editable right on your Mac — changes appear instantly, no sync step. The container gets its own IP address on Apple's container network and is reachable at `<scheme>://<name>-<app>.outpost`. No ports are published onto macOS; web and service endpoints use standard ports on that unique IP, so nothing collides with Herd, Sail, or another instance.
+The worktree is bind-mounted into the container, so the instance's code is editable right on your Mac — changes appear instantly, no sync step. The container gets its own IP address on Apple's container network and is reachable at `<scheme>://<name>-<app>.outpost`. No ports are published onto macOS; web and service endpoints use standard ports on that unique IP, so nothing collides with Herd, Sail, or another instance. Outpost allocates 4 CPUs and 2 GB of memory by default instead of inheriting Apple's smaller machine-wide memory default; tune `resources.cpus` and `resources.memory` for lighter or heavier applications.
 
 The instance's `.env` is seeded from your `.env.example` — never from your real `.env`, so real credentials stay out of sandboxes — and pointed at the instance's own services with the sandbox credentials from `config/outpost.php`. The published image contains the documented default credentials and PHP versions. Changing either requires a local `outpost:build` before creating more instances.
 
@@ -239,6 +239,8 @@ Instances are development sandboxes, not production parity. The database account
 | `image` | `ghcr.io/zacksmash/outpost:0.1.0` | Exact OCI image reference used by instances. |
 | `dns` | `1.1.1.1` | Nameserver injected into builds and instances. |
 | `path` | `.outpost` | Where instances live, relative to your project. |
+| `resources.cpus` | `4` | Virtual CPUs allocated to each instance. |
+| `resources.memory` | `2G` | Memory allocated to each instance; accepts runtime sizes such as `2048M` or `3G`. |
 | `php` | `['8.4', '8.5']` | PHP versions in the base image. |
 | `server` | `auto` | Use Octane when installed, otherwise PHP-FPM; accepts `auto`, `fpm`, or `octane`. |
 | `frontend` | `build` | Front-end workflow; accepts `build`, `vite`, or `none`. |

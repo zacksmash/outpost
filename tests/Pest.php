@@ -24,6 +24,8 @@ function fakeManifest(
     array $processes = [],
     ?string $url = null,
     bool $exposeServices = true,
+    ?int $cpus = 4,
+    ?string $memory = '2G',
 ): Manifest {
     return new Manifest(
         name: $name,
@@ -39,5 +41,7 @@ function fakeManifest(
         processes: $processes,
         database: $database,
         createdAt: CarbonImmutable::parse('2026-08-14T09:00:00+00:00'),
+        cpus: $cpus,
+        memory: $memory,
     );
 }

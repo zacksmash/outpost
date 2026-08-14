@@ -35,6 +35,8 @@ class Manifest implements Arrayable
         public readonly array $processes,
         public readonly ?string $database,
         public readonly CarbonImmutable $createdAt,
+        public readonly ?int $cpus = null,
+        public readonly ?string $memory = null,
     ) {}
 
     /**
@@ -68,6 +70,18 @@ class Manifest implements Arrayable
             throw new InvalidArgumentException('The manifest [expose_services] value must be a boolean.');
         }
 
+        if (array_key_exists('cpus', $data)
+            && $data['cpus'] !== null
+            && (! is_int($data['cpus']) || $data['cpus'] < 1)) {
+            throw new InvalidArgumentException('The manifest [cpus] value must be a positive integer or null.');
+        }
+
+        if (array_key_exists('memory', $data)
+            && $data['memory'] !== null
+            && (! is_string($data['memory']) || $data['memory'] === '')) {
+            throw new InvalidArgumentException('The manifest [memory] value must be a non-empty string or null.');
+        }
+
         if (! isset($data['created_at']) || ! is_string($data['created_at'])) {
             throw new InvalidArgumentException('The manifest [created_at] value must be a string.');
         }
@@ -98,6 +112,8 @@ class Manifest implements Arrayable
                 : [],
             database: $data['database'] ?? null,
             createdAt: $createdAt,
+            cpus: $data['cpus'] ?? null,
+            memory: $data['memory'] ?? null,
         );
     }
 
@@ -138,6 +154,8 @@ class Manifest implements Arrayable
             'processes' => $this->processes,
             'database' => $this->database,
             'created_at' => $this->createdAt->toIso8601String(),
+            'cpus' => $this->cpus,
+            'memory' => $this->memory,
         ];
     }
 

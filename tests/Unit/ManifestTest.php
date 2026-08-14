@@ -46,14 +46,25 @@ it('loads old manifests without a processes field', function () {
 it('loads old manifests with the original web and frontend defaults', function () {
     $data = fakeManifest(server: 'octane', frontend: 'vite')->toArray();
 
-    unset($data['server'], $data['frontend'], $data['expose_services']);
+    unset($data['server'], $data['frontend'], $data['expose_services'], $data['cpus'], $data['memory']);
 
     $manifest = Manifest::fromArray($data);
 
     expect($manifest->server)->toBe('fpm')
         ->and($manifest->frontend)->toBe('build')
-        ->and($manifest->exposeServices)->toBeFalse();
+        ->and($manifest->exposeServices)->toBeFalse()
+        ->and($manifest->cpus)->toBeNull()
+        ->and($manifest->memory)->toBeNull();
 });
+
+it('rejects invalid resource metadata', function (string $key, mixed $value) {
+    Manifest::fromArray([...fakeManifest()->toArray(), $key => $value]);
+})->with([
+    'zero cpus' => ['cpus', 0],
+    'string cpus' => ['cpus', '4'],
+    'empty memory' => ['memory', ''],
+    'integer memory' => ['memory', 2048],
+])->throws(InvalidArgumentException::class);
 
 it('rejects a non-boolean service exposure value', function () {
     Manifest::fromArray([...fakeManifest()->toArray(), 'expose_services' => 'yes']);

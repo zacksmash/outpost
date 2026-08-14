@@ -54,6 +54,10 @@ class InfoCommand extends Command
                 'frontend' => $manifest->frontend,
                 'services' => $manifest->services,
                 'processes' => $manifest->processes,
+                'resources' => [
+                    'cpus' => $manifest->cpus,
+                    'memory' => $manifest->memory,
+                ],
                 'expose_services' => $manifest->exposeServices,
                 'endpoints' => $resolvedEndpoints,
             ];
@@ -94,6 +98,10 @@ class InfoCommand extends Command
             ['Services', $manifest->services === [] ? 'none' : implode(', ', $manifest->services)],
             ['Processes', $manifest->processes === [] ? 'none' : implode(', ', $manifest->processes)],
         ];
+
+        if ($manifest->cpus !== null && $manifest->memory !== null) {
+            $rows[] = ['Resources', "{$manifest->cpus} CPU / {$manifest->memory}"];
+        }
 
         foreach ($endpoints as $name => $endpoint) {
             $url = $endpoint['url'] ?? null;

@@ -65,6 +65,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Instance Resources
+    |--------------------------------------------------------------------------
+    |
+    | Apple's runtime otherwise inherits a machine-wide default that may be as
+    | low as 1 GB. Outpost applies predictable per-instance limits with enough
+    | room for Composer, Laravel, Octane, Vite, and detected services together.
+    |
+    */
+
+    'resources' => [
+        'cpus' => (int) env('OUTPOST_CPUS', 4),
+        'memory' => env('OUTPOST_MEMORY', '2G'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | PHP Versions
     |--------------------------------------------------------------------------
     |

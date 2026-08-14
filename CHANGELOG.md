@@ -17,10 +17,11 @@
 - `php artisan outpost:build` — build a customized local base image (Ubuntu 24.04, nginx, PHP 8.4 + 8.5 with Swoole, Node, MySQL, PostgreSQL, Redis, Mailpit, supervisord) with database credentials and PHP versions supplied from configuration as build arguments.
 - `php artisan outpost:list`, `outpost:info`, `outpost:open`, `outpost:start`, `outpost:stop`, `outpost:shell`, `outpost:logs`, and `outpost:remove` for day-to-day instance management.
 - Scriptable agent operations through `outpost:list --json` and shell-free `outpost:exec`, including streamed output and unchanged command exit codes.
+- Predictable per-instance CPU and memory allocation, defaulting to 4 CPUs and 2 GB with configuration validation before any worktree or manifest is created and resource details recorded for `outpost:info`.
 - Service detection for MySQL/MariaDB, PostgreSQL, Redis, and Mailpit, with a `config('outpost.services')` override and honest reporting of detected-but-deferred capabilities (Horizon and external Scout drivers).
 - Per-instance manifest at `.outpost/<name>/outpost.json` recording what was detected and provisioned.
 - Read-only mounting of composer path repositories behind an explicit default-no confirmation; non-interactive runs mount nothing unless `--mount-path-repos` is passed, and sensitive locations (the home directory, its ancestors, hidden directories directly beneath it, and ~/Library) are never mounted.
-- `config/outpost.php` with the instance domain, base image, DNS, instance path, PHP versions, Octane/PHP-FPM selection, front-end workflow, trusted HTTPS, service detection and exposure, supervised processes, sandbox credentials, and boot timeout.
+- `config/outpost.php` with the instance domain, base image, DNS, instance path and resources, PHP versions, Octane/PHP-FPM selection, front-end workflow, trusted HTTPS, service detection and exposure, supervised processes, sandbox credentials, and boot timeout.
 
 ### Changed
 
