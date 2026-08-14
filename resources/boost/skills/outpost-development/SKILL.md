@@ -10,7 +10,7 @@ metadata:
 
 # Outpost
 
-Use this skill when a Laravel application needs to integrate `zacksmash/outpost`: spinning up a branch as an isolated instance with its own container, services, and URL on macOS.
+Use this skill when a Laravel application needs to integrate `zacksmash/outpost`: diagnosing setup and spinning up a branch as an isolated instance with its own container, services, and URL on macOS.
 
 ## Primary Goal
 
@@ -20,7 +20,7 @@ Use this skill when a Laravel application needs to integrate `zacksmash/outpost`
 
 ### 1. Confirm the environment
 
-- macOS on Apple silicon with the `container` CLI installed (`brew install container`)
+- macOS 26 or newer on Apple silicon with Apple `container` 1.2.x installed (`brew install container`)
 - a Laravel application inside a git repository with at least one commit
 
 ### 2. Install
@@ -40,15 +40,19 @@ container system start
 sudo container system dns create outpost   # Outpost prints this command but never runs sudo itself
 container system stop && container system start
 php artisan outpost:build                  # builds the shared base image; first run takes minutes
+php artisan outpost:doctor                 # read-only verification of the complete setup
 ```
 
 If the machine already publishes under another domain, inspect the live value with `container system property list`, then set `OUTPOST_DOMAIN` to that domain instead of changing machine config. Editing `config.toml` does not affect the running service until it is restarted.
+
+The doctor treats Apple `container` 1.2.x as verified. It reports older versions as blocking and newer unverified minors as warnings. It never changes host or runtime state and prints the command or file change for every failed check. If every check passes but one browser reports `ERR_ADDRESS_UNREACHABLE`, enable that browser under System Settings > Privacy & Security > Local Network, quit it fully, and reopen it.
 
 ### 4. Create and manage instances
 
 ```bash
 php artisan outpost                        # prompt-driven: pick a branch, confirm a name
 php artisan outpost feature/billing --name=billing --seed
+php artisan outpost:doctor
 php artisan outpost:list
 php artisan outpost:start billing
 php artisan outpost:stop billing
@@ -76,6 +80,7 @@ Read before executing:
 
 ## Examples
 
+- A setup fails before instance creation: run `php artisan outpost:doctor`, apply the remedies attached to `FAIL` rows, and rerun it until only `PASS` or non-blocking `WARN` rows remain.
 - A reviewer needs to try a pull request without disturbing their own branch: `php artisan outpost pr-branch`, open the printed `http://<name>-<app>.outpost` URL, then `php artisan outpost:remove <name>` when done.
 - An app on SQLite needs no services: the instance boots with nginx and PHP-FPM only, and Outpost creates `database/database.sqlite` automatically.
 - The app installs a local package via a composer path repository: Outpost lists the path and asks before mounting it read-only; pass `--mount-path-repos` in scripts that must not prompt.
@@ -83,6 +88,7 @@ Read before executing:
 ## Anti-patterns
 
 - do not run instances for production parity; instances are development sandboxes with permissive sandbox credentials
+- do not manually change runtime or DNS state before running `php artisan outpost:doctor`; it is read-only and reports the live state
 - do not expect Octane, Horizon, or external Scout drivers to run inside instances — they are detected, recorded in the manifest as deferred, and skipped, so Redis-queued jobs do not process inside an instance
 - do not edit files under `.outpost/<name>/runtime/` expecting Outpost to regenerate or validate them; they are written once at creation and applied verbatim on every boot
 - do not document or rely on package internals (detector, provisioner, runtime classes); the supported surface is the artisan commands and `config/outpost.php`

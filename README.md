@@ -24,8 +24,8 @@ Each instance runs in its own lightweight virtual machine with exactly the servi
 
 ## Requirements
 
-- macOS on Apple silicon
-- Apple's `container` CLI — `brew install container`
+- macOS 26 or newer on Apple silicon
+- Apple's `container` CLI 1.2.x — `brew install container`
 - A Laravel application in a git repository with at least one commit
 
 ## Installation
@@ -72,6 +72,14 @@ Finally, build the shared base image. Every instance boots from this single imag
 php artisan outpost:build
 ```
 
+Run the doctor at any point to inspect the host, live runtime, DNS publication and resolver state, base image, and application prerequisites without changing anything:
+
+```bash
+php artisan outpost:doctor
+```
+
+Outpost has verified Apple's `container` 1.2.x line. Older versions fail the compatibility check; newer minors produce a warning rather than blocking you.
+
 ## Creating an Instance
 
 The `outpost` command walks you through everything:
@@ -107,12 +115,15 @@ Octane, Horizon, and external Scout drivers are detected but not run inside inst
 
 ```bash
 php artisan outpost:list             # every instance, its state, and its URL
+php artisan outpost:doctor           # diagnose host, runtime, DNS, image, and app readiness
 php artisan outpost:start billing    # start a stopped instance
 php artisan outpost:stop billing     # stop it; worktree and data survive
 php artisan outpost:shell billing    # open a shell inside the instance
 php artisan outpost:logs billing     # show the service logs; --follow streams
 php artisan outpost:remove billing   # remove the container, worktree, and data
 ```
+
+If these checks pass but a Chromium-based browser reports `ERR_ADDRESS_UNREACHABLE`, allow that browser under **System Settings → Privacy & Security → Local Network**, quit it completely, and reopen it. macOS applies this permission per browser; another browser working does not imply every browser is allowed.
 
 Stopping an instance preserves its database — the data lives in the container's own writable layer and survives across `stop` and `start`. Removing an instance destroys all of it, which is rather the point. Removal asks first, offers to delete the instance's branch when it's safe to do so, and `--force` skips every question (leaving the branch alone).
 

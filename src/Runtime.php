@@ -18,6 +18,42 @@ class Runtime
     protected const int TIMEOUT = 600;
 
     /**
+     * Get the installed Apple container CLI version.
+     */
+    public function version(): string
+    {
+        $result = $this->runOrFail(
+            ['container', '--version'],
+            'Unable to run the Apple container CLI',
+        );
+
+        if (preg_match('/container CLI version\s+v?([^\s]+)/i', $result->output(), $matches) !== 1) {
+            throw new RuntimeException('Unable to determine the Apple container CLI version.');
+        }
+
+        return $matches[1];
+    }
+
+    /**
+     * Get the container system service status.
+     */
+    public function systemStatus(): string
+    {
+        $result = $this->runOrFail(
+            ['container', 'system', 'status', '--format', 'json'],
+            'Unable to inspect the container system status',
+        );
+
+        $status = data_get(json_decode($result->output(), true), 'status');
+
+        if (! is_string($status) || $status === '') {
+            throw new RuntimeException('Unable to parse the container system status as JSON.');
+        }
+
+        return $status;
+    }
+
+    /**
      * Get the domain the DNS daemon publishes container hostnames under.
      *
      * Read the running service's properties instead of config.toml because

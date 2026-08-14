@@ -13,6 +13,38 @@ beforeEach(function () {
     $this->runtime = new Runtime;
 });
 
+it('reads the container cli version', function () {
+    Process::fake([
+        processPattern('container', '--version') => Process::result('container CLI version 1.2.2 (build: release)'),
+    ]);
+
+    expect($this->runtime->version())->toBe('1.2.2');
+});
+
+it('rejects an unrecognized container cli version', function () {
+    Process::fake([
+        processPattern('container', '--version') => Process::result('container development build'),
+    ]);
+
+    $this->runtime->version();
+})->throws(RuntimeException::class, 'Unable to determine the Apple container CLI version');
+
+it('reads the container system status', function () {
+    Process::fake([
+        processPattern('container', 'system', 'status', '--format', 'json') => Process::result('{"status":"running"}'),
+    ]);
+
+    expect($this->runtime->systemStatus())->toBe('running');
+});
+
+it('rejects a malformed container system status', function () {
+    Process::fake([
+        processPattern('container', 'system', 'status', '--format', 'json') => Process::result('not-json'),
+    ]);
+
+    $this->runtime->systemStatus();
+})->throws(RuntimeException::class, 'Unable to parse the container system status');
+
 it('recognizes a registered dns domain', function () {
     Process::fake([
         processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\nbox\noutpost\n"),

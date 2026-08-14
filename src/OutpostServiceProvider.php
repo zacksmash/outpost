@@ -20,6 +20,17 @@ class OutpostServiceProvider extends ServiceProvider
             return new Detector($app->make('config'), $app->basePath());
         });
 
+        $this->app->singleton(Doctor::class, function (Application $app) {
+            return new Doctor(
+                $app->make(Host::class),
+                $app->make(Runtime::class),
+                $app->make(Git::class),
+                $app->make('files'),
+                $app->basePath(),
+                $app->make('config'),
+            );
+        });
+
         $this->app->singleton(Git::class, function (Application $app) {
             return new Git($app->basePath());
         });
@@ -58,6 +69,7 @@ class OutpostServiceProvider extends ServiceProvider
 
         $this->commands([
             Console\Commands\BuildCommand::class,
+            Console\Commands\DoctorCommand::class,
             Console\Commands\ListCommand::class,
             Console\Commands\LogsCommand::class,
             Console\Commands\OutpostCommand::class,
