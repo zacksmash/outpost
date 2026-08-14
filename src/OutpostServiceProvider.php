@@ -16,6 +16,10 @@ class OutpostServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/outpost.php', 'outpost');
 
+        $this->app->singleton(Detector::class, function (Application $app) {
+            return new Detector($app->make('config'), $app->basePath());
+        });
+
         $this->app->singleton(Outposts::class, function (Application $app) {
             $path = $app->make('config')->string('outpost.path');
 
