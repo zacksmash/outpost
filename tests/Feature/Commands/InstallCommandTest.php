@@ -3,13 +3,27 @@
 declare(strict_types=1);
 
 use Illuminate\Process\PendingProcess;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Str;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\DoctorCheck;
 use Zacksmash\Outpost\Runtime;
 
 beforeEach(function () {
     Process::preventStrayProcesses();
+
+    $this->root = sys_get_temp_dir().'/outpost-install-'.Str::random(10);
+
+    config([
+        'outpost.domain' => 'outpost',
+        'outpost.https' => 'auto',
+        'outpost.tls.path' => $this->root.'/tls',
+    ]);
+});
+
+afterEach(function () {
+    File::deleteDirectory($this->root);
 });
 
 it('finishes immediately when outpost is already ready', function () {
@@ -167,7 +181,7 @@ it('applies safe setup steps without prompting when forced', function () {
         ->assertSuccessful();
 });
 
-it('offers to create trusted https when the certificate is missing', function () {
+it('offers to prepare trusted https when setup is missing', function () {
     $doctor = Mockery::mock(Doctor::class);
     $doctor->shouldReceive('inspect')->twice()->andReturn(
         [DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS falls back to HTTP.', 'Run outpost:certify')],
@@ -179,7 +193,7 @@ it('offers to create trusted https when the certificate is missing', function ()
     Process::fake();
 
     $this->artisan('outpost:install')
-        ->expectsConfirmation('Create and trust a wildcard certificate for local HTTPS now?', 'yes')
+        ->expectsConfirmation('Prepare trusted local HTTPS now?', 'yes')
         ->expectsOutputToContain('Outpost is ready')
         ->assertSuccessful();
 

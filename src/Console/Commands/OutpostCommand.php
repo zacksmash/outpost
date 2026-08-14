@@ -227,6 +227,15 @@ class OutpostCommand extends Command
                 'supervisord.conf' => $supervisord->generate($manifest, $commands),
             ]);
 
+            $tlsDirectory = $outposts->runtimePath($name).'/tls';
+
+            if ($secure) {
+                spin(
+                    fn () => $certificates->createForHost("{$container}.{$domain}", $tlsDirectory),
+                    'Creating the HTTPS certificate',
+                );
+            }
+
             $this->ensureInstancesIgnored();
 
             spin(
@@ -237,7 +246,7 @@ class OutpostCommand extends Command
                     [
                         $outposts->worktreePath($name).':/app',
                         $outposts->runtimePath($name).':/outpost:ro',
-                        ...($secure ? [$certificates->directory().':/outpost-tls:ro'] : []),
+                        ...($secure ? [$tlsDirectory.':/outpost-tls:ro'] : []),
                         ...$mounts,
                     ],
                     cpus: $resources['cpus'],

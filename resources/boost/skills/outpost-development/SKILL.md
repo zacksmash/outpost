@@ -44,12 +44,12 @@ container system stop && container system start
 php artisan outpost:pull                   # pulls the exact configured version from GHCR
 php artisan outpost:build                  # customized local fallback; first run takes minutes
 php artisan outpost:doctor                 # read-only verification of the complete setup
-php artisan outpost:certify                # create/trust the project wildcard certificate
+php artisan outpost:certify                # prepare the trusted local certificate authority
 ```
 
 The installer offers to start the runtime, pull a missing image, and create trusted HTTPS. Pass `--force` to apply runtime/image actions without prompting, `--https` to explicitly allow trust-store setup in a non-interactive run, or `--local` to build the configured image from package stubs instead of pulling it. It never invokes `sudo` itself, rewrites machine configuration, or changes application source files; it prints exact remedies for those steps instead.
 
-`outpost:certify` invokes `mkcert -install`, which may ask for the macOS password, then stores a wildcard leaf certificate under `.outpost/tls`. With `https => auto`, new instances use trusted HTTPS when those files match the configured domain and otherwise fall back to HTTP.
+`outpost:certify` invokes `mkcert -install`, which may ask for the macOS password, and records that the configured domain is prepared. Each new HTTPS instance receives a leaf certificate for its exact hostname under `.outpost/<name>/runtime/tls`; no wildcard matching is used. With `https => auto`, new instances use trusted HTTPS when setup matches the configured domain and otherwise fall back to HTTP. Recreate instances made by an older version to replace their shared wildcard certificate.
 
 If the machine already publishes under another domain, inspect the live value with `container system property list`, then set `OUTPOST_DOMAIN` to that domain instead of changing machine config. Editing `config.toml` does not affect the running service until it is restarted.
 
@@ -130,7 +130,7 @@ Read before executing:
 
 - do not run instances for production parity; instances are development sandboxes with permissive sandbox credentials
 - do not manually change runtime or DNS state before running `php artisan outpost:doctor`; it is read-only and reports the live state
-- do not copy or commit `.outpost/tls/key.pem`; Outpost keeps the project-local leaf key inside the ignored `.outpost` directory and mounts it read-only
+- do not copy or commit `.outpost/<name>/runtime/tls/key.pem`; Outpost keeps each exact-host leaf key inside the ignored `.outpost` directory and mounts it read-only
 - do not assume direct backing-service access is network-isolated from every other local container; set `expose_services` to `false` when loopback-only services are required
 - do not add `octane` or `vite` entries to `processes` when Outpost manages those modes; those names are reserved and their commands are generated automatically
 - do not expect external Scout drivers to run inside instances; Horizon runs only when it is explicitly configured in `processes`

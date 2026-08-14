@@ -43,7 +43,7 @@ class Certificates
 
         if (! $this->exists()) {
             throw new RuntimeException(
-                'HTTPS is enabled, but its certificate files are missing. Run [php artisan outpost:certify].',
+                'HTTPS is enabled, but trusted HTTPS has not been prepared. Run [php artisan outpost:certify].',
             );
         }
 
@@ -51,14 +51,18 @@ class Certificates
     }
 
     /**
-     * Determine whether both local TLS files exist.
+     * Determine whether trusted HTTPS is prepared for the configured domain.
      */
     public function exists(): bool
     {
-        return $this->files->isFile($this->certificatePath())
-            && $this->files->isFile($this->keyPath())
-            && $this->files->isFile($this->domainPath())
-            && trim($this->files->get($this->domainPath())) === $this->configuredDomain();
+        if (! $this->files->isFile($this->domainPath())
+            || trim($this->files->get($this->domainPath())) !== $this->configuredDomain()) {
+            return false;
+        }
+
+        return $this->files->isFile($this->trustedPath())
+            || ($this->files->isFile($this->certificatePath())
+                && $this->files->isFile($this->keyPath()));
     }
 
     /**
@@ -86,7 +90,7 @@ class Certificates
     }
 
     /**
-     * Get the public certificate path.
+     * Get the legacy shared public certificate path.
      */
     public function certificatePath(): string
     {
@@ -94,7 +98,7 @@ class Certificates
     }
 
     /**
-     * Get the private key path.
+     * Get the legacy shared private key path.
      */
     public function keyPath(): string
     {
@@ -110,7 +114,15 @@ class Certificates
     }
 
     /**
-     * Create and trust a certificate for the Outpost domain.
+     * Get the marker written after the local authority is installed.
+     */
+    public function trustedPath(): string
+    {
+        return $this->directory().'/trusted';
+    }
+
+    /**
+     * Install the local certificate authority and record the trusted domain.
      */
     public function create(string $domain, ?callable $output = null): void
     {
@@ -136,26 +148,57 @@ class Certificates
 
         $this->files->ensureDirectoryExists($this->directory(), 0700);
 
-        $certificate = Process::forever()->run([
-            'mkcert',
-            '-cert-file', $this->certificatePath(),
-            '-key-file', $this->keyPath(),
-            $domain,
-            "*.{$domain}",
-        ], $output);
-
-        if (! $certificate->successful()) {
-            throw new RuntimeException(
-                'Unable to create the Outpost HTTPS certificate: '.trim($certificate->errorOutput() ?: $certificate->output()),
-            );
-        }
-
         if ($this->files->put($this->domainPath(), $domain."\n") === false) {
             throw new RuntimeException('Unable to record the Outpost HTTPS certificate domain.');
         }
 
-        if ($this->files->exists($this->keyPath())) {
-            $this->files->chmod($this->keyPath(), 0600);
+        if ($this->files->put($this->trustedPath(), "mkcert\n") === false) {
+            throw new RuntimeException('Unable to record the trusted Outpost HTTPS setup.');
+        }
+    }
+
+    /**
+     * Create a leaf certificate for one exact instance hostname.
+     */
+    public function createForHost(string $hostname, string $directory, ?callable $output = null): void
+    {
+        $domain = $this->configuredDomain();
+
+        $this->validateDomain($hostname);
+
+        if ($hostname === $domain || ! str_ends_with($hostname, ".{$domain}")) {
+            throw new RuntimeException(
+                "The certificate name [{$hostname}] must be an exact hostname beneath [{$domain}].",
+            );
+        }
+
+        if (! $this->exists()) {
+            throw new RuntimeException(
+                'Trusted HTTPS is not prepared. Run [php artisan outpost:certify].',
+            );
+        }
+
+        $directory = $this->validatedDirectory($directory);
+        $this->files->ensureDirectoryExists($directory, 0700);
+
+        $certificatePath = $directory.'/certificate.pem';
+        $keyPath = $directory.'/key.pem';
+
+        $certificate = Process::forever()->run([
+            'mkcert',
+            '-cert-file', $certificatePath,
+            '-key-file', $keyPath,
+            $hostname,
+        ], $output);
+
+        if (! $certificate->successful()) {
+            throw new RuntimeException(
+                "Unable to create the HTTPS certificate for [{$hostname}]: ".trim($certificate->errorOutput() ?: $certificate->output()),
+            );
+        }
+
+        if ($this->files->exists($keyPath)) {
+            $this->files->chmod($keyPath, 0600);
         }
     }
 
@@ -184,5 +227,24 @@ class Certificates
         ) !== 1) {
             throw new RuntimeException('The [outpost.domain] value is not a valid certificate domain.');
         }
+    }
+
+    /**
+     * Refuse an unsafe certificate output directory.
+     */
+    protected function validatedDirectory(string $directory): string
+    {
+        $directory = rtrim($directory, '/');
+
+        if ($directory === ''
+            || $directory === '.'
+            || $directory === '..'
+            || str_contains($directory, "\0")
+            || str_contains($directory, "\n")
+            || str_contains($directory, "\r")) {
+            throw new RuntimeException('The instance certificate directory is not valid.');
+        }
+
+        return $directory;
     }
 }

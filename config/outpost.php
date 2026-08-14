@@ -130,9 +130,9 @@ return [
     | Local HTTPS
     |--------------------------------------------------------------------------
     |
-    | "auto" uses trusted HTTPS after "outpost:certify" creates a wildcard
-    | certificate, while retaining an HTTP fallback on a fresh install.
-    | Set true to require the certificate or false to always use HTTP.
+    | "auto" uses trusted HTTPS after "outpost:certify" prepares the local
+    | authority. Each instance receives an exact-host certificate. Set true
+    | to require HTTPS or false to always use HTTP.
     |
     */
 

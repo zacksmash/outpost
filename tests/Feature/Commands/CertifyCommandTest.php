@@ -23,7 +23,7 @@ afterEach(function () {
     File::deleteDirectory($this->root);
 });
 
-it('creates a trusted wildcard certificate', function () {
+it('prepares trusted https without creating a wildcard certificate', function () {
     Process::fake();
 
     $this->artisan('outpost:certify')
@@ -31,13 +31,13 @@ it('creates a trusted wildcard certificate', function () {
         ->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => ($process->command[0] ?? null) === 'mkcert');
+    Process::assertDidntRun(fn (PendingProcess $process) => in_array('-cert-file', $process->command, true));
 });
 
-it('leaves an existing certificate alone without force', function () {
+it('leaves existing trusted https setup alone without force', function () {
     File::ensureDirectoryExists($this->root.'/tls');
-    File::put($this->root.'/tls/certificate.pem', 'certificate');
-    File::put($this->root.'/tls/key.pem', 'key');
     File::put($this->root.'/tls/domain', "outpost\n");
+    File::put($this->root.'/tls/trusted', "mkcert\n");
     Process::fake();
 
     $this->artisan('outpost:certify')
@@ -47,11 +47,10 @@ it('leaves an existing certificate alone without force', function () {
     Process::assertNothingRan();
 });
 
-it('regenerates an existing certificate when forced', function () {
+it('repeats existing trusted https setup when forced', function () {
     File::ensureDirectoryExists($this->root.'/tls');
-    File::put($this->root.'/tls/certificate.pem', 'certificate');
-    File::put($this->root.'/tls/key.pem', 'key');
     File::put($this->root.'/tls/domain', "outpost\n");
+    File::put($this->root.'/tls/trusted', "mkcert\n");
     Process::fake();
 
     $this->artisan('outpost:certify', ['--force' => true])->assertSuccessful();

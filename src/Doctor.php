@@ -273,7 +273,7 @@ class Doctor
         }
 
         if ($enabled) {
-            return DoctorCheck::pass(self::TLS_CHECK, 'Trusted wildcard HTTPS is ready for new instances.');
+            return DoctorCheck::pass(self::TLS_CHECK, 'Trusted HTTPS is ready; each new instance receives an exact hostname certificate.');
         }
 
         return DoctorCheck::warning(

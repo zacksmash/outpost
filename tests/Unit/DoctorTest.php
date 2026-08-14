@@ -82,7 +82,7 @@ it('warns when auto https has not been certified yet', function () {
         ->and($checks[Doctor::TLS_CHECK]->remedy)->toContain('outpost:certify');
 });
 
-it('fails when required https certificate files are missing', function () {
+it('fails when required trusted https setup is missing', function () {
     config(['outpost.https' => true]);
     File::deleteDirectory($this->root.'/.outpost/tls');
     fakeHealthyDoctor();

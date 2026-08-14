@@ -19,12 +19,12 @@ class CertifyCommand extends Command
      * The command signature.
      */
     protected $signature = 'outpost:certify
-        {--force : Regenerate an existing certificate}';
+        {--force : Repeat trusted HTTPS setup even when already prepared}';
 
     /**
      * The command description.
      */
-    protected $description = 'Create and trust a wildcard certificate for local Outpost HTTPS';
+    protected $description = 'Prepare the trusted local authority for exact Outpost HTTPS certificates';
 
     /**
      * Execute the console command.

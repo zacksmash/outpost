@@ -51,7 +51,7 @@ Start with the guided installer:
 php artisan outpost:install
 ```
 
-It inspects the full setup, offers to start the Apple container service, pull the missing versioned base image, and create a trusted wildcard HTTPS certificate, then prints the exact commands for anything requiring manual or privileged changes. `--force` applies runtime and image actions without prompting but deliberately does not modify the system trust store; combine it with `--https` when that change is intentional. The installer never invokes `sudo` itself, rewrites machine configuration, or changes application source files.
+It inspects the full setup, offers to start the Apple container service, pull the missing versioned base image, and prepare trusted local HTTPS, then prints the exact commands for anything requiring manual or privileged changes. `--force` applies runtime and image actions without prompting but deliberately does not modify the system trust store; combine it with `--https` when that change is intentional. The installer never invokes `sudo` itself, rewrites machine configuration, or changes application source files.
 
 The manual setup it guides you through is described below. First, make sure the container runtime is running:
 
@@ -98,14 +98,14 @@ Run the doctor at any point to inspect the host, live runtime, DNS publication a
 php artisan outpost:doctor
 ```
 
-For trusted local HTTPS, install `mkcert` and let Outpost create one project-local certificate for the configured domain and every instance beneath it:
+For trusted local HTTPS, install `mkcert` and let Outpost prepare its local certificate authority once:
 
 ```bash
 brew install mkcert
 php artisan outpost:certify
 ```
 
-`mkcert` may ask for your macOS password while installing its local certificate authority. Outpost keeps only the wildcard leaf certificate and key under `.outpost/tls`, mounts them read-only, redirects the application from HTTP to HTTPS, and uses the same trusted endpoint for Vite and Mailpit. With the default `https => auto`, a fresh installation falls back to HTTP until this command succeeds; changing the domain makes the old certificate ineligible automatically.
+`mkcert` may ask for your macOS password while installing its local certificate authority. Each new instance then receives a certificate for its exact hostname—never a wildcard—under `.outpost/<name>/runtime/tls`, and that directory is mounted read-only. The application, Vite, and Mailpit use the same trusted hostname on their respective ports. With the default `https => auto`, a fresh installation falls back to HTTP until this command succeeds; changing the domain invalidates the setup marker automatically. Recreate HTTPS instances made by an older Outpost version so they receive exact-host certificates.
 
 Outpost has verified Apple's `container` 1.2.x line. Older versions fail the compatibility check; newer minors produce a warning rather than blocking you.
 
@@ -196,7 +196,7 @@ php artisan outpost:list             # every instance, its state, and its URL
 php artisan outpost:list --json      # machine-readable inventory for agents and scripts
 php artisan outpost:info billing     # runtime details, URLs, DSNs, and credentials; --json available
 php artisan outpost:doctor           # diagnose host, runtime, DNS, image, and app readiness
-php artisan outpost:certify          # create or renew trusted local HTTPS; --force renews
+php artisan outpost:certify          # prepare or recheck trusted local HTTPS; --force repeats setup
 php artisan outpost:pull             # refresh the exact configured OCI image
 php artisan outpost:open billing     # start if needed, then open in the default browser
 php artisan outpost:open billing mailpit # open Mailpit; `vite` is also supported
@@ -248,7 +248,7 @@ Instances are development sandboxes, not production parity. The database account
 | `vite.port` | `5173` | Public per-instance port for the nginx-proxied Vite development server. |
 | `vite.hot_file` | `public/hot` | Laravel Vite hot-file path, relative to the application. |
 | `https` | `auto` | Use a trusted certificate when present; accepts `auto`, `true`, or `false`. |
-| `tls.path` | `.outpost/tls` | Project-local wildcard certificate directory. |
+| `tls.path` | `.outpost/tls` | Project-local HTTPS trust metadata; exact leaf certificates live in each instance's runtime directory. |
 | `services` | `null` | Set an array to skip service detection. |
 | `expose_services` | `true` | Make detected services reachable on the instance hostname and standard ports. |
 | `processes` | `[]` | Named, shell-free argument lists supervised with the instance. |

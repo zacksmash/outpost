@@ -23,7 +23,7 @@ class InstallCommand extends Command
      */
     protected $signature = 'outpost:install
         {--force : Apply safe setup steps without asking}
-        {--https : Create and trust a local HTTPS certificate}
+        {--https : Prepare trusted local HTTPS}
         {--local : Build the base image locally instead of pulling it}';
 
     /**
@@ -171,7 +171,7 @@ class InstallCommand extends Command
             return false;
         }
 
-        return confirm('Create and trust a wildcard certificate for local HTTPS now?', true);
+        return confirm('Prepare trusted local HTTPS now?', true);
     }
 
     /**

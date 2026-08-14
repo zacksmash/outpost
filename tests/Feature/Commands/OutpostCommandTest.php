@@ -16,7 +16,10 @@ beforeEach(function () {
 
     $this->root = sys_get_temp_dir().'/outpost-create-'.Str::random(10);
 
-    config(['outpost.path' => $this->root]);
+    config([
+        'outpost.path' => $this->root,
+        'outpost.https' => false,
+    ]);
 
     File::ensureDirectoryExists($this->root.'/feature-x/app');
     File::put($this->root.'/feature-x/app/.env.example', "APP_NAME=Example\nDB_CONNECTION=sqlite\n");
@@ -161,15 +164,16 @@ it('runs detected octane and vite development servers', function () {
 it('boots a trusted https instance with its certificate mounted read only', function () {
     $tls = $this->root.'/tls';
     File::ensureDirectoryExists($tls);
-    File::put($tls.'/certificate.pem', 'certificate');
-    File::put($tls.'/key.pem', 'key');
     File::put($tls.'/domain', "outpost\n");
+    File::put($tls.'/trusted', "mkcert\n");
     config([
         'outpost.https' => true,
         'outpost.tls.path' => $tls,
     ]);
 
-    fakeCreation();
+    fakeCreation([
+        processPattern('mkcert', '-cert-file').' *' => Process::result('created'),
+    ]);
 
     $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
         ->expectsOutputToContain('https://feature-x-laravel.outpost')
@@ -179,14 +183,24 @@ it('boots a trusted https instance with its certificate mounted read only', func
     $nginx = File::get($this->root.'/feature-x/runtime/nginx.conf');
 
     expect($manifest['url'])->toBe('https://feature-x-laravel.outpost')
-        ->and($nginx)->toContain('listen 443 ssl default_server;');
+        ->and($nginx)->toContain('listen 443 ssl default_server;')
+        ->and(File::isDirectory($this->root.'/feature-x/runtime/tls'))->toBeTrue();
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'mkcert',
+        '-cert-file', $this->root.'/feature-x/runtime/tls/certificate.pem',
+        '-key-file', $this->root.'/feature-x/runtime/tls/key.pem',
+        'feature-x-laravel.outpost',
+    ]);
+
+    Process::assertDidntRun(fn (PendingProcess $process) => in_array('*.outpost', $process->command, true));
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'run', '--detach', '--name', 'feature-x-laravel', '--dns', '1.1.1.1',
         '--cpus', '4', '--memory', '2G',
         '--volume', $this->root.'/feature-x/app:/app',
         '--volume', $this->root.'/feature-x/runtime:/outpost:ro',
-        '--volume', $tls.':/outpost-tls:ro',
+        '--volume', $this->root.'/feature-x/runtime/tls:/outpost-tls:ro',
         'ghcr.io/zacksmash/outpost:0.1.0',
     ]);
 });
