@@ -11,10 +11,11 @@ return [
     |
     | Every instance is reachable at its own local URL, such as
     | "http://feature-billing-app.outpost". This value is the local domain
-    | those URLs live on. The domain must be registered once with Apple's
-    | container DNS resolver; Outpost prints the exact command to run
-    | whenever that registration is missing. Herd owns ".test", so
-    | Outpost stays out of its way by default.
+    | those URLs live on. It must match the machine-wide publication
+    | domain in ~/.config/container/config.toml and be registered
+    | with the container DNS resolver — Outpost verifies the live
+    | runtime value at creation time and prints the exact fix when
+    | they disagree or a config change still needs a restart.
     |
     */
 

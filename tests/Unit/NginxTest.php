@@ -19,6 +19,14 @@ it('pins the fastcgi socket to the instance php version', function () {
         ->toContain('fastcgi_pass unix:/run/php/php8.5-fpm.sock;');
 });
 
+it('accepts modern laravel responses with large preload headers', function () {
+    $config = (new Nginx)->generate(fakeManifest());
+
+    expect($config)->toContain('fastcgi_buffer_size 32k;')
+        ->and($config)->toContain('fastcgi_buffers 8 32k;')
+        ->and($config)->toContain('fastcgi_busy_buffers_size 64k;');
+});
+
 it('denies access to hidden files except well-known', function () {
     expect((new Nginx)->generate(fakeManifest(php: '8.4')))
         ->toContain('location ~ /\.(?!well-known).*');

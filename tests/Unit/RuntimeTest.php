@@ -229,6 +229,32 @@ it('gives up when a container never becomes ready', function () {
     Sleep::assertSleptTimes(4);
 });
 
+it('reads the live publication domain from the runtime', function (string $output, ?string $expected) {
+    Process::fake([
+        processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result($output),
+    ]);
+
+    expect((new Runtime)->publicationDomain())->toBe($expected);
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'system', 'property', 'list', '--format', 'json',
+    ]);
+})->with([
+    'dns domain' => ['{"dns":{"domain":"box"}}', 'box'],
+    'trailing root label' => ['{"dns":{"domain":"outpost."}}', 'outpost'],
+    'dns without domain' => ['{"dns":{}}', null],
+    'empty domain' => ['{"dns":{"domain":""}}', null],
+]);
+
+it('rejects malformed runtime properties', function () {
+    Process::fake([
+        processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result('not-json'),
+    ]);
+
+    expect(fn () => (new Runtime)->publicationDomain())
+        ->toThrow(RuntimeException::class, 'Unable to parse the container system properties');
+});
+
 it('flushes the macos dns cache', function () {
     Process::fake();
 

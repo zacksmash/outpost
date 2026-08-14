@@ -34,9 +34,15 @@ php artisan vendor:publish --tag="outpost-config"   # optional; tag "outpost" pu
 
 ```bash
 container system start
+# ~/.config/container/config.toml must set the machine's publication domain:
+#   [dns]
+#   domain = "outpost"
 sudo container system dns create outpost   # Outpost prints this command but never runs sudo itself
+container system stop && container system start
 php artisan outpost:build                  # builds the shared base image; first run takes minutes
 ```
+
+If the machine already publishes under another domain, inspect the live value with `container system property list`, then set `OUTPOST_DOMAIN` to that domain instead of changing machine config. Editing `config.toml` does not affect the running service until it is restarted.
 
 ### 4. Create and manage instances
 

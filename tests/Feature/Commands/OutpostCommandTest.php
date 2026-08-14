@@ -29,6 +29,7 @@ function fakeCreation(array $overrides = []): void
     Process::fake($overrides + [
         processPattern('git', 'rev-parse', 'HEAD') => Process::result('abc123'),
         processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\noutpost\n"),
+        processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result('{"dns":{"domain":"outpost"}}'),
         processPattern('container', 'image', 'inspect', 'outpost-base') => Process::result('[]'),
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
         processPattern('git', 'branch', '--show-current') => Process::result("main\n"),
@@ -90,6 +91,40 @@ it('prints the dns registration command instead of running it', function () {
         ->assertFailed();
 
     Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[0] ?? null) === 'sudo');
+});
+
+it('refuses a domain the machine will never publish', function () {
+    fakeCreation([
+        processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\nbox\n"),
+        processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result('{"dns":{"domain":"box"}}'),
+    ]);
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->expectsOutputToContain('publishes container hostnames under [box]')
+        ->expectsOutputToContain('OUTPOST_DOMAIN=box')
+        ->assertFailed();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'run');
+});
+
+it('provisions the application before checking its final HTTP response', function () {
+    $composerInstalled = false;
+
+    fakeCreation([
+        processPattern('container', 'exec', 'feature-x-laravel', 'php8.5', '/usr/local/bin/composer').' *' => function () use (&$composerInstalled) {
+            $composerInstalled = true;
+
+            return Process::result();
+        },
+        processPattern('container', 'exec', 'feature-x-laravel', 'curl').' *' => function () use (&$composerInstalled) {
+            expect($composerInstalled)->toBeTrue();
+
+            return Process::result();
+        },
+    ]);
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->assertSuccessful();
 });
 
 it('requires the base image to be built first', function () {
@@ -215,7 +250,7 @@ it('leaves everything in place when the instance never answers', function () {
     Sleep::fake();
 
     fakeCreation([
-        processPattern('container', 'exec').' *' => Process::result('', 'refused', 7),
+        processPattern('container', 'exec', 'feature-x-laravel', 'curl').' *' => Process::result('', 'refused', 7),
     ]);
 
     config(['outpost.timeout' => 3]);

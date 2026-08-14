@@ -179,6 +179,46 @@ it('runs the container steps in order, pinned to the instance php version', func
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('db:seed', $process->command, true));
 });
 
+it('installs npm dependencies and builds assets when the app has a build script', function () {
+    Process::fake();
+
+    File::put($this->root.'/feature-x/app/package.json', json_encode([
+        'scripts' => ['build' => 'vite build'],
+    ], JSON_THROW_ON_ERROR));
+
+    $steps = [];
+
+    $this->provisioner->provision(
+        fakeManifest(name: 'feature-x', database: 'sqlite', services: []),
+        onStep: function (string $step) use (&$steps) {
+            $steps[] = $step;
+        },
+    );
+
+    expect($steps)->toContain('Installing npm dependencies')
+        ->and($steps)->toContain('Building the front-end assets');
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', 'feature-x-app', 'npm', 'install', '--no-fund', '--no-audit',
+    ]);
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', 'feature-x-app', 'npm', 'run', 'build',
+    ]);
+});
+
+it('skips the front-end build without a build script', function () {
+    Process::fake();
+
+    File::put($this->root.'/feature-x/app/package.json', json_encode([
+        'scripts' => ['dev' => 'vite'],
+    ], JSON_THROW_ON_ERROR));
+
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []));
+
+    Process::assertDidntRun(fn (PendingProcess $process) => in_array('npm', $process->command, true));
+});
+
 it('seeds the database only when asked', function () {
     Process::fake();
 

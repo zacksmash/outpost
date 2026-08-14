@@ -50,11 +50,21 @@ First, make sure the container runtime is running:
 container system start
 ```
 
-Next, register the `.outpost` domain so instance URLs resolve from your Mac. Outpost never runs `sudo` on your behalf, so this one is yours to run:
+Next, make instance URLs resolvable. The container runtime publishes every container's hostname under a **single machine-wide domain**, so that domain and Outpost's must agree. Point the runtime at `outpost` in `~/.config/container/config.toml`:
+
+```toml
+[dns]
+domain = "outpost"
+```
+
+Then register the resolver — Outpost never runs `sudo` on your behalf, so this one is yours — and restart the runtime:
 
 ```bash
 sudo container system dns create outpost
+container system stop && container system start
 ```
+
+Already publishing under another domain? Set `OUTPOST_DOMAIN` to match it instead. Outpost checks the running service's live domain at creation time—not just the config file—and tells you when a restart is still needed.
 
 Finally, build the shared base image. Every instance boots from this single image, so creating an instance never waits on a build. The first build installs everything Outpost supports and takes several minutes:
 
@@ -70,7 +80,7 @@ The `outpost` command walks you through everything:
 php artisan outpost
 ```
 
-You'll pick a branch (or type a new name to create one), confirm the instance's name, and Outpost handles the rest: it checks out the branch into a dedicated worktree, detects which services the app needs, boots a container, writes the instance's `.env`, installs dependencies, runs your migrations, and prints the URL.
+You'll pick a branch (or type a new name to create one), confirm the instance's name, and Outpost handles the rest: it checks out the branch into a dedicated worktree, detects which services the app needs, boots a container, writes the instance's `.env`, installs composer and npm dependencies, builds your front-end assets when a build script exists, runs your migrations, and prints the URL.
 
 Everything can be provided up front when you'd rather not be asked:
 

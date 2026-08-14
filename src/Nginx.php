@@ -33,6 +33,9 @@ class Nginx
 
             location ~ ^/index\\.php(/|$) {
                 fastcgi_pass unix:/run/php/php{$manifest->php}-fpm.sock;
+                fastcgi_buffer_size 32k;
+                fastcgi_buffers 8 32k;
+                fastcgi_busy_buffers_size 64k;
                 fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
                 include fastcgi_params;
             }

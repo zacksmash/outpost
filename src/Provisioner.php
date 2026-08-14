@@ -32,13 +32,21 @@ class Provisioner
             fn () => $this->prepareEnvironment($manifest));
 
         $this->step($onStep, 'Installing composer dependencies',
-            fn () => $this->exec($manifest, ['/usr/local/bin/composer', 'install', '--no-interaction', '--prefer-dist']));
+            fn () => $this->php($manifest, ['/usr/local/bin/composer', 'install', '--no-interaction', '--prefer-dist']));
 
         $this->step($onStep, 'Generating the application key',
             fn () => $this->artisan($manifest, ['key:generate', '--force']));
 
         $this->step($onStep, 'Linking the storage directory',
             fn () => $this->artisan($manifest, ['storage:link', '--force']));
+
+        if ($this->buildsFrontend($manifest)) {
+            $this->step($onStep, 'Installing npm dependencies',
+                fn () => $this->exec($manifest, ['npm', 'install', '--no-fund', '--no-audit']));
+
+            $this->step($onStep, 'Building the front-end assets',
+                fn () => $this->exec($manifest, ['npm', 'run', 'build']));
+        }
 
         $this->step($onStep, 'Running the database migrations',
             fn () => $this->artisan($manifest, ['migrate', '--force']));
@@ -47,6 +55,20 @@ class Provisioner
             $this->step($onStep, 'Seeding the database',
                 fn () => $this->artisan($manifest, ['db:seed', '--force']));
         }
+    }
+
+    /**
+     * Determine if the application builds front-end assets.
+     *
+     * Vite manifests are gitignored, so a fresh worktree never has one;
+     * an app with a build script serves errors until it runs.
+     */
+    protected function buildsFrontend(Manifest $manifest): bool
+    {
+        $package = $this->outposts->worktreePath($manifest->name).'/package.json';
+
+        return File::exists($package)
+            && is_string(data_get(File::json($package), 'scripts.build'));
     }
 
     /**
@@ -165,7 +187,7 @@ class Provisioner
      */
     protected function artisan(Manifest $manifest, array $command): void
     {
-        $this->exec($manifest, ['artisan', ...$command]);
+        $this->php($manifest, ['artisan', ...$command]);
     }
 
     /**
@@ -173,10 +195,18 @@ class Provisioner
      *
      * @param  list<string>  $command
      */
+    protected function php(Manifest $manifest, array $command): void
+    {
+        $this->exec($manifest, ["php{$manifest->php}", ...$command]);
+    }
+
+    /**
+     * Run a command inside the instance, throwing on failure.
+     *
+     * @param  list<string>  $command
+     */
     protected function exec(Manifest $manifest, array $command): void
     {
-        $command = ["php{$manifest->php}", ...$command];
-
         $result = $this->runtime->exec($manifest->container, $command);
 
         if (! $result->successful()) {

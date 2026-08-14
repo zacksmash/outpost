@@ -70,6 +70,15 @@ class OutpostCommand extends Command
                 return self::FAILURE;
             }
 
+            $published = $runtime->publicationDomain();
+
+            if ($published !== null && $published !== $domain) {
+                error("Instance URLs would use the [{$domain}] domain, but this machine publishes container hostnames under [{$published}], so they would never resolve.");
+                note("Either set OUTPOST_DOMAIN={$published} to match this machine, or change the machine's publication domain:\n\n  1. Edit ~/.config/container/config.toml so [dns] has domain = \"{$domain}\"\n  2. Restart the runtime: container system stop && container system start");
+
+                return self::FAILURE;
+            }
+
             if (! $runtime->domainRegistered($domain)) {
                 error("The [{$domain}] domain is not registered with the container DNS resolver.");
                 note("Run this once, then try again:\n\n  sudo container system dns create {$domain}");
@@ -158,19 +167,19 @@ class OutpostCommand extends Command
                 'Booting the instance',
             );
 
-            $seconds = config()->integer('outpost.timeout');
-
-            if (! spin(fn () => $runtime->awaitReady($container, $seconds), 'Waiting for the instance to answer')) {
-                throw new RuntimeException(
-                    "The instance did not answer HTTP within {$seconds} seconds. Check its logs with [php artisan outpost:logs {$name}].",
-                );
-            }
-
             $provisioner->provision(
                 $manifest,
                 seed: (bool) $this->option('seed'),
                 onStep: fn (string $step) => info($step),
             );
+
+            $seconds = config()->integer('outpost.timeout');
+
+            if (! spin(fn () => $runtime->awaitReady($container, $seconds), 'Checking the application response')) {
+                throw new RuntimeException(
+                    "The application did not answer HTTP within {$seconds} seconds. Check its logs with [php artisan outpost:logs {$name}].",
+                );
+            }
 
             $runtime->flushDnsCache();
         } catch (RuntimeException $e) {

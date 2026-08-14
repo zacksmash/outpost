@@ -18,6 +18,30 @@ class Runtime
     protected const int TIMEOUT = 600;
 
     /**
+     * Get the domain the DNS daemon publishes container hostnames under.
+     *
+     * Read the running service's properties instead of config.toml because
+     * edits there do not take effect until the runtime is restarted.
+     */
+    public function publicationDomain(): ?string
+    {
+        $result = $this->runOrFail(
+            ['container', 'system', 'property', 'list', '--format', 'json'],
+            'Unable to inspect the container system properties',
+        );
+
+        $properties = json_decode($result->output(), true);
+
+        if (! is_array($properties)) {
+            throw new RuntimeException('Unable to parse the container system properties as JSON.');
+        }
+
+        $domain = data_get($properties, 'dns.domain');
+
+        return is_string($domain) && $domain !== '' ? rtrim($domain, '.') : null;
+    }
+
+    /**
      * Determine if the given local DNS domain is registered.
      */
     public function domainRegistered(string $domain): bool
