@@ -45,7 +45,7 @@ function fakeHealthyDoctor(array $overrides = []): void
         processPattern('container', 'system', 'status', '--format', 'json') => Process::result('{"status":"running"}'),
         processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result('{"dns":{"domain":"outpost"}}'),
         processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\noutpost\n"),
-        processPattern('container', 'image', 'inspect', 'outpost-base') => Process::result('[{"reference":"outpost-base"}]'),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.0') => Process::result('[{"reference":"ghcr.io/zacksmash/outpost:0.1.0"}]'),
         processPattern('git', 'rev-parse', 'HEAD') => Process::result("abc123\n"),
     ]);
 }
@@ -60,7 +60,7 @@ it('passes a healthy supported environment', function () {
         ->and($checks['Platform']->detail)->toBe('macOS 27.0 on arm64')
         ->and($checks['Runtime version']->detail)->toContain('1.2.2')
         ->and($checks['Publication domain']->detail)->toContain('[outpost]')
-        ->and($checks['Base image']->detail)->toContain('[outpost-base]');
+        ->and($checks['Base image']->detail)->toContain('[ghcr.io/zacksmash/outpost:0.1.0]');
 });
 
 it('fails unsupported platforms and old runtime versions', function () {
@@ -121,7 +121,7 @@ it('reports domain, resolver, image, and project problems with fixes', function 
     fakeHealthyDoctor([
         processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result('{"dns":{"domain":"box"}}'),
         processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\nbox\n"),
-        processPattern('container', 'image', 'inspect', 'outpost-base') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.0') => Process::result('', 'not found', 1),
         processPattern('git', 'rev-parse', 'HEAD') => Process::result('', 'unknown revision', 128),
     ]);
 

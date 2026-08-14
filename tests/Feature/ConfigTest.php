@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 it('exposes sensible defaults', function () {
     expect(config('outpost.domain'))->toBe('outpost')
-        ->and(config('outpost.image'))->toBe('outpost-base')
+        ->and(config('outpost.image'))->toBe('ghcr.io/zacksmash/outpost:0.1.0')
         ->and(config('outpost.dns'))->toBe('1.1.1.1')
         ->and(config('outpost.path'))->toBe('.outpost')
         ->and(config('outpost.php'))->toBe(['8.4', '8.5'])

@@ -22,7 +22,8 @@ class InstallCommand extends Command
      * The command signature.
      */
     protected $signature = 'outpost:install
-        {--force : Apply safe setup steps without asking}';
+        {--force : Apply safe setup steps without asking}
+        {--local : Build the base image locally instead of pulling it}';
 
     /**
      * The command description.
@@ -51,8 +52,9 @@ class InstallCommand extends Command
 
         if ($this->failed($checks, Doctor::BASE_IMAGE_CHECK)
             && ! $this->hasRuntimeBlocker($checks)
-            && $this->approve('Build the shared ['.config()->string('outpost.image').'] image now?')) {
-            $exit = $this->call('outpost:build', [
+            && $this->approve($this->imageQuestion())) {
+            $command = $this->option('local') ? 'outpost:build' : 'outpost:pull';
+            $exit = $this->call($command, [
                 '--force' => (bool) $this->option('force'),
             ]);
 
@@ -123,5 +125,16 @@ class InstallCommand extends Command
     protected function approve(string $question): bool
     {
         return (bool) $this->option('force') || confirm($question, true);
+    }
+
+    /**
+     * Get the prompt for acquiring the configured image.
+     */
+    protected function imageQuestion(): string
+    {
+        $action = $this->option('local') ? 'Build' : 'Pull';
+        $suffix = $this->option('local') ? ' locally' : '';
+
+        return "{$action} the shared [".config()->string('outpost.image')."] image{$suffix} now?";
     }
 }

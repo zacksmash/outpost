@@ -17,7 +17,7 @@ it('finishes immediately when outpost is already ready', function () {
     $doctor->shouldReceive('inspect')->once()->andReturn([
         DoctorCheck::pass('Platform', 'macOS 27.0 on arm64'),
         DoctorCheck::pass('Runtime', 'The Apple container system is running.'),
-        DoctorCheck::pass('Base image', 'The [outpost-base] image is available.'),
+        DoctorCheck::pass('Base image', 'The [ghcr.io/zacksmash/outpost:0.1.0] image is available.'),
     ]);
 
     app()->instance(Doctor::class, $doctor);
@@ -68,23 +68,44 @@ it('leaves a stopped runtime untouched when the action is declined', function ()
         ->assertFailed();
 });
 
-it('offers to build a missing base image and verifies the result', function () {
+it('offers to pull a missing base image and verifies the result', function () {
     $doctor = Mockery::mock(Doctor::class);
     $doctor->shouldReceive('inspect')->twice()->andReturn(
-        [DoctorCheck::failure('Base image', 'The [outpost-base] image is missing.', 'Run: php artisan outpost:build')],
-        [DoctorCheck::pass('Base image', 'The [outpost-base] image is available.')],
+        [DoctorCheck::failure('Base image', 'The versioned image is missing.', 'Run: php artisan outpost:pull')],
+        [DoctorCheck::pass('Base image', 'The versioned image is available.')],
     );
 
     app()->instance(Doctor::class, $doctor);
 
     Process::fake([
-        processPattern('container', 'image', 'inspect', 'outpost-base') => Process::result('', 'not found', 1),
-        processPattern('container', 'build').' *' => Process::result('built'),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.0') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.1.0') => Process::result('pulled'),
     ]);
 
     $this->artisan('outpost:install')
-        ->expectsConfirmation('Build the shared [outpost-base] image now?', 'yes')
+        ->expectsConfirmation('Pull the shared [ghcr.io/zacksmash/outpost:0.1.0] image now?', 'yes')
         ->expectsOutputToContain('Outpost is ready')
+        ->assertSuccessful();
+
+    Process::assertRan(fn (PendingProcess $process) => ($process->command[2] ?? null) === 'pull');
+});
+
+it('builds the base image locally when requested', function () {
+    $doctor = Mockery::mock(Doctor::class);
+    $doctor->shouldReceive('inspect')->twice()->andReturn(
+        [DoctorCheck::failure('Base image', 'The versioned image is missing.', 'Run: php artisan outpost:pull')],
+        [DoctorCheck::pass('Base image', 'The versioned image is available.')],
+    );
+
+    app()->instance(Doctor::class, $doctor);
+
+    Process::fake([
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.0') => Process::result('', 'not found', 1),
+        processPattern('container', 'build').' *' => Process::result('built'),
+    ]);
+
+    $this->artisan('outpost:install', ['--local' => true])
+        ->expectsConfirmation('Build the shared [ghcr.io/zacksmash/outpost:0.1.0] image locally now?', 'yes')
         ->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'build');
@@ -116,7 +137,7 @@ it('does not build an image while the runtime contract is blocked', function () 
     $doctor = Mockery::mock(Doctor::class);
     $doctor->shouldReceive('inspect')->once()->andReturn([
         DoctorCheck::failure('Runtime version', 'Apple container 1.1.4 is unsupported.', 'Upgrade to 1.2.x.'),
-        DoctorCheck::failure('Base image', 'The [outpost-base] image is missing.', 'Run: php artisan outpost:build'),
+        DoctorCheck::failure('Base image', 'The versioned image is missing.', 'Run: php artisan outpost:pull'),
     ]);
 
     app()->instance(Doctor::class, $doctor);

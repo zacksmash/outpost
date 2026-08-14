@@ -112,6 +112,23 @@ class Runtime
     }
 
     /**
+     * Pull an image from an OCI registry, streaming its progress.
+     */
+    public function pull(string $image, ?callable $output = null): void
+    {
+        $result = Process::forever()->run(
+            ['container', 'image', 'pull', $image],
+            $output,
+        );
+
+        if (! $result->successful()) {
+            throw new RuntimeException(
+                "Unable to pull the [{$image}] image: ".trim($result->errorOutput() ?: $result->output()),
+            );
+        }
+    }
+
+    /**
      * Build an image from the given context directory, streaming build output.
      *
      * @param  array<string, string>  $buildArgs

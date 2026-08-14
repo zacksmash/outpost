@@ -24,7 +24,7 @@ class BuildCommand extends Command
     /**
      * The command description.
      */
-    protected $description = 'Build the shared base image for Outpost instances';
+    protected $description = 'Build a customized Outpost base image locally';
 
     /**
      * Execute the console command.
@@ -66,7 +66,7 @@ class BuildCommand extends Command
             return self::SUCCESS;
         }
 
-        note('The base image installs everything Outpost supports, so the first build takes several minutes.');
+        note('The local image installs everything Outpost supports, so the first build takes several minutes.');
 
         try {
             $runtime->build(

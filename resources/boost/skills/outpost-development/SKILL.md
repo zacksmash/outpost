@@ -33,18 +33,19 @@ php artisan vendor:publish --tag="outpost-config"   # optional; tag "outpost" pu
 ### 3. One-time host setup
 
 ```bash
-php artisan outpost:install                # preferred guided setup
+php artisan outpost:install                # preferred guided setup; starts runtime and pulls image
 container system start
 # ~/.config/container/config.toml must set the machine's publication domain:
 #   [dns]
 #   domain = "outpost"
 sudo container system dns create outpost   # Outpost prints this command but never runs sudo itself
 container system stop && container system start
-php artisan outpost:build                  # builds the shared base image; first run takes minutes
+php artisan outpost:pull                   # pulls the exact configured version from GHCR
+php artisan outpost:build                  # customized local fallback; first run takes minutes
 php artisan outpost:doctor                 # read-only verification of the complete setup
 ```
 
-The installer offers to start the runtime and build a missing image. Pass `--force` to apply those safe actions without prompting. It never invokes `sudo`, rewrites machine configuration, or changes application source files; it prints exact remedies for those steps instead.
+The installer offers to start the runtime and pull a missing image. Pass `--force` to apply those safe actions without prompting, or `--local` to build the configured image from package stubs instead of pulling it. It never invokes `sudo`, rewrites machine configuration, or changes application source files; it prints exact remedies for those steps instead.
 
 If the machine already publishes under another domain, inspect the live value with `container system property list`, then set `OUTPOST_DOMAIN` to that domain instead of changing machine config. Editing `config.toml` does not affect the running service until it is restarted.
 
@@ -56,6 +57,7 @@ The doctor treats Apple `container` 1.2.x as verified. It reports older versions
 php artisan outpost                        # prompt-driven: pick a branch, confirm a name
 php artisan outpost feature/billing --name=billing --seed
 php artisan outpost:doctor
+php artisan outpost:pull --force
 php artisan outpost:list
 php artisan outpost:start billing
 php artisan outpost:stop billing
@@ -72,7 +74,7 @@ php artisan outpost:remove billing --force
 
 Services are detected from the app's own configuration (database driver, redis usage across cache/session/queue/broadcast, smtp mailer). When detection guesses wrong, set `services` in `config/outpost.php` (e.g. `['mysql', 'redis']`) to skip detection, then remove and recreate the instance. The manifest at `.outpost/<name>/outpost.json` records what was detected.
 
-Key `config/outpost.php` values: `domain` (default `outpost`), `image`, `dns`, `path`, `php` (versions baked into the image — rebuild after changing), `services`, `database` (sandbox credentials baked into the image at build time — rebuild after changing; letters, numbers, dots, dashes, underscores only), `timeout`.
+Key `config/outpost.php` values: `domain` (default `outpost`), `image` (an exact versioned GHCR reference), `dns`, `path`, `php` (versions baked into the image — rebuild locally after changing), `services`, `database` (sandbox credentials baked into the image — rebuild locally after changing; letters, numbers, dots, dashes, underscores only), `timeout`.
 
 ## Rules, References, and Templates
 

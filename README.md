@@ -50,7 +50,7 @@ Start with the guided installer:
 php artisan outpost:install
 ```
 
-It inspects the full setup, offers to start the Apple container service and build a missing base image, then prints the exact commands for anything requiring manual or privileged changes. `--force` applies those two safe actions without prompting. The installer never invokes `sudo`, rewrites machine configuration, or changes application source files.
+It inspects the full setup, offers to start the Apple container service and pull the missing versioned base image, then prints the exact commands for anything requiring manual or privileged changes. `--force` applies those two safe actions without prompting. The installer never invokes `sudo`, rewrites machine configuration, or changes application source files.
 
 The manual setup it guides you through is described below. First, make sure the container runtime is running:
 
@@ -74,10 +74,21 @@ container system stop && container system start
 
 Already publishing under another domain? Set `OUTPOST_DOMAIN` to match it instead. Outpost checks the running service's live domain at creation time—not just the config file—and tells you when a restart is still needed.
 
-Finally, build the shared base image. Every instance boots from this single image, so creating an instance never waits on a build. The first build installs everything Outpost supports and takes several minutes:
+Finally, pull the versioned base image. Every instance boots from this single image, so creating an instance never waits on a build:
+
+```bash
+php artisan outpost:pull
+```
+
+The default image is `ghcr.io/zacksmash/outpost:0.1.0`, published for ARM64 from the same package stubs whenever a matching GitHub release is published. Exact tags keep an existing installation reproducible instead of silently changing underneath it.
+
+Need different PHP versions or sandbox database credentials? Publish `config/outpost.php`, make the changes, and build the configured image locally instead. The first local build takes several minutes:
 
 ```bash
 php artisan outpost:build
+
+# Or perform the complete guided setup while choosing a local build:
+php artisan outpost:install --local
 ```
 
 Run the doctor at any point to inspect the host, live runtime, DNS publication and resolver state, base image, and application prerequisites without changing anything:
@@ -124,6 +135,7 @@ Octane, Horizon, and external Scout drivers are detected but not run inside inst
 ```bash
 php artisan outpost:list             # every instance, its state, and its URL
 php artisan outpost:doctor           # diagnose host, runtime, DNS, image, and app readiness
+php artisan outpost:pull             # refresh the exact configured OCI image
 php artisan outpost:start billing    # start a stopped instance
 php artisan outpost:stop billing     # stop it; worktree and data survive
 php artisan outpost:shell billing    # open a shell inside the instance
@@ -141,7 +153,7 @@ Instances live under `.outpost/` in your project root (Outpost adds it to your `
 
 The worktree is bind-mounted into the container, so the instance's code is editable right on your Mac — changes appear instantly, no sync step. The container gets its own IP address on Apple's container network, answers on port 80, and is reachable at `http://<name>-<app>.outpost`. No ports are published, so nothing collides with Herd, Sail, or anything else on your machine.
 
-The instance's `.env` is seeded from your `.env.example` — never from your real `.env`, so real credentials stay out of sandboxes — and pointed at the instance's own services with the sandbox credentials from `config/outpost.php`. Those credentials are baked into the base image when you run `outpost:build`, so changing them afterward requires a rebuild.
+The instance's `.env` is seeded from your `.env.example` — never from your real `.env`, so real credentials stay out of sandboxes — and pointed at the instance's own services with the sandbox credentials from `config/outpost.php`. The published image contains the documented default credentials and PHP versions. Changing either requires a local `outpost:build` before creating more instances.
 
 ## Isolation and Its Limits
 
@@ -157,7 +169,7 @@ Instances are development sandboxes, not production parity. The database account
 | Key | Default | Description |
 | --- | --- | --- |
 | `domain` | `outpost` | The local domain instance URLs live on. |
-| `image` | `outpost-base` | The shared base image name. |
+| `image` | `ghcr.io/zacksmash/outpost:0.1.0` | Exact OCI image reference used by instances. |
 | `dns` | `1.1.1.1` | Nameserver injected into builds and instances. |
 | `path` | `.outpost` | Where instances live, relative to your project. |
 | `php` | `['8.4', '8.5']` | PHP versions in the base image. |

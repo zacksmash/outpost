@@ -87,8 +87,8 @@ class OutpostCommand extends Command
             }
 
             if (! $runtime->hasImage($image)) {
-                error("The [{$image}] base image has not been built yet.");
-                note("Build it once, then try again:\n\n  php artisan outpost:build");
+                error("The [{$image}] base image is not installed locally.");
+                note("Install it once, then try again:\n\n  php artisan outpost:pull\n\nFor a customized local build, use [php artisan outpost:build].");
 
                 return self::FAILURE;
             }

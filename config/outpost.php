@@ -26,14 +26,14 @@ return [
     | Base Image
     |--------------------------------------------------------------------------
     |
-    | All instances boot from a single shared base image containing every
-    | service Outpost knows how to run. The image is built once via the
-    | "outpost:build" command, so creating an instance never triggers
-    | an image build. Instances differ only by generated config.
+    | All instances boot from a single versioned base image containing every
+    | service Outpost knows how to run. The guided installer pulls the image
+    | from GitHub Container Registry. Use "outpost:build" when you need a
+    | customized local image instead. Instances differ only by config.
     |
     */
 
-    'image' => env('OUTPOST_IMAGE', 'outpost-base'),
+    'image' => env('OUTPOST_IMAGE', 'ghcr.io/zacksmash/outpost:0.1.0'),
 
     /*
     |--------------------------------------------------------------------------

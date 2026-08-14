@@ -213,7 +213,7 @@ class Doctor
             : DoctorCheck::failure(
                 self::BASE_IMAGE_CHECK,
                 "The [{$image}] image is missing.",
-                'Run: php artisan outpost:build',
+                'Run: php artisan outpost:pull (or use outpost:build for a customized local image)',
             );
 
         return $checks;

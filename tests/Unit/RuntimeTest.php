@@ -83,6 +83,24 @@ it('checks whether an image exists', function () {
         ->and($this->runtime->hasImage('other'))->toBeTrue();
 });
 
+it('pulls an image from an oci registry', function () {
+    Process::fake();
+
+    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.1.0');
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.1.0',
+    ]);
+});
+
+it('surfaces the real error when an image pull fails', function () {
+    Process::fake([
+        processPattern('container', 'image', 'pull').' *' => Process::result('', 'denied', 1),
+    ]);
+
+    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.1.0');
+})->throws(RuntimeException::class, 'Unable to pull the [ghcr.io/zacksmash/outpost:0.1.0] image: denied');
+
 it('builds an image with dns, tag, and build arguments', function () {
     Process::fake();
 

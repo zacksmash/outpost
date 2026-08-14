@@ -30,7 +30,7 @@ function fakeCreation(array $overrides = []): void
         processPattern('git', 'rev-parse', 'HEAD') => Process::result('abc123'),
         processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\noutpost\n"),
         processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result('{"dns":{"domain":"outpost"}}'),
-        processPattern('container', 'image', 'inspect', 'outpost-base') => Process::result('[]'),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.0') => Process::result('[]'),
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
         processPattern('git', 'branch', '--show-current') => Process::result("main\n"),
         processPattern('git', 'branch', '--format=%(refname:short)') => Process::result("main\nfeature-x\n"),
@@ -65,7 +65,7 @@ it('creates a fully provisioned instance', function () {
         'container', 'run', '--detach', '--name', 'feature-x-laravel', '--dns', '1.1.1.1',
         '--volume', $this->root.'/feature-x/app:/app',
         '--volume', $this->root.'/feature-x/runtime:/outpost:ro',
-        'outpost-base',
+        'ghcr.io/zacksmash/outpost:0.1.0',
     ]);
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === ['dscacheutil', '-flushcache']);
@@ -129,7 +129,7 @@ it('provisions the application before checking its final HTTP response', functio
 
 it('requires the base image to be built first', function () {
     fakeCreation([
-        processPattern('container', 'image', 'inspect', 'outpost-base') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.0') => Process::result('', 'not found', 1),
     ]);
 
     $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
