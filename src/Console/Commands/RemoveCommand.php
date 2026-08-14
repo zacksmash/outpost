@@ -30,7 +30,8 @@ class RemoveCommand extends Command
      */
     protected $signature = 'outpost:remove
         {name? : The name of the instance}
-        {--force : Remove without asking}';
+        {--force : Remove without asking}
+        {--forget : Remove local state without contacting the container runtime}';
 
     /**
      * The command description.
@@ -58,15 +59,25 @@ class RemoveCommand extends Command
             return self::FAILURE;
         }
 
-        if (! $this->option('force')
-            && ! confirm("Remove the [{$manifest->name}] instance? Its container, worktree, and data will be destroyed.", false)) {
+        $forget = (bool) $this->option('forget');
+        $confirmation = $forget
+            ? "Forget the [{$manifest->name}] instance? Its worktree and data will be destroyed, but container [{$manifest->container}] will be left behind."
+            : "Remove the [{$manifest->name}] instance? Its container, worktree, and data will be destroyed.";
+
+        if (! $this->option('force') && ! confirm($confirmation, false)) {
             info('Nothing removed.');
 
             return self::SUCCESS;
         }
 
         try {
-            $this->removeContainer($runtime, $manifest);
+            if ($forget) {
+                warning("Skipped container [{$manifest->container}].");
+                warning("Remove it later with [container delete --force {$manifest->container}].");
+            } else {
+                $this->removeContainer($runtime, $manifest);
+            }
+
             $this->removeWorktree($outposts, $git, $manifest->name);
 
             $outposts->delete($manifest->name);

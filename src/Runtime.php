@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zacksmash\Outpost;
 
 use Illuminate\Contracts\Process\ProcessResult;
+use Illuminate\Process\Exceptions\ProcessTimedOutException;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Sleep;
 use RuntimeException;
@@ -61,6 +62,7 @@ class Runtime
         $this->runOrFail(
             ['container', 'system', 'start'],
             'Unable to start the Apple container system',
+            self::TIMEOUT,
         );
     }
 
@@ -180,7 +182,7 @@ class Runtime
 
         $command[] = $image;
 
-        $this->runOrFail($command, "Unable to boot the container [{$container}]");
+        $this->runOrFail($command, "Unable to boot the container [{$container}]", self::TIMEOUT);
     }
 
     /**
@@ -413,9 +415,20 @@ class Runtime
      *
      * @param  list<string>  $command
      */
-    protected function runOrFail(array $command, string $message): ProcessResult
+    protected function runOrFail(array $command, string $message, ?int $timeout = null): ProcessResult
     {
-        $result = Process::timeout(self::TIMEOUT)->run($command);
+        $timeout ??= $this->lifecycleTimeout();
+
+        try {
+            $result = Process::timeout($timeout)->run($command);
+        } catch (ProcessTimedOutException $e) {
+            throw new RuntimeException(
+                "{$message} timed out after {$timeout} seconds. The Apple container VM may be unresponsive. "
+                .'Stop unrelated container workloads before restarting Apple container with '
+                .'[container system stop && container system start], then retry.',
+                previous: $e,
+            );
+        }
 
         if (! $result->successful()) {
             throw new RuntimeException(
@@ -424,5 +437,19 @@ class Runtime
         }
 
         return $result;
+    }
+
+    /**
+     * Get the bounded timeout for quick host runtime operations.
+     */
+    protected function lifecycleTimeout(): int
+    {
+        $timeout = config('outpost.lifecycle_timeout');
+
+        if (! is_int($timeout) || $timeout < 1) {
+            throw new RuntimeException('The [outpost.lifecycle_timeout] value must be a positive integer.');
+        }
+
+        return $timeout;
     }
 }

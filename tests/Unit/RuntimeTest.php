@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+use Illuminate\Process\Exceptions\ProcessTimedOutException;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Sleep;
+use Symfony\Component\Process\Exception\ProcessTimedOutException as SymfonyProcessTimedOutException;
+use Symfony\Component\Process\Process as SymfonyProcess;
 use Zacksmash\Outpost\Runtime;
 
 beforeEach(function () {
@@ -44,7 +47,7 @@ it('starts the container system', function () {
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'system', 'start',
-    ]);
+    ] && $process->timeout === 600);
 });
 
 it('rejects a malformed container system status', function () {
@@ -135,7 +138,7 @@ it('boots a detached container with volumes and dns', function () {
         '--volume', '/host/app:/app',
         '--volume', '/host/runtime:/outpost:ro',
         'outpost-base',
-    ]);
+    ] && $process->timeout === 600);
 });
 
 it('boots a container with configured resource limits', function () {
@@ -173,13 +176,15 @@ it('surfaces the real error when a boot fails', function () {
 })->throws(RuntimeException::class, 'Unable to boot the container [feature-x-app]: no such image');
 
 it('starts, stops, and deletes containers', function (string $method, string $verb) {
+    config(['outpost.lifecycle_timeout' => 17]);
+
     Process::fake();
 
     $this->runtime->{$method}('feature-x-app');
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', $verb, 'feature-x-app',
-    ]);
+    ] && $process->timeout === 17);
 })->with([
     'start' => ['start', 'start'],
     'stop' => ['stop', 'stop'],
@@ -194,6 +199,52 @@ it('releases application processes after provisioning', function () {
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'exec', 'billing-app', 'touch', '/var/lib/outpost/ready',
     ]);
+});
+
+it('bounds container inventory calls with the lifecycle timeout', function () {
+    config(['outpost.lifecycle_timeout' => 17]);
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
+    ]);
+
+    expect($this->runtime->states())->toBe([]);
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'list', '--all', '--format', 'json',
+    ] && $process->timeout === 17);
+});
+
+it('rejects an invalid lifecycle timeout before invoking the runtime', function (mixed $timeout) {
+    config(['outpost.lifecycle_timeout' => $timeout]);
+
+    Process::fake();
+
+    expect(fn () => $this->runtime->stop('feature-x-app'))
+        ->toThrow(RuntimeException::class, 'outpost.lifecycle_timeout');
+
+    Process::assertNothingRan();
+})->with([
+    'zero' => 0,
+    'negative' => -1,
+    'string' => '30',
+]);
+
+it('turns a lifecycle timeout into actionable runtime guidance', function () {
+    config(['outpost.lifecycle_timeout' => 17]);
+
+    $process = new SymfonyProcess(['container', 'stop', 'feature-x-app']);
+    $process->setTimeout(17);
+
+    $timeout = new ProcessTimedOutException(
+        new SymfonyProcessTimedOutException($process, SymfonyProcessTimedOutException::TYPE_GENERAL),
+        Process::result(),
+    );
+
+    Process::fake(fn () => $timeout);
+
+    expect(fn () => $this->runtime->stop('feature-x-app'))
+        ->toThrow(RuntimeException::class, 'timed out after 17 seconds. The Apple container VM may be unresponsive.');
 });
 
 it('surfaces the real error when application processes cannot be released', function () {
@@ -272,7 +323,7 @@ it('maps every container to its state', function () {
 });
 
 it('opens a shell and passes the exit code through', function () {
-    $tty = Symfony\Component\Process\Process::isTtySupported();
+    $tty = SymfonyProcess::isTtySupported();
 
     Process::fake([
         processPattern('container', 'exec', '-i').' *' => Process::result('', '', 3),

@@ -206,11 +206,12 @@ php artisan outpost:shell billing    # open a shell inside the instance
 php artisan outpost:exec billing -- php artisan test --filter=Feature
 php artisan outpost:logs billing     # show the service logs; --follow streams
 php artisan outpost:remove billing   # remove the container, worktree, and data
+php artisan outpost:remove billing --forget # discard local state when its VM is stuck
 ```
 
 If these checks pass but a Chromium-based browser reports `ERR_ADDRESS_UNREACHABLE`, allow that browser under **System Settings → Privacy & Security → Local Network**, quit it completely, and reopen it. macOS applies this permission per browser; another browser working does not imply every browser is allowed.
 
-Stopping an instance preserves its database — the data lives in the container's own writable layer and survives across `stop` and `start`. Removing an instance destroys all of it, which is rather the point. Removal asks first, offers to delete the instance's branch when it's safe to do so, and `--force` skips every question (leaving the branch alone).
+Stopping an instance preserves its database — the data lives in the container's own writable layer and survives across `stop` and `start`. Removing an instance destroys all of it, which is rather the point. Removal asks first, offers to delete the instance's branch when it's safe to do so, and `--force` skips every question (leaving the branch alone). If Apple's per-container VM is stuck, lifecycle operations stop after `lifecycle_timeout` seconds instead of waiting indefinitely. `outpost:remove <name> --forget` is the explicit last resort: it removes the worktree and Outpost manifest without contacting the runtime, warns about the orphaned container, and prints the exact cleanup command to run after recovering Apple container.
 
 `outpost:exec` is the non-interactive path for scripts and agents. Everything after `--` is passed as an argument list directly to `container exec` from the instance's `/app` working directory; no shell interprets it, output streams normally, and the inner command's exit code is returned unchanged. Use `outpost:shell` when you actually need an interactive terminal.
 
@@ -252,6 +253,7 @@ Instances are development sandboxes, not production parity. The database account
 | `expose_services` | `true` | Make detected services reachable on the instance hostname and standard ports. |
 | `processes` | `[]` | Named, shell-free argument lists supervised with the instance. |
 | `database` | `outpost` / `outpost` / `password` | Sandbox database credentials. |
+| `lifecycle_timeout` | `30` | Seconds to wait for quick Apple container lifecycle operations before reporting a stuck VM with recovery guidance. |
 | `timeout` | `60` | Seconds to wait for an instance to answer HTTP. |
 
 ## Changelog

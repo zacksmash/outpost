@@ -79,6 +79,26 @@ it('skips every confirmation when forced', function () {
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('-D', $process->command, true));
 });
 
+it('can forget local instance state without contacting a stuck runtime', function () {
+    File::ensureDirectoryExists($this->root.'/feature-x/app');
+
+    fakeRemoval();
+
+    $this->artisan('outpost:remove', [
+        'name' => 'feature-x',
+        '--force' => true,
+        '--forget' => true,
+    ])
+        ->expectsOutputToContain('Skipped container [feature-x-app]')
+        ->expectsOutputToContain('Remove it later')
+        ->expectsOutputToContain('Removed [feature-x].')
+        ->assertSuccessful();
+
+    expect(File::isDirectory($this->root.'/feature-x'))->toBeFalse();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[0] ?? null) === 'container');
+});
+
 it('cleans up a half-created instance gracefully', function () {
     fakeRemoval([
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),

@@ -208,6 +208,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Runtime Lifecycle Timeout
+    |--------------------------------------------------------------------------
+    |
+    | Apple runs every container in its own lightweight virtual machine. If a
+    | VM becomes unresponsive, lifecycle commands can otherwise wait forever.
+    | Outpost stops waiting after this many seconds and prints recovery steps.
+    | Long-running builds, provisioning, and user commands are not affected.
+    |
+    */
+
+    'lifecycle_timeout' => (int) env('OUTPOST_LIFECYCLE_TIMEOUT', 30),
+
+    /*
+    |--------------------------------------------------------------------------
     | Boot Timeout
     |--------------------------------------------------------------------------
     |

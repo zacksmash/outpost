@@ -74,6 +74,7 @@ php artisan outpost:shell billing
 php artisan outpost:exec billing -- php artisan test --filter=Feature
 php artisan outpost:logs billing --follow
 php artisan outpost:remove billing --force
+php artisan outpost:remove billing --forget --force # local cleanup when Apple's VM is stuck
 ```
 
 - `outpost` accepts a local branch, a known remote branch, or a new local branch name. Remote branches are fetched and made editable; an existing local counterpart is preserved.
@@ -83,7 +84,7 @@ php artisan outpost:remove billing --force
 - `outpost:open` starts a stopped instance before opening its URL in the macOS default browser
 - `outpost:info --json` is the stable machine-readable way for agents and scripts to discover instance and service endpoints
 - `outpost:list --json` is the stable machine-readable inventory; `outpost:exec <name> -- <command...>` passes argument tokens without a shell, streams output, and preserves the inner exit code
-- `outpost:remove` confirms before destroying; `--force` skips every confirmation and keeps the branch
+- `outpost:remove` confirms before destroying; `--force` skips every confirmation and keeps the branch. Quick lifecycle calls stop after `lifecycle_timeout` seconds (30 by default); `--forget` deliberately removes only the local worktree and manifest when Apple's VM cannot be reached, leaving an orphaned container and printing its cleanup command.
 
 ### 5. Configure when detection needs help
 
@@ -105,7 +106,7 @@ Configure long-running Laravel processes as shell-free argument lists. `@php` re
 ],
 ```
 
-Key `config/outpost.php` values: `domain` (default `outpost`), `image` (an exact versioned GHCR reference), `dns`, `path`, `resources` (4 CPUs and `2G` memory by default), `php` (versions baked into the image — rebuild locally after changing), `server` (`auto`, `fpm`, or `octane`), `frontend` (`build`, `vite`, or `none`), `vite`, `https` (`auto`, `true`, or `false`), `tls.path`, `services`, `expose_services`, `processes`, `database` (sandbox credentials baked into the image — rebuild locally after changing; letters, numbers, dots, dashes, underscores only), `timeout`.
+Key `config/outpost.php` values: `domain` (default `outpost`), `image` (an exact versioned GHCR reference), `dns`, `path`, `resources` (4 CPUs and `2G` memory by default), `php` (versions baked into the image — rebuild locally after changing), `server` (`auto`, `fpm`, or `octane`), `frontend` (`build`, `vite`, or `none`), `vite`, `https` (`auto`, `true`, or `false`), `tls.path`, `services`, `expose_services`, `processes`, `database` (sandbox credentials baked into the image — rebuild locally after changing; letters, numbers, dots, dashes, underscores only), `lifecycle_timeout` (30 seconds by default for bounded Apple container lifecycle operations), `timeout`.
 
 ## Rules, References, and Templates
 
