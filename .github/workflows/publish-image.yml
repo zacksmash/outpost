@@ -12,16 +12,44 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
   group: publish-image-${{ github.event.release.tag_name || inputs.version }}
   cancel-in-progress: false
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: 8.5
+          extensions: dom, curl, libxml, mbstring, zip, fileinfo, sqlite, pdo_sqlite, bcmath, intl
+          ini-values: error_reporting=E_ALL
+          tools: composer:v2
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Validate package
+        run: |
+          composer validate --strict
+          composer test
+
   publish:
+    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout code
@@ -40,6 +68,15 @@ jobs:
           fi
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Verify package image version
+        env:
+          EXPECTED_IMAGE: ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+        run: |
+          if ! grep -Fq "$EXPECTED_IMAGE" config/outpost.php; then
+            echo "config/outpost.php must default to [$EXPECTED_IMAGE] before this release can publish." >&2
+            exit 1
+          fi
 
       - name: Set up ARM64 emulation
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0

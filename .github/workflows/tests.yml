@@ -48,6 +48,9 @@ jobs:
           tools: composer:v2
           coverage: none
 
+      - name: Validate Composer metadata
+        run: composer validate --strict
+
       - name: Install dependencies
         run: |
           composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update

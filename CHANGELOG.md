@@ -20,3 +20,7 @@
 - Per-instance manifest at `.outpost/<name>/outpost.json` recording what was detected and provisioned.
 - Read-only mounting of composer path repositories behind an explicit default-no confirmation; non-interactive runs mount nothing unless `--mount-path-repos` is passed, and sensitive locations (the home directory, its ancestors, hidden directories directly beneath it, and ~/Library) are never mounted.
 - `config/outpost.php` with the instance domain, base image, DNS, instance path, PHP versions, Octane/PHP-FPM selection, front-end workflow, trusted HTTPS, service detection and exposure, supervised processes, sandbox credentials, and boot timeout.
+
+### Changed
+
+- Release image publishing now waits for the full package gate, verifies the semantic release matches the package's exact default image tag, and grants registry write access only to the publishing job; pull-request CI also validates Composer metadata strictly.
