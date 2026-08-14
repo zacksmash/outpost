@@ -1,0 +1,163 @@
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Process\PendingProcess;
+use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Sleep;
+use Zacksmash\Outpost\Runtime;
+
+beforeEach(function () {
+    Process::preventStrayProcesses();
+
+    $this->runtime = new Runtime;
+});
+
+it('recognizes a registered dns domain', function () {
+    Process::fake([
+        processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\nbox\noutpost\n"),
+    ]);
+
+    expect($this->runtime->domainRegistered('outpost'))->toBeTrue()
+        ->and($this->runtime->domainRegistered('out'))->toBeFalse()
+        ->and($this->runtime->domainRegistered('test'))->toBeFalse();
+});
+
+it('throws when the dns domains cannot be listed', function () {
+    Process::fake([
+        processPattern('container', 'system', 'dns', 'list') => Process::result('', 'daemon unavailable', 1),
+    ]);
+
+    $this->runtime->domainRegistered('outpost');
+})->throws(RuntimeException::class, 'daemon unavailable');
+
+it('checks whether an image exists', function () {
+    Process::fake([
+        processPattern('container', 'image', 'inspect', 'outpost-base') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'inspect', 'other') => Process::result('[{"reference":"other"}]'),
+    ]);
+
+    expect($this->runtime->hasImage('outpost-base'))->toBeFalse()
+        ->and($this->runtime->hasImage('other'))->toBeTrue();
+});
+
+it('boots a detached container with volumes and dns', function () {
+    Process::fake();
+
+    $this->runtime->boot('feature-x-app', 'outpost-base', '1.1.1.1', [
+        '/host/app:/app',
+        '/host/runtime:/outpost:ro',
+    ]);
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'run', '--detach', '--name', 'feature-x-app', '--dns', '1.1.1.1',
+        '--volume', '/host/app:/app',
+        '--volume', '/host/runtime:/outpost:ro',
+        'outpost-base',
+    ]);
+});
+
+it('surfaces the real error when a boot fails', function () {
+    Process::fake([
+        processPattern('container', 'run').' *' => Process::result('', 'no such image', 125),
+    ]);
+
+    $this->runtime->boot('feature-x-app', 'outpost-base', '1.1.1.1', []);
+})->throws(RuntimeException::class, 'Unable to boot the container [feature-x-app]: no such image');
+
+it('starts, stops, and deletes containers', function (string $method, string $verb) {
+    Process::fake();
+
+    $this->runtime->{$method}('feature-x-app');
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', $verb, 'feature-x-app',
+    ]);
+})->with([
+    'start' => ['start', 'start'],
+    'stop' => ['stop', 'stop'],
+    'delete' => ['delete', 'delete'],
+]);
+
+it('surfaces the real error when a lifecycle command fails', function (string $method) {
+    Process::fake([
+        "'container'*" => Process::result('', 'went sideways', 1),
+    ]);
+
+    expect(fn () => $this->runtime->{$method}('feature-x-app'))
+        ->toThrow(RuntimeException::class, 'went sideways');
+})->with(['start', 'stop', 'delete']);
+
+it('executes commands inside a container and returns the raw result', function () {
+    Process::fake([
+        processPattern('container', 'exec', 'feature-x-app', 'php', 'artisan', 'migrate', '--force') => Process::result('migrated', 'warning', 2),
+    ]);
+
+    $result = $this->runtime->exec('feature-x-app', ['php', 'artisan', 'migrate', '--force']);
+
+    expect($result->exitCode())->toBe(2)
+        ->and(trim($result->output()))->toBe('migrated')
+        ->and(trim($result->errorOutput()))->toBe('warning');
+});
+
+it('reads container state from the json listing', function () {
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+            ['id' => 'feature-y-app', 'status' => ['state' => 'stopped']],
+        ], JSON_THROW_ON_ERROR)),
+    ]);
+
+    expect($this->runtime->state('feature-x-app'))->toBe('running')
+        ->and($this->runtime->state('feature-y-app'))->toBe('stopped')
+        ->and($this->runtime->state('missing'))->toBeNull()
+        ->and($this->runtime->running('feature-x-app'))->toBeTrue()
+        ->and($this->runtime->running('feature-y-app'))->toBeFalse()
+        ->and($this->runtime->exists('feature-y-app'))->toBeTrue()
+        ->and($this->runtime->exists('missing'))->toBeFalse();
+});
+
+it('throws when the container list is not valid json', function () {
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result('not json'),
+    ]);
+
+    $this->runtime->state('feature-x-app');
+})->throws(RuntimeException::class, 'Unable to parse the container list output as JSON.');
+
+it('waits for a container to answer http', function () {
+    Sleep::fake();
+
+    Process::fake([
+        processPattern('container', 'exec', 'feature-x-app', 'curl').' *' => Process::sequence()
+            ->push(Process::result('', 'refused', 7))
+            ->push(Process::result('', 'refused', 7))
+            ->push(Process::result('')),
+    ]);
+
+    expect($this->runtime->awaitReady('feature-x-app', 30))->toBeTrue();
+
+    Sleep::assertSleptTimes(2);
+});
+
+it('gives up when a container never becomes ready', function () {
+    Sleep::fake();
+
+    Process::fake([
+        processPattern('container', 'exec', 'feature-x-app', 'curl').' *' => Process::result('', 'refused', 7),
+    ]);
+
+    expect($this->runtime->awaitReady('feature-x-app', 5))->toBeFalse();
+
+    Sleep::assertSleptTimes(4);
+});
+
+it('flushes the macos dns cache', function () {
+    Process::fake();
+
+    $this->runtime->flushDnsCache();
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'dscacheutil', '-flushcache',
+    ]);
+});

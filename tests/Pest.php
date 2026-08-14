@@ -8,6 +8,11 @@ use Zacksmash\Outpost\Tests\TestCase;
 
 uses(TestCase::class)->in(__DIR__);
 
+function processPattern(string ...$tokens): string
+{
+    return implode(' ', array_map(fn (string $token): string => "'{$token}'", $tokens));
+}
+
 function fakeManifest(string $name = 'feature-billing'): Manifest
 {
     return new Manifest(

@@ -1,0 +1,210 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Zacksmash\Outpost;
+
+use Illuminate\Contracts\Process\ProcessResult;
+use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Sleep;
+use RuntimeException;
+
+class Runtime
+{
+    /**
+     * The timeout applied to long-running container operations.
+     */
+    protected const int TIMEOUT = 600;
+
+    /**
+     * Determine if the given local DNS domain is registered.
+     */
+    public function domainRegistered(string $domain): bool
+    {
+        $result = $this->runOrFail(
+            ['container', 'system', 'dns', 'list'],
+            'Unable to list the registered local DNS domains',
+        );
+
+        $domains = array_slice(array_map('trim', explode("\n", trim($result->output()))), 1);
+
+        return in_array($domain, $domains, true);
+    }
+
+    /**
+     * Determine if the given image exists locally.
+     */
+    public function hasImage(string $image): bool
+    {
+        return Process::run(['container', 'image', 'inspect', $image])->successful();
+    }
+
+    /**
+     * Boot a new detached container.
+     *
+     * @param  list<string>  $volumes
+     */
+    public function boot(string $container, string $image, string $dns, array $volumes): void
+    {
+        $command = ['container', 'run', '--detach', '--name', $container, '--dns', $dns];
+
+        foreach ($volumes as $volume) {
+            $command[] = '--volume';
+            $command[] = $volume;
+        }
+
+        $command[] = $image;
+
+        $this->runOrFail($command, "Unable to boot the container [{$container}]");
+    }
+
+    /**
+     * Start the given container.
+     */
+    public function start(string $container): void
+    {
+        $this->runOrFail(
+            ['container', 'start', $container],
+            "Unable to start the container [{$container}]",
+        );
+    }
+
+    /**
+     * Stop the given container.
+     */
+    public function stop(string $container): void
+    {
+        $this->runOrFail(
+            ['container', 'stop', $container],
+            "Unable to stop the container [{$container}]",
+        );
+    }
+
+    /**
+     * Delete the given container.
+     */
+    public function delete(string $container): void
+    {
+        $this->runOrFail(
+            ['container', 'delete', $container],
+            "Unable to delete the container [{$container}]",
+        );
+    }
+
+    /**
+     * Run a command inside the given container.
+     *
+     * Callers are responsible for inspecting the returned result.
+     *
+     * @param  list<string>  $command
+     */
+    public function exec(string $container, array $command): ProcessResult
+    {
+        return Process::timeout(self::TIMEOUT)->run(['container', 'exec', $container, ...$command]);
+    }
+
+    /**
+     * Get the state of the given container, or null if it does not exist.
+     */
+    public function state(string $container): ?string
+    {
+        $result = $this->runOrFail(
+            ['container', 'list', '--all', '--format', 'json'],
+            'Unable to list the existing containers',
+        );
+
+        $containers = json_decode($result->output(), true);
+
+        if (! is_array($containers)) {
+            throw new RuntimeException('Unable to parse the container list output as JSON.');
+        }
+
+        foreach ($containers as $item) {
+            if (data_get($item, 'id') === $container) {
+                $state = data_get($item, 'status.state');
+
+                return is_string($state) ? $state : null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Determine if the given container exists in any state.
+     */
+    public function exists(string $container): bool
+    {
+        return $this->state($container) !== null;
+    }
+
+    /**
+     * Determine if the given container is running.
+     */
+    public function running(string $container): bool
+    {
+        return $this->state($container) === 'running';
+    }
+
+    /**
+     * Determine if the given container is answering HTTP.
+     */
+    public function ready(string $container): bool
+    {
+        return $this->exec($container, [
+            'curl', '--fail', '--silent', '--output', '/dev/null', 'http://127.0.0.1',
+        ])->successful();
+    }
+
+    /**
+     * Wait for the given container to answer HTTP.
+     */
+    public function awaitReady(string $container, int $seconds): bool
+    {
+        $attempts = max(1, $seconds);
+
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            if ($this->ready($container)) {
+                return true;
+            }
+
+            if ($attempt < $attempts) {
+                Sleep::for(1)->second();
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Flush the macOS DNS cache.
+     *
+     * Recreated containers reuse their names but receive new addresses,
+     * and macOS happily keeps serving the stale one until told not to.
+     */
+    public function flushDnsCache(): void
+    {
+        $this->runOrFail(
+            ['dscacheutil', '-flushcache'],
+            'Unable to flush the macOS DNS cache',
+        );
+    }
+
+    /**
+     * Run the given command or throw with its real error output.
+     *
+     * @param  list<string>  $command
+     */
+    protected function runOrFail(array $command, string $message): ProcessResult
+    {
+        $result = Process::timeout(self::TIMEOUT)->run($command);
+
+        if (! $result->successful()) {
+            throw new RuntimeException(
+                "{$message}: ".trim($result->errorOutput() ?: $result->output()),
+            );
+        }
+
+        return $result;
+    }
+}
