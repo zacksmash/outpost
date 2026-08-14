@@ -27,6 +27,8 @@ class Manifest implements Arrayable
         public readonly string $url,
         public readonly string $branch,
         public readonly string $php,
+        public readonly string $server,
+        public readonly string $frontend,
         public readonly array $services,
         public readonly array $deferred,
         public readonly array $processes,
@@ -51,6 +53,16 @@ class Manifest implements Arrayable
             throw new InvalidArgumentException('The manifest [database] value must be a string or null.');
         }
 
+        if (array_key_exists('server', $data)
+            && (! is_string($data['server']) || ! in_array($data['server'], ['fpm', 'octane'], true))) {
+            throw new InvalidArgumentException('The manifest [server] value must be fpm or octane.');
+        }
+
+        if (array_key_exists('frontend', $data)
+            && (! is_string($data['frontend']) || ! in_array($data['frontend'], ['build', 'vite', 'none'], true))) {
+            throw new InvalidArgumentException('The manifest [frontend] value must be build, vite, or none.');
+        }
+
         if (! isset($data['created_at']) || ! is_string($data['created_at'])) {
             throw new InvalidArgumentException('The manifest [created_at] value must be a string.');
         }
@@ -71,6 +83,8 @@ class Manifest implements Arrayable
             url: $data['url'],
             branch: $data['branch'],
             php: $data['php'],
+            server: $data['server'] ?? 'fpm',
+            frontend: $data['frontend'] ?? 'build',
             services: static::stringList($data, 'services'),
             deferred: static::stringList($data, 'deferred'),
             processes: array_key_exists('processes', $data)
@@ -102,6 +116,8 @@ class Manifest implements Arrayable
             'url' => $this->url,
             'branch' => $this->branch,
             'php' => $this->php,
+            'server' => $this->server,
+            'frontend' => $this->frontend,
             'services' => $this->services,
             'deferred' => $this->deferred,
             'processes' => $this->processes,

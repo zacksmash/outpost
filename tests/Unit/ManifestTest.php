@@ -38,9 +38,29 @@ it('loads old manifests without a processes field', function () {
     expect(Manifest::fromArray($data)->processes)->toBe([]);
 });
 
+it('loads old manifests with the original web and frontend defaults', function () {
+    $data = fakeManifest(server: 'octane', frontend: 'vite')->toArray();
+
+    unset($data['server'], $data['frontend']);
+
+    $manifest = Manifest::fromArray($data);
+
+    expect($manifest->server)->toBe('fpm')
+        ->and($manifest->frontend)->toBe('build');
+});
+
 it('rejects processes that are not a list of strings', function () {
     Manifest::fromArray([...fakeManifest()->toArray(), 'processes' => ['queue', 1]]);
 })->throws(InvalidArgumentException::class, 'The manifest [processes] value must only contain strings.');
+
+it('rejects unsupported web and frontend modes', function (string $key, mixed $value) {
+    Manifest::fromArray([...fakeManifest()->toArray(), $key => $value]);
+})->with([
+    'web server' => ['server', 'apache'],
+    'null web server' => ['server', null],
+    'frontend' => ['frontend', 'webpack'],
+    'non-string frontend' => ['frontend', 1],
+])->throws(InvalidArgumentException::class);
 
 it('rejects a missing name', function () {
     $data = fakeManifest()->toArray();

@@ -92,6 +92,8 @@ it('writes values containing regex replacement characters literally', function (
         url: 'http://feature-x-app.out$1post\\box',
         branch: 'feature/x',
         php: '8.4',
+        server: 'fpm',
+        frontend: 'build',
         services: [],
         deferred: [],
         processes: [],
@@ -216,6 +218,45 @@ it('skips the front-end build without a build script', function () {
     ], JSON_THROW_ON_ERROR));
 
     $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []));
+
+    Process::assertDidntRun(fn (PendingProcess $process) => in_array('npm', $process->command, true));
+});
+
+it('installs frontend dependencies without building in vite mode', function () {
+    Process::fake();
+
+    File::put($this->root.'/feature-x/app/package.json', json_encode([
+        'scripts' => ['dev' => 'vite', 'build' => 'vite build'],
+    ], JSON_THROW_ON_ERROR));
+
+    $this->provisioner->provision(fakeManifest(
+        name: 'feature-x',
+        database: 'sqlite',
+        services: [],
+        frontend: 'vite',
+    ));
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', 'feature-x-app', 'npm', 'install', '--no-fund', '--no-audit',
+    ]);
+    Process::assertDidntRun(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', 'feature-x-app', 'npm', 'run', 'build',
+    ]);
+});
+
+it('skips frontend installation when frontend support is disabled', function () {
+    Process::fake();
+
+    File::put($this->root.'/feature-x/app/package.json', json_encode([
+        'scripts' => ['build' => 'vite build'],
+    ], JSON_THROW_ON_ERROR));
+
+    $this->provisioner->provision(fakeManifest(
+        name: 'feature-x',
+        database: 'sqlite',
+        services: [],
+        frontend: 'none',
+    ));
 
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('npm', $process->command, true));
 });

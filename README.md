@@ -107,7 +107,7 @@ The `outpost` command walks you through everything:
 php artisan outpost
 ```
 
-You'll pick a branch (or type a new name to create one), confirm the instance's name, and Outpost handles the rest: it checks out the branch into a dedicated worktree, detects which services the app needs, boots a container, writes the instance's `.env`, installs composer and npm dependencies, builds your front-end assets when a build script exists, runs your migrations, and prints the URL.
+You'll pick a branch (or type a new name to create one), confirm the instance's name, and Outpost handles the rest: it checks out the branch into a dedicated worktree, detects which services and web server the app needs, boots a container, writes the instance's `.env`, installs dependencies, prepares the front end, runs your migrations, and prints the URL.
 
 Everything can be provided up front when you'd rather not be asked:
 
@@ -137,7 +137,19 @@ Outpost inspects your application's own configuration — the same sources `php 
 
 When detection guesses wrong, set `services` in `config/outpost.php` to skip detection entirely, then remove and recreate the instance. Each instance's manifest at `.outpost/<name>/outpost.json` records what was detected, so you can always see exactly what an instance is running and why.
 
-Octane and external Scout drivers are detected but not run inside instances yet. Horizon is reported as deferred unless you configure it as an application process. Outpost records every deferred capability and configured process in the manifest, so a Redis-backed queue never looks active when no worker is actually running.
+Octane applications run automatically through Swoole and a websocket-aware nginx reverse proxy. Set `server` to `fpm` to use the traditional request lifecycle instead, or to `octane` to require Octane explicitly. The base image supplies Swoole and the polling file watcher Octane needs for live code reloads, so the consuming application does not need container-specific dependencies.
+
+External Scout drivers are still reported as deferred. Horizon is reported as deferred unless you configure it as an application process. Outpost records every selected server, front-end mode, deferred capability, and supervised process in the manifest, so a Redis-backed queue never looks active when no worker is actually running.
+
+### Front-end Workflow
+
+The default `frontend` mode is `build`: Outpost installs npm dependencies and runs the application's `build` script once during provisioning. Set it to `vite` for a supervised Vite development server with HMR, or `none` to skip npm completely:
+
+```php
+'frontend' => 'vite',
+```
+
+Vite mode requires a `package.json` `dev` script. Outpost binds Vite to the instance, writes its public `http://<instance>.outpost:5173` address to Laravel's hot file, enables polling for the macOS bind mount, and keeps the process alive with Supervisor. Change `vite.port` or `vite.hot_file` when the application uses nonstandard values. The Vite port is reached directly on the instance's private IP, so it does not reserve a host port or collide with another instance.
 
 ### Application Processes
 
@@ -151,7 +163,7 @@ Queue workers, the scheduler, Horizon, and other long-running commands can run w
 ],
 ```
 
-`@php` resolves to the PHP version Outpost selected from the application's Composer constraint. Processes run from `/app` as the same user as PHP-FPM, send output to `outpost:logs`, and do not start until dependencies, the environment, and migrations are ready. Supervisor restarts them after crashes and normal container restarts. Argument arrays are passed directly without a shell; use one item per argument and do not use shell operators.
+`@php` resolves to the PHP version Outpost selected from the application's Composer constraint. Processes run from `/app` as the application user, send output to `outpost:logs`, and do not start until dependencies, the environment, and migrations are ready. Supervisor restarts them after crashes and normal container restarts. Argument arrays are passed directly without a shell; use one item per argument and do not use shell operators. The names `octane` and `vite` are reserved whenever Outpost is managing those processes.
 
 ## Day-to-Day
 
@@ -197,6 +209,10 @@ Instances are development sandboxes, not production parity. The database account
 | `dns` | `1.1.1.1` | Nameserver injected into builds and instances. |
 | `path` | `.outpost` | Where instances live, relative to your project. |
 | `php` | `['8.4', '8.5']` | PHP versions in the base image. |
+| `server` | `auto` | Use Octane when installed, otherwise PHP-FPM; accepts `auto`, `fpm`, or `octane`. |
+| `frontend` | `build` | Front-end workflow; accepts `build`, `vite`, or `none`. |
+| `vite.port` | `5173` | Private instance port used by the Vite development server. |
+| `vite.hot_file` | `public/hot` | Laravel Vite hot-file path, relative to the application. |
 | `services` | `null` | Set an array to skip service detection. |
 | `processes` | `[]` | Named, shell-free argument lists supervised with the instance. |
 | `database` | `outpost` / `outpost` / `password` | Sandbox database credentials. |

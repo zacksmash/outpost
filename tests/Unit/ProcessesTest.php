@@ -22,6 +22,59 @@ it('allows no configured processes', function () {
     expect((new Processes(app('config')))->commands('8.4'))->toBe([]);
 });
 
+it('adds the octane and vite development processes', function () {
+    config([
+        'outpost.processes' => [],
+        'outpost.vite.port' => 5173,
+        'outpost.vite.hot_file' => 'public/hot',
+    ]);
+
+    expect((new Processes(app('config')))->commands(
+        php: '8.5',
+        server: 'octane',
+        frontend: 'vite',
+        url: 'http://billing-app.outpost',
+    ))->toBe([
+        'octane' => [
+            'env', 'CHOKIDAR_USEPOLLING=true', 'php8.5', 'artisan', 'octane:start',
+            '--server=swoole', '--host=127.0.0.1', '--port=8000', '--watch',
+        ],
+        'vite' => [
+            '/usr/local/bin/outpost-vite',
+            'http://billing-app.outpost:5173',
+            'public/hot',
+            'env', 'CHOKIDAR_USEPOLLING=true',
+            'npm', 'run', 'dev', '--',
+            '--host', '0.0.0.0', '--port', '5173', '--strictPort',
+        ],
+    ]);
+});
+
+it('rejects configured processes that collide with managed processes', function () {
+    config(['outpost.processes' => [
+        'octane' => ['@php', 'artisan', 'something-else'],
+    ]]);
+
+    (new Processes(app('config')))->commands('8.4', server: 'octane');
+})->throws(RuntimeException::class, 'reserved');
+
+it('validates the vite port and hot file', function (array $vite) {
+    config([
+        'outpost.processes' => [],
+        'outpost.vite' => $vite,
+    ]);
+
+    (new Processes(app('config')))->commands(
+        php: '8.4',
+        frontend: 'vite',
+        url: 'http://billing-app.outpost',
+    );
+})->with([
+    'bad port' => [['port' => 70000, 'hot_file' => 'public/hot']],
+    'absolute hot file' => [['port' => 5173, 'hot_file' => '/tmp/hot']],
+    'traversing hot file' => [['port' => 5173, 'hot_file' => '../hot']],
+])->throws(RuntimeException::class);
+
 it('rejects a process collection that is not an array', function () {
     config(['outpost.processes' => 'artisan queue:work']);
 

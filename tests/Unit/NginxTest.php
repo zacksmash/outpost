@@ -31,3 +31,14 @@ it('denies access to hidden files except well-known', function () {
     expect((new Nginx)->generate(fakeManifest(php: '8.4')))
         ->toContain('location ~ /\.(?!well-known).*');
 });
+
+it('proxies dynamic requests and websockets to octane', function () {
+    $config = (new Nginx)->generate(fakeManifest(server: 'octane'));
+
+    expect($config)->toContain('location @octane')
+        ->and($config)->toContain('proxy_pass http://127.0.0.1:8000$suffix;')
+        ->and($config)->toContain('proxy_set_header Upgrade $http_upgrade;')
+        ->and($config)->toContain('proxy_set_header Connection $connection_upgrade;')
+        ->and($config)->not->toContain('fastcgi_pass')
+        ->and($config)->not->toContain('php-fpm');
+});

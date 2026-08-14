@@ -16,6 +16,8 @@ function processPattern(string ...$tokens): string
 function fakeManifest(
     string $name = 'feature-billing',
     string $php = '8.4',
+    string $server = 'fpm',
+    string $frontend = 'build',
     ?string $database = 'mysql',
     array $services = ['mysql', 'redis'],
     array $deferred = ['horizon'],
@@ -27,6 +29,8 @@ function fakeManifest(
         url: "http://{$name}-app.outpost",
         branch: 'feature/billing',
         php: $php,
+        server: $server,
+        frontend: $frontend,
         services: $services,
         deferred: $deferred,
         processes: $processes,

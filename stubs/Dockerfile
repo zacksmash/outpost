@@ -35,7 +35,7 @@ RUN add-apt-repository -y ppa:ondrej/php \
         apt-get install -y --no-install-recommends \
             php$v-cli php$v-fpm php$v-bcmath php$v-curl php$v-gd php$v-intl \
             php$v-mbstring php$v-mysql php$v-pgsql php$v-redis php$v-sqlite3 \
-            php$v-xml php$v-zip; \
+            php$v-swoole php$v-xml php$v-zip; \
     done \
     && rm -rf /var/lib/apt/lists/*
 
@@ -50,7 +50,11 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
         > /etc/apt/sources.list.d/nodesource.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends nodejs \
+    && npm install --prefix /opt/outpost --no-audit --no-fund chokidar@4.0.3 \
+    && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
+
+ENV NODE_PATH=/opt/outpost/node_modules
 
 RUN curl -fsSL "https://github.com/axllent/mailpit/releases/download/${MAILPIT_VERSION}/mailpit-linux-arm64.tar.gz" \
         -o /tmp/mailpit.tar.gz \
@@ -80,7 +84,8 @@ RUN bash /usr/local/share/outpost/setup-mysql.sh "$DB_DATABASE" "$DB_USERNAME" "
 
 COPY entrypoint.sh /usr/local/bin/outpost-entrypoint
 COPY wait-for-app.sh /usr/local/bin/outpost-wait
-RUN chmod +x /usr/local/bin/outpost-entrypoint /usr/local/bin/outpost-wait
+COPY vite.sh /usr/local/bin/outpost-vite
+RUN chmod +x /usr/local/bin/outpost-entrypoint /usr/local/bin/outpost-wait /usr/local/bin/outpost-vite
 
 WORKDIR /app
 EXPOSE 80

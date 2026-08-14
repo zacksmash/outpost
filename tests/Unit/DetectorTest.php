@@ -27,6 +27,8 @@ it('needs no services for a sqlite application', function () {
 
     expect($detection->services)->toBe([])
         ->and($detection->database)->toBe('sqlite')
+        ->and($detection->server)->toBe('fpm')
+        ->and($detection->frontend)->toBe('build')
         ->and($detection->deferred)->toBe([]);
 });
 
@@ -97,14 +99,65 @@ it('lets the outpost config override detection entirely', function () {
         ->and($detection->database)->toBe('mysql');
 });
 
-it('defers horizon and octane', function () {
+it('runs detected octane applications and only defers horizon', function () {
     $detection = detectorWith([
         'horizon' => ['use' => 'default'],
         'octane' => ['server' => 'swoole'],
     ]);
 
-    expect($detection->deferred)->toBe(['horizon', 'octane']);
+    expect($detection->server)->toBe('octane')
+        ->and($detection->deferred)->toBe(['horizon']);
 });
+
+it('can force php fpm for an octane application', function () {
+    $detection = detectorWith([
+        'octane' => ['server' => 'swoole'],
+        'outpost.server' => 'fpm',
+    ]);
+
+    expect($detection->server)->toBe('fpm')
+        ->and($detection->deferred)->toBe(['octane']);
+});
+
+it('refuses an explicit octane server when octane is not installed', function () {
+    detectorWith(['outpost.server' => 'octane']);
+})->throws(RuntimeException::class, 'does not expose an Octane configuration');
+
+it('refuses an unsupported web server', function () {
+    detectorWith(['outpost.server' => 'apache']);
+})->throws(RuntimeException::class, 'outpost.server');
+
+it('supports build, vite, and disabled frontend modes', function (string $frontend) {
+    $root = sys_get_temp_dir().'/outpost-frontend-'.Str::random(10);
+    File::ensureDirectoryExists($root);
+    File::put($root.'/package.json', json_encode([
+        'scripts' => ['dev' => 'vite', 'build' => 'vite build'],
+    ], JSON_THROW_ON_ERROR));
+
+    try {
+        expect(detectorWith(['outpost.frontend' => $frontend], $root)->frontend)->toBe($frontend);
+    } finally {
+        File::deleteDirectory($root);
+    }
+})->with(['build', 'vite', 'none']);
+
+it('refuses vite mode without a dev script', function () {
+    $root = sys_get_temp_dir().'/outpost-frontend-'.Str::random(10);
+    File::ensureDirectoryExists($root);
+    File::put($root.'/package.json', json_encode([
+        'scripts' => ['build' => 'vite build'],
+    ], JSON_THROW_ON_ERROR));
+
+    try {
+        detectorWith(['outpost.frontend' => 'vite'], $root);
+    } finally {
+        File::deleteDirectory($root);
+    }
+})->throws(RuntimeException::class, 'requires a package.json dev script');
+
+it('refuses an unsupported frontend mode', function () {
+    detectorWith(['outpost.frontend' => 'webpack']);
+})->throws(RuntimeException::class, 'outpost.frontend');
 
 it('does not defer horizon when a horizon process is configured', function () {
     $detection = detectorWith([

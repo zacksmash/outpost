@@ -32,11 +32,13 @@ class Supervisord
             $programs[] = $this->program('redis', '/usr/bin/redis-server --bind 127.0.0.1', 15);
         }
 
-        $programs[] = $this->program(
-            'php-fpm',
-            "/usr/sbin/php-fpm{$manifest->php} --nodaemonize --fpm-config /etc/php/{$manifest->php}/fpm/php-fpm.conf",
-            20,
-        );
+        if ($manifest->server === 'fpm') {
+            $programs[] = $this->program(
+                'php-fpm',
+                "/usr/sbin/php-fpm{$manifest->php} --nodaemonize --fpm-config /etc/php/{$manifest->php}/fpm/php-fpm.conf",
+                20,
+            );
+        }
 
         if ($manifest->uses('mailpit')) {
             $programs[] = $this->program(

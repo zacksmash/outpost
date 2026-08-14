@@ -17,5 +17,7 @@ class Detection
         public readonly array $deferred,
         public readonly ?string $database,
         public readonly string $php,
+        public readonly string $server,
+        public readonly string $frontend,
     ) {}
 }

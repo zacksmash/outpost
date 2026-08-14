@@ -79,6 +79,38 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Web Server
+    |--------------------------------------------------------------------------
+    |
+    | "auto" runs Laravel Octane when the application exposes its config and
+    | otherwise uses PHP-FPM. Set "fpm" to keep an Octane application on
+    | the traditional request model, or "octane" to require Octane.
+    |
+    */
+
+    'server' => env('OUTPOST_SERVER', 'auto'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Frontend Development
+    |--------------------------------------------------------------------------
+    |
+    | "build" installs dependencies and builds production assets once.
+    | "vite" keeps the dev server and HMR running with the instance.
+    | "none" skips npm entirely. Vite uses the conventional hot file by
+    | default; customize it here when the application does the same.
+    |
+    */
+
+    'frontend' => env('OUTPOST_FRONTEND', 'build'),
+
+    'vite' => [
+        'port' => (int) env('OUTPOST_VITE_PORT', 5173),
+        'hot_file' => 'public/hot',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Services
     |--------------------------------------------------------------------------
     |

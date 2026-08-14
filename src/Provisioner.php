@@ -40,10 +40,12 @@ class Provisioner
         $this->step($onStep, 'Linking the storage directory',
             fn () => $this->artisan($manifest, ['storage:link', '--force']));
 
-        if ($this->buildsFrontend($manifest)) {
+        if ($this->installsFrontend($manifest)) {
             $this->step($onStep, 'Installing npm dependencies',
                 fn () => $this->exec($manifest, ['npm', 'install', '--no-fund', '--no-audit']));
+        }
 
+        if ($this->buildsFrontend($manifest)) {
             $this->step($onStep, 'Building the front-end assets',
                 fn () => $this->exec($manifest, ['npm', 'run', 'build']));
         }
@@ -65,10 +67,31 @@ class Provisioner
      */
     protected function buildsFrontend(Manifest $manifest): bool
     {
+        return $manifest->frontend === 'build'
+            && $this->hasFrontendScript($manifest, 'build');
+    }
+
+    /**
+     * Determine if frontend dependencies should be installed.
+     */
+    protected function installsFrontend(Manifest $manifest): bool
+    {
+        return match ($manifest->frontend) {
+            'build' => $this->hasFrontendScript($manifest, 'build'),
+            'vite' => $this->hasFrontendScript($manifest, 'dev'),
+            default => false,
+        };
+    }
+
+    /**
+     * Determine if package.json exposes a frontend script.
+     */
+    protected function hasFrontendScript(Manifest $manifest, string $script): bool
+    {
         $package = $this->outposts->worktreePath($manifest->name).'/package.json';
 
         return File::exists($package)
-            && is_string(data_get(File::json($package), 'scripts.build'));
+            && is_string(data_get(File::json($package), "scripts.{$script}"));
     }
 
     /**

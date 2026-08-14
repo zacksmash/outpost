@@ -19,20 +19,29 @@ class Processes
      *
      * @return array<string, list<string>>
      */
-    public function commands(string $php): array
-    {
+    public function commands(
+        string $php,
+        string $server = 'fpm',
+        string $frontend = 'build',
+        ?string $url = null,
+    ): array {
+        $commands = $this->managedCommands($php, $server, $frontend, $url);
         $configured = $this->config->get('outpost.processes', []);
 
         if (! is_array($configured)) {
             throw new RuntimeException('The [outpost.processes] value must be an associative array.');
         }
 
-        $commands = [];
-
         foreach ($configured as $name => $command) {
             if (! is_string($name) || preg_match('/^[a-z][a-z0-9_-]*$/D', $name) !== 1) {
                 throw new RuntimeException(
                     'Outpost process names must start with a lowercase letter and may only contain lowercase letters, numbers, dashes, and underscores.',
+                );
+            }
+
+            if (array_key_exists($name, $commands)) {
+                throw new RuntimeException(
+                    "The [{$name}] process name is reserved by Outpost's managed {$name} process.",
                 );
             }
 
@@ -63,5 +72,85 @@ class Processes
         }
 
         return $commands;
+    }
+
+    /**
+     * Build the processes managed by Outpost itself.
+     *
+     * @return array<string, list<string>>
+     */
+    protected function managedCommands(
+        string $php,
+        string $server,
+        string $frontend,
+        ?string $url,
+    ): array {
+        $commands = [];
+
+        if ($server === 'octane') {
+            $commands['octane'] = [
+                'env',
+                'CHOKIDAR_USEPOLLING=true',
+                "php{$php}",
+                'artisan',
+                'octane:start',
+                '--server=swoole',
+                '--host=127.0.0.1',
+                '--port=8000',
+                '--watch',
+            ];
+        }
+
+        if ($frontend === 'vite') {
+            $commands['vite'] = $this->viteCommand($url);
+        }
+
+        return $commands;
+    }
+
+    /**
+     * Build the managed Vite development-server command.
+     *
+     * @return list<string>
+     */
+    protected function viteCommand(?string $url): array
+    {
+        $port = $this->config->get('outpost.vite.port', 5173);
+        $hotFile = $this->config->get('outpost.vite.hot_file', 'public/hot');
+
+        if (! is_int($port) || $port < 1 || $port > 65535) {
+            throw new RuntimeException('The [outpost.vite.port] value must be an integer between 1 and 65535.');
+        }
+
+        if (! is_string($hotFile)
+            || $hotFile === ''
+            || str_starts_with($hotFile, '/')
+            || str_contains($hotFile, '\\')
+            || in_array('..', explode('/', $hotFile), true)) {
+            throw new RuntimeException(
+                'The [outpost.vite.hot_file] value must be a safe path relative to the application.',
+            );
+        }
+
+        if ($url === null || ! str_starts_with($url, 'http')) {
+            throw new RuntimeException('Vite mode requires an instance URL.');
+        }
+
+        return [
+            '/usr/local/bin/outpost-vite',
+            rtrim($url, '/').":{$port}",
+            $hotFile,
+            'env',
+            'CHOKIDAR_USEPOLLING=true',
+            'npm',
+            'run',
+            'dev',
+            '--',
+            '--host',
+            '0.0.0.0',
+            '--port',
+            (string) $port,
+            '--strictPort',
+        ];
     }
 }

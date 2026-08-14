@@ -155,11 +155,19 @@ class OutpostCommand extends Command
             }
 
             $detection = $detector->detect();
-            $commands = $processes->commands($detection->php);
+            $url = "http://{$container}.{$domain}";
+            $commands = $processes->commands(
+                php: $detection->php,
+                server: $detection->server,
+                frontend: $detection->frontend,
+                url: $url,
+            );
 
             info(sprintf(
-                'PHP %s · Services: %s · Processes: %s',
+                'PHP %s (%s) · Frontend: %s · Services: %s · Processes: %s',
                 $detection->php,
+                $detection->server === 'octane' ? 'Octane' : 'PHP-FPM',
+                $detection->frontend === 'vite' ? 'Vite' : ucfirst($detection->frontend),
                 $detection->services === [] ? 'none' : implode(', ', $detection->services),
                 $commands === [] ? 'none' : implode(', ', array_keys($commands)),
             ));
@@ -171,9 +179,11 @@ class OutpostCommand extends Command
             $manifest = new Manifest(
                 name: $name,
                 container: $container,
-                url: "http://{$container}.{$domain}",
+                url: $url,
                 branch: $branch,
                 php: $detection->php,
+                server: $detection->server,
+                frontend: $detection->frontend,
                 services: $detection->services,
                 deferred: $detection->deferred,
                 processes: array_keys($commands),

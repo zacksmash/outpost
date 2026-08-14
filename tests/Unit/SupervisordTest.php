@@ -22,6 +22,15 @@ it('pins php-fpm to the instance php version', function () {
         ->toContain('command=/usr/sbin/php-fpm8.5 --nodaemonize --fpm-config /etc/php/8.5/fpm/php-fpm.conf');
 });
 
+it('does not run php fpm when octane serves the application', function () {
+    $config = (new Supervisord)->generate(fakeManifest(server: 'octane', processes: ['octane']), [
+        'octane' => ['php8.5', 'artisan', 'octane:start'],
+    ]);
+
+    expect($config)->toContain('[program:outpost-octane]')
+        ->and($config)->not->toContain('[program:php-fpm]');
+});
+
 it('runs each detected service', function (string $service, string $needle) {
     expect((new Supervisord)->generate(fakeManifest(services: [$service])))->toContain($needle);
 })->with([

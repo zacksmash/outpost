@@ -80,6 +80,10 @@ php artisan outpost:remove billing --force
 
 Services are detected from the app's own configuration (database driver, redis usage across cache/session/queue/broadcast, smtp mailer). When detection guesses wrong, set `services` in `config/outpost.php` (e.g. `['mysql', 'redis']`) to skip detection, then remove and recreate the instance. The manifest at `.outpost/<name>/outpost.json` records what was detected.
 
+Outpost uses Octane with Swoole automatically when the app exposes Octane configuration; otherwise it uses PHP-FPM. Set `server` to `fpm` to force the traditional request lifecycle or `octane` to require Octane. Octane runs behind nginx with websocket forwarding and polling-based live reload.
+
+The `frontend` mode is `build` by default. Use `vite` to install dependencies and supervise the app's `dev` script with HMR, or `none` to skip npm. Vite mode requires a `package.json` `dev` script and publishes the dev server at the instance hostname on `vite.port` (default `5173`). Set `vite.hot_file` when the app does not use `public/hot`.
+
 Configure long-running Laravel processes as shell-free argument lists. `@php` resolves to the instance's selected PHP version. They wait for provisioning before starting, restart under Supervisor, and write to the normal instance logs:
 
 ```php
@@ -90,7 +94,7 @@ Configure long-running Laravel processes as shell-free argument lists. `@php` re
 ],
 ```
 
-Key `config/outpost.php` values: `domain` (default `outpost`), `image` (an exact versioned GHCR reference), `dns`, `path`, `php` (versions baked into the image — rebuild locally after changing), `services`, `processes`, `database` (sandbox credentials baked into the image — rebuild locally after changing; letters, numbers, dots, dashes, underscores only), `timeout`.
+Key `config/outpost.php` values: `domain` (default `outpost`), `image` (an exact versioned GHCR reference), `dns`, `path`, `php` (versions baked into the image — rebuild locally after changing), `server` (`auto`, `fpm`, or `octane`), `frontend` (`build`, `vite`, or `none`), `vite`, `services`, `processes`, `database` (sandbox credentials baked into the image — rebuild locally after changing; letters, numbers, dots, dashes, underscores only), `timeout`.
 
 ## Rules, References, and Templates
 
@@ -105,13 +109,15 @@ Read before executing:
 - A reviewer needs to try a GitHub pull request without disturbing their own branch: `php artisan outpost --pr=482 --name=pr-482 --open`, then `php artisan outpost:remove pr-482` when done.
 - An app on SQLite needs no services: the instance boots with nginx and PHP-FPM only, and Outpost creates `database/database.sqlite` automatically.
 - A Redis queue needs a worker: add a `queue` process using `['@php', 'artisan', 'queue:work', '--sleep=1']`, recreate the instance, and inspect its output with `php artisan outpost:logs <name> --follow`.
+- An Octane app should use the default `server => auto`; choose `fpm` only when testing the traditional request lifecycle. Use `frontend => vite` when edits need browser HMR and recreate the instance after changing either mode.
 - The app installs a local package via a composer path repository: Outpost lists the path and asks before mounting it read-only; pass `--mount-path-repos` in scripts that must not prompt.
 
 ## Anti-patterns
 
 - do not run instances for production parity; instances are development sandboxes with permissive sandbox credentials
 - do not manually change runtime or DNS state before running `php artisan outpost:doctor`; it is read-only and reports the live state
-- do not expect Octane or external Scout drivers to run inside instances yet; Horizon runs only when it is explicitly configured in `processes`
+- do not add `octane` or `vite` entries to `processes` when Outpost manages those modes; those names are reserved and their commands are generated automatically
+- do not expect external Scout drivers to run inside instances; Horizon runs only when it is explicitly configured in `processes`
 - do not put a shell command string or shell operators in `processes`; each command must be an argument array, with one item per argument
 - do not edit files under `.outpost/<name>/runtime/` expecting Outpost to regenerate or validate them; they are written once at creation and applied verbatim on every boot
 - do not document or rely on package internals (detector, provisioner, runtime classes); the supported surface is the artisan commands and `config/outpost.php`

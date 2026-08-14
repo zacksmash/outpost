@@ -48,6 +48,7 @@ it('lists every instance with its live state', function () {
         ->and($output)->toContain('running')
         ->and($output)->toContain('missing')
         ->and($output)->toContain('http://feature-x-app.outpost')
+        ->and($output)->toContain('8.4 / fpm')
         ->and($output)->toContain('mysql, redis')
         ->and($output)->toContain('queue');
 });

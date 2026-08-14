@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
+use Zacksmash\Outpost\Detection;
+use Zacksmash\Outpost\Detector;
 
 beforeEach(function () {
     Process::preventStrayProcesses();
@@ -92,6 +94,46 @@ it('configures and releases application processes after provisioning', function 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'exec', 'feature-x-laravel', 'touch', '/var/lib/outpost/ready',
     ]);
+});
+
+it('runs detected octane and vite development servers', function () {
+    config([
+        'octane' => ['server' => 'swoole'],
+        'outpost.frontend' => 'vite',
+    ]);
+
+    File::put($this->root.'/feature-x/app/package.json', json_encode([
+        'scripts' => ['dev' => 'vite', 'build' => 'vite build'],
+    ], JSON_THROW_ON_ERROR));
+
+    $detector = Mockery::mock(Detector::class);
+    $detector->shouldReceive('detect')->once()->andReturn(new Detection(
+        services: [],
+        deferred: [],
+        database: 'sqlite',
+        php: '8.5',
+        server: 'octane',
+        frontend: 'vite',
+    ));
+    app()->instance(Detector::class, $detector);
+
+    fakeCreation();
+
+    $exit = Artisan::call('outpost', ['branch' => 'feature-x', '--name' => 'feature-x']);
+
+    expect($exit)->toBe(0);
+
+    $manifest = json_decode(File::get($this->root.'/feature-x/outpost.json'), true);
+    $nginx = File::get($this->root.'/feature-x/runtime/nginx.conf');
+    $supervisor = File::get($this->root.'/feature-x/runtime/supervisord.conf');
+
+    expect($manifest['server'])->toBe('octane')
+        ->and($manifest['frontend'])->toBe('vite')
+        ->and($manifest['processes'])->toBe(['octane', 'vite'])
+        ->and($nginx)->toContain('location @octane')
+        ->and($supervisor)->toContain('[program:outpost-octane]')
+        ->and($supervisor)->toContain('[program:outpost-vite]')
+        ->and($supervisor)->not->toContain('[program:php-fpm]');
 });
 
 it('rejects malformed application process configuration before creating state', function () {

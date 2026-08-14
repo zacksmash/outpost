@@ -34,12 +34,15 @@ class Detector
     public function detect(): Detection
     {
         $database = $this->database();
+        $server = $this->server();
 
         return new Detection(
             services: $this->services($database),
-            deferred: $this->deferred($database),
+            deferred: $this->deferred($database, $server),
             database: $database,
             php: $this->php(),
+            server: $server,
+            frontend: $this->frontend(),
         );
     }
 
@@ -88,7 +91,7 @@ class Detector
      *
      * @return list<string>
      */
-    protected function deferred(?string $database): array
+    protected function deferred(?string $database, string $server): array
     {
         $deferred = [];
 
@@ -99,7 +102,7 @@ class Detector
             $deferred[] = 'horizon';
         }
 
-        if ($this->config->has('octane')) {
+        if ($this->config->has('octane') && $server !== 'octane') {
             $deferred[] = 'octane';
         }
 
@@ -114,6 +117,61 @@ class Detector
         }
 
         return $deferred;
+    }
+
+    /**
+     * Determine which web server should run the application.
+     */
+    protected function server(): string
+    {
+        $server = $this->config->get('outpost.server', 'auto');
+
+        if (! is_string($server) || ! in_array($server, ['auto', 'fpm', 'octane'], true)) {
+            throw new RuntimeException('The [outpost.server] value must be one of: auto, fpm, octane.');
+        }
+
+        if ($server === 'auto') {
+            return $this->config->has('octane') ? 'octane' : 'fpm';
+        }
+
+        if ($server === 'octane' && ! $this->config->has('octane')) {
+            throw new RuntimeException(
+                'The [outpost.server] value is octane, but this application does not expose an Octane configuration.',
+            );
+        }
+
+        return $server;
+    }
+
+    /**
+     * Determine how frontend assets should be prepared.
+     */
+    protected function frontend(): string
+    {
+        $frontend = $this->config->get('outpost.frontend', 'build');
+
+        if (! is_string($frontend) || ! in_array($frontend, ['build', 'vite', 'none'], true)) {
+            throw new RuntimeException('The [outpost.frontend] value must be one of: build, vite, none.');
+        }
+
+        if ($frontend === 'vite' && ! $this->hasPackageScript('dev')) {
+            throw new RuntimeException(
+                'The [outpost.frontend] vite mode requires a package.json dev script.',
+            );
+        }
+
+        return $frontend;
+    }
+
+    /**
+     * Determine whether package.json defines the given script.
+     */
+    protected function hasPackageScript(string $script): bool
+    {
+        $path = $this->basePath.'/package.json';
+
+        return File::exists($path)
+            && is_string(data_get(File::json($path), "scripts.{$script}"));
     }
 
     /**
