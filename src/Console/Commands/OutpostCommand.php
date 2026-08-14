@@ -188,12 +188,15 @@ class OutpostCommand extends Command
                 server: $detection->server,
                 frontend: $detection->frontend,
                 url: $url,
+                octaneServer: $detection->octaneServer,
             );
 
             info(sprintf(
                 'PHP %s (%s) · Resources: %d CPU / %s · Frontend: %s · Services: %s · Processes: %s',
                 $detection->php,
-                $detection->server === 'octane' ? 'Octane' : 'PHP-FPM',
+                $detection->server === 'octane'
+                    ? 'Octane / '.$detection->octaneServer
+                    : 'PHP-FPM',
                 $resources['cpus'],
                 $resources['memory'],
                 $detection->frontend === 'vite' ? 'Vite' : ucfirst($detection->frontend),
@@ -221,6 +224,7 @@ class OutpostCommand extends Command
                 createdAt: CarbonImmutable::now(),
                 cpus: $resources['cpus'],
                 memory: $resources['memory'],
+                octaneServer: $detection->octaneServer,
             );
 
             $outposts->save($manifest);

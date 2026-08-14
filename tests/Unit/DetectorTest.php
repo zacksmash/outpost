@@ -28,6 +28,7 @@ it('needs no services for a sqlite application', function () {
     expect($detection->services)->toBe([])
         ->and($detection->database)->toBe('sqlite')
         ->and($detection->server)->toBe('fpm')
+        ->and($detection->octaneServer)->toBeNull()
         ->and($detection->frontend)->toBe('build')
         ->and($detection->deferred)->toBe([]);
 });
@@ -106,7 +107,71 @@ it('runs detected octane applications and only defers horizon', function () {
     ]);
 
     expect($detection->server)->toBe('octane')
+        ->and($detection->octaneServer)->toBe('swoole')
         ->and($detection->deferred)->toBe(['horizon']);
+});
+
+it('uses the application octane server automatically', function (string $server) {
+    $detection = detectorWith([
+        'octane' => ['server' => $server],
+    ]);
+
+    expect($detection->server)->toBe('octane')
+        ->and($detection->octaneServer)->toBe($server);
+})->with(['swoole', 'frankenphp']);
+
+it('uses roadrunner when its php worker package is locked', function () {
+    $root = sys_get_temp_dir().'/outpost-roadrunner-'.Str::random(10);
+    File::ensureDirectoryExists($root);
+    File::put($root.'/composer.lock', json_encode([
+        'packages' => [
+            ['name' => 'spiral/roadrunner-http'],
+        ],
+        'packages-dev' => [],
+    ], JSON_THROW_ON_ERROR));
+
+    try {
+        $detection = detectorWith(['octane' => ['server' => 'roadrunner']], $root);
+
+        expect($detection->octaneServer)->toBe('roadrunner');
+    } finally {
+        File::deleteDirectory($root);
+    }
+});
+
+it('refuses roadrunner without its php worker package', function () {
+    detectorWith(['octane' => ['server' => 'roadrunner']]);
+})->throws(RuntimeException::class, 'spiral/roadrunner-http');
+
+it('refuses frankenphp when the application cannot run its embedded php version', function () {
+    $root = sys_get_temp_dir().'/outpost-frankenphp-'.Str::random(10);
+    File::ensureDirectoryExists($root);
+    File::put($root.'/composer.json', json_encode([
+        'require' => ['php' => '~8.4.0'],
+    ], JSON_THROW_ON_ERROR));
+
+    try {
+        detectorWith(['octane' => ['server' => 'frankenphp']], $root);
+    } finally {
+        File::deleteDirectory($root);
+    }
+})->throws(RuntimeException::class, 'FrankenPHP uses PHP 8.5');
+
+it('can override the application octane server', function () {
+    $detection = detectorWith([
+        'octane' => ['server' => 'swoole'],
+        'outpost.octane.server' => 'frankenphp',
+    ]);
+
+    expect($detection->server)->toBe('octane')
+        ->and($detection->octaneServer)->toBe('frankenphp');
+});
+
+it('preserves swoole as the fallback for octane configs without a server', function () {
+    $detection = detectorWith(['octane' => []]);
+
+    expect($detection->server)->toBe('octane')
+        ->and($detection->octaneServer)->toBe('swoole');
 });
 
 it('can force php fpm for an octane application', function () {
@@ -116,8 +181,19 @@ it('can force php fpm for an octane application', function () {
     ]);
 
     expect($detection->server)->toBe('fpm')
+        ->and($detection->octaneServer)->toBeNull()
         ->and($detection->deferred)->toBe(['octane']);
 });
+
+it('refuses an unsupported octane server', function (array $config) {
+    detectorWith([
+        'octane' => ['server' => 'swoole'],
+        ...$config,
+    ]);
+})->with([
+    'application config' => [['octane.server' => 'hyper']],
+    'outpost override' => [['outpost.octane.server' => 'hyper']],
+])->throws(RuntimeException::class, 'Octane server');
 
 it('refuses an explicit octane server when octane is not installed', function () {
     detectorWith(['outpost.server' => 'octane']);

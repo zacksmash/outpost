@@ -212,6 +212,7 @@ it('runs detected octane and vite development servers', function () {
         database: 'sqlite',
         php: '8.5',
         server: 'octane',
+        octaneServer: 'frankenphp',
         frontend: 'vite',
     ));
     app()->instance(Detector::class, $detector);
@@ -227,10 +228,12 @@ it('runs detected octane and vite development servers', function () {
     $supervisor = File::get($this->root.'/feature-x/runtime/supervisord.conf');
 
     expect($manifest['server'])->toBe('octane')
+        ->and($manifest['octane_server'])->toBe('frankenphp')
         ->and($manifest['frontend'])->toBe('vite')
         ->and($manifest['processes'])->toBe(['octane', 'vite'])
         ->and($nginx)->toContain('location @octane')
         ->and($supervisor)->toContain('[program:outpost-octane]')
+        ->and($supervisor)->toContain('--server=frankenphp')
         ->and($supervisor)->toContain('[program:outpost-vite]')
         ->and($supervisor)->not->toContain('[program:php-fpm]');
 });

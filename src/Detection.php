@@ -19,5 +19,6 @@ class Detection
         public readonly string $php,
         public readonly string $server,
         public readonly string $frontend,
+        public readonly ?string $octaneServer = null,
     ) {}
 }

@@ -72,7 +72,11 @@ class ListCommand extends Command
             array_map(fn (Manifest $manifest): array => [
                 $manifest->name,
                 $manifest->branch,
-                $manifest->php.' / '.$manifest->server,
+                implode(' / ', array_filter([
+                    $manifest->php,
+                    $manifest->server,
+                    $manifest->octaneServer,
+                ])),
                 $manifest->services === [] ? '—' : implode(', ', $manifest->services),
                 $manifest->processes === [] ? '—' : implode(', ', $manifest->processes),
                 $states[$manifest->container] ?? 'missing',

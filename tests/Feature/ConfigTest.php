@@ -10,6 +10,7 @@ it('exposes sensible defaults', function () {
         ->and(config('outpost.resources'))->toBe(['cpus' => 4, 'memory' => '2G'])
         ->and(config('outpost.php'))->toBe(['8.4', '8.5'])
         ->and(config('outpost.server'))->toBe('auto')
+        ->and(config('outpost.octane'))->toBe(['server' => 'auto'])
         ->and(config('outpost.frontend'))->toBe('build')
         ->and(config('outpost.vite'))->toBe(['port' => 5173, 'hot_file' => 'public/hot'])
         ->and(config('outpost.https'))->toBe('auto')

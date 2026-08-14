@@ -85,7 +85,9 @@ php artisan outpost:remove billing --forget --force # local cleanup when Apple's
 
 Services are detected from the app's own configuration (database driver, redis usage across cache/session/queue/broadcast, smtp mailer). When detection guesses wrong, set `services` in `config/outpost.php` (e.g. `['mysql', 'redis']`) to skip detection, then remove and recreate the instance. The manifest at `.outpost/<name>/outpost.json` records what was detected.
 
-Outpost uses Octane with Swoole automatically when the app exposes Octane configuration; otherwise it uses PHP-FPM. Set `server` to `fpm` to force the traditional request lifecycle or `octane` to require Octane. Octane runs behind nginx with websocket forwarding and polling-based live reload.
+Outpost uses Octane automatically when the app exposes Octane configuration; otherwise it uses PHP-FPM. `octane.server => auto` mirrors the app's `OCTANE_SERVER` and supports `swoole`, `roadrunner`, and `frankenphp`. Set `server` to `fpm` to force the traditional request lifecycle or `octane` to require Octane, and override `octane.server` only when an outpost should differ from the primary app. All three runtimes run behind nginx with websocket forwarding and live reload.
+
+The image provides Swoole and pinned RoadRunner and FrankenPHP executables. RoadRunner apps must lock `spiral/roadrunner-http:^3.3`; the separate CLI downloader package is not required by Outpost. FrankenPHP embeds PHP 8.5, so the app must permit that version. Outpost validates both conditions before creating a worktree and records the resolved runtime as `octane_server` in the manifest.
 
 The `frontend` mode is `build` by default. Use `vite` to install dependencies and supervise the app's `dev` script with HMR, or `none` to skip npm. Vite mode requires a `package.json` `dev` script, explicitly allows only the generated instance hostname, and publishes the dev server there on `vite.port` (default `5173`). Set `vite.hot_file` when the app does not use `public/hot`.
 
@@ -101,7 +103,7 @@ Configure long-running Laravel processes as shell-free argument lists. `@php` re
 ],
 ```
 
-Key `config/outpost.php` values: `domain` (default `outpost`), `image` (an exact versioned GHCR reference), `dns`, `path`, `resources` (4 CPUs and `2G` memory by default), `php` (versions baked into the image — rebuild locally after changing), `server` (`auto`, `fpm`, or `octane`), `frontend` (`build`, `vite`, or `none`), `vite`, `https` (`auto` mirrors the primary app, `true` requires HTTPS, `false` requires HTTP), `tls.path`, `services`, `expose_services`, `processes`, `database` (sandbox credentials baked into the image — rebuild locally after changing; letters, numbers, dots, dashes, underscores only), `lifecycle_timeout` (30 seconds by default for bounded Apple container lifecycle operations), `timeout`.
+Key `config/outpost.php` values: `domain` (default `outpost`), `image` (an exact versioned GHCR reference), `dns`, `path`, `resources` (4 CPUs and `2G` memory by default), `php` (versions baked into the image — rebuild locally after changing), `server` (`auto`, `fpm`, or `octane`), `octane.server` (`auto`, `swoole`, `roadrunner`, or `frankenphp`), `frontend` (`build`, `vite`, or `none`), `vite`, `https` (`auto` mirrors the primary app, `true` requires HTTPS, `false` requires HTTP), `tls.path`, `services`, `expose_services`, `processes`, `database` (sandbox credentials baked into the image — rebuild locally after changing; letters, numbers, dots, dashes, underscores only), `lifecycle_timeout` (30 seconds by default for bounded Apple container lifecycle operations), `timeout`.
 
 ## Rules, References, and Templates
 
@@ -118,7 +120,7 @@ Read before executing:
 - An agent needs to run a test without an interactive shell: `php artisan outpost:exec billing -- php artisan test --filter=Feature`, then use the command's unchanged exit code.
 - An app on SQLite needs no services: the instance boots with nginx and PHP-FPM only, and Outpost creates `database/database.sqlite` automatically.
 - A Redis queue needs a worker: add a `queue` process using `['@php', 'artisan', 'queue:work', '--sleep=1']`, recreate the instance, and inspect its output with `php artisan outpost:logs <name> --follow`.
-- An Octane app should use the default `server => auto`; choose `fpm` only when testing the traditional request lifecycle. Use `frontend => vite` when edits need browser HMR and recreate the instance after changing either mode.
+- An Octane app should use the default `server => auto` and `octane.server => auto`; Outpost then mirrors `OCTANE_SERVER`. Choose `fpm` only when testing the traditional request lifecycle. Use `frontend => vite` when edits need browser HMR and recreate the instance after changing any mode.
 - The app installs a local package via a composer path repository: Outpost lists the path and asks before mounting it read-only; pass `--mount-path-repos` in scripts that must not prompt.
 
 ## Anti-patterns
@@ -128,6 +130,7 @@ Read before executing:
 - do not copy or commit `.outpost/<name>/runtime/tls/key.pem`; Outpost keeps each exact-host leaf key inside the ignored `.outpost` directory and mounts it read-only
 - do not assume direct backing-service access is network-isolated from every other local container; set `expose_services` to `false` when loopback-only services are required
 - do not add `octane` or `vite` entries to `processes` when Outpost manages those modes; those names are reserved and their commands are generated automatically
+- do not add or download an app-local RoadRunner or FrankenPHP executable solely for Outpost; the base image supplies verified binaries, though an intentionally committed app-local `rr` remains authoritative
 - do not expect external Scout drivers to run inside instances; Horizon runs only when it is explicitly configured in `processes`
 - do not put a shell command string or shell operators in `processes`; each command must be an argument array, with one item per argument
 - do not edit files under `.outpost/<name>/runtime/` expecting Outpost to regenerate or validate them; they are written once at creation and applied verbatim on every boot

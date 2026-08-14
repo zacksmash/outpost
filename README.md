@@ -131,7 +131,19 @@ Outpost inspects your application's own configuration — the same sources `php 
 
 When detection guesses wrong, set `services` in `config/outpost.php` to skip detection entirely, then remove and recreate the instance. Each instance's manifest at `.outpost/<name>/outpost.json` records what was detected, so you can always see exactly what an instance is running and why.
 
-Octane applications run automatically through Swoole and a websocket-aware nginx reverse proxy. Set `server` to `fpm` to use the traditional request lifecycle instead, or to `octane` to require Octane explicitly. The base image supplies Swoole and the polling file watcher Octane needs for live code reloads, so the consuming application does not need container-specific dependencies.
+Octane applications run automatically behind the same websocket-aware nginx reverse proxy used by every outpost. By default, `octane.server` mirrors the application's own `OCTANE_SERVER` setting and supports `swoole`, `roadrunner`, and `frankenphp`. Override it only when an outpost should use a different runtime:
+
+```php
+'server' => 'octane',
+
+'octane' => [
+    'server' => 'frankenphp',
+],
+```
+
+The base image supplies Swoole plus pinned, checksum-verified RoadRunner and FrankenPHP binaries, so no runtime executable is downloaded while an instance starts. RoadRunner applications still need the PHP worker package in their lock file; install it with `composer require spiral/roadrunner-http:^3.3 --with-all-dependencies`. The pinned FrankenPHP binary embeds PHP 8.5, and Outpost reports an actionable error before creating anything when the application cannot run on that version. Every runtime gets live reload for the bind-mounted worktree and the selected runtime is recorded in the manifest and shown by `outpost:info`.
+
+Set `server` to `fpm` to use the traditional request lifecycle instead, or to `octane` to require Octane explicitly. HTTPS still terminates at Outpost's nginx proxy, so Octane listens only on container loopback regardless of the selected runtime.
 
 External Scout drivers are still reported as deferred. Horizon is reported as deferred unless you configure it as an application process. Outpost records every selected server, front-end mode, deferred capability, and supervised process in the manifest, so a Redis-backed queue never looks active when no worker is actually running.
 
@@ -228,6 +240,7 @@ Instances are development sandboxes, not production parity. The database account
 | `resources.memory` | `2G` | Memory allocated to each instance; accepts runtime sizes such as `2048M` or `3G`. |
 | `php` | `['8.4', '8.5']` | PHP versions in the base image. |
 | `server` | `auto` | Use Octane when installed, otherwise PHP-FPM; accepts `auto`, `fpm`, or `octane`. |
+| `octane.server` | `auto` | Mirror `OCTANE_SERVER`, or select `swoole`, `roadrunner`, or `frankenphp`. |
 | `frontend` | `build` | Front-end workflow; accepts `build`, `vite`, or `none`. |
 | `vite.port` | `5173` | Public per-instance port for the nginx-proxied Vite development server. |
 | `vite.hot_file` | `public/hot` | Laravel Vite hot-file path, relative to the application. |

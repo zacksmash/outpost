@@ -29,8 +29,9 @@ class Processes
         string $server = 'fpm',
         string $frontend = 'build',
         ?string $url = null,
+        ?string $octaneServer = null,
     ): array {
-        $commands = $this->managedCommands($php, $server, $frontend, $url);
+        $commands = $this->managedCommands($php, $server, $frontend, $url, $octaneServer);
         $configured = $this->config->get('outpost.processes', []);
 
         if (! is_array($configured)) {
@@ -89,19 +90,32 @@ class Processes
         string $server,
         string $frontend,
         ?string $url,
+        ?string $octaneServer,
     ): array {
         $commands = [];
 
         if ($server === 'octane') {
+            $octaneServer ??= 'swoole';
+
+            $serverOptions = match ($octaneServer) {
+                'swoole' => [],
+                'roadrunner' => ['--rpc-port=6001'],
+                'frankenphp' => ['--admin-port=2019'],
+                default => throw new RuntimeException(
+                    'The managed Octane server must be one of: swoole, roadrunner, frankenphp.',
+                ),
+            };
+
             $commands['octane'] = [
                 'env',
                 'CHOKIDAR_USEPOLLING=true',
                 "php{$php}",
                 'artisan',
                 'octane:start',
-                '--server=swoole',
+                "--server={$octaneServer}",
                 '--host=127.0.0.1',
                 '--port=8000',
+                ...$serverOptions,
                 '--watch',
             ];
         }

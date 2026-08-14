@@ -22,6 +22,8 @@ afterEach(function () {
 it('shows runtime details and service connection information', function () {
     app(Outposts::class)->save(fakeManifest(
         name: 'billing',
+        server: 'octane',
+        octaneServer: 'roadrunner',
         frontend: 'vite',
         database: 'mysql',
         services: ['mysql', 'redis', 'mailpit'],
@@ -40,6 +42,7 @@ it('shows runtime details and service connection information', function () {
     expect($exit)->toBe(0)
         ->and($output)->toContain('billing')
         ->and($output)->toContain('running')
+        ->and($output)->toContain('octane / roadrunner')
         ->and($output)->toContain('4 CPU / 2G')
         ->and($output)->toContain('mysql://outpost:password@billing-app.outpost:3306/outpost')
         ->and($output)->toContain('http://billing-app.outpost:8025');
@@ -58,6 +61,7 @@ it('provides structured json for agents and scripts', function () {
     expect($exit)->toBe(0)
         ->and($output['name'])->toBe('billing')
         ->and($output['state'])->toBe('missing')
+        ->and($output['octane_server'])->toBeNull()
         ->and($output['resources'])->toBe(['cpus' => 4, 'memory' => '2G'])
         ->and($output['endpoints']['application']['url'])->toBe('http://billing-app.outpost')
         ->and($output['expose_services'])->toBeFalse();

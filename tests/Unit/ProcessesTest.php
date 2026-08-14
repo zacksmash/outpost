@@ -32,6 +32,7 @@ it('adds the octane and vite development processes', function () {
     expect((new Processes(app('config')))->commands(
         php: '8.5',
         server: 'octane',
+        octaneServer: 'swoole',
         frontend: 'vite',
         url: 'http://billing-app.outpost',
     ))->toBe([
@@ -50,6 +51,33 @@ it('adds the octane and vite development processes', function () {
         ],
     ]);
 });
+
+it('builds the command for each octane server', function (string $server, array $options) {
+    config(['outpost.processes' => []]);
+
+    expect((new Processes(app('config')))->commands(
+        php: '8.5',
+        server: 'octane',
+        octaneServer: $server,
+    )['octane'])->toBe([
+        'env', 'CHOKIDAR_USEPOLLING=true', 'php8.5', 'artisan', 'octane:start',
+        "--server={$server}", '--host=127.0.0.1', '--port=8000', ...$options, '--watch',
+    ]);
+})->with([
+    'Swoole' => ['swoole', []],
+    'RoadRunner' => ['roadrunner', ['--rpc-port=6001']],
+    'FrankenPHP' => ['frankenphp', ['--admin-port=2019']],
+]);
+
+it('refuses an unsupported managed octane server', function () {
+    config(['outpost.processes' => []]);
+
+    (new Processes(app('config')))->commands(
+        php: '8.5',
+        server: 'octane',
+        octaneServer: 'hyper',
+    );
+})->throws(RuntimeException::class, 'Octane server');
 
 it('rejects configured processes that collide with managed processes', function () {
     config(['outpost.processes' => [

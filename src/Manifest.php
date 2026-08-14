@@ -37,6 +37,7 @@ class Manifest implements Arrayable
         public readonly CarbonImmutable $createdAt,
         public readonly ?int $cpus = null,
         public readonly ?string $memory = null,
+        public readonly ?string $octaneServer = null,
     ) {}
 
     /**
@@ -59,6 +60,18 @@ class Manifest implements Arrayable
         if (array_key_exists('server', $data)
             && (! is_string($data['server']) || ! in_array($data['server'], ['fpm', 'octane'], true))) {
             throw new InvalidArgumentException('The manifest [server] value must be fpm or octane.');
+        }
+
+        $server = $data['server'] ?? 'fpm';
+
+        if (array_key_exists('octane_server', $data)
+            && ($server === 'octane'
+                ? ! is_string($data['octane_server'])
+                    || ! in_array($data['octane_server'], ['swoole', 'roadrunner', 'frankenphp'], true)
+                : $data['octane_server'] !== null)) {
+            throw new InvalidArgumentException(
+                'The manifest [octane_server] value must be swoole, roadrunner, or frankenphp for an Octane instance, and null otherwise.',
+            );
         }
 
         if (array_key_exists('frontend', $data)
@@ -102,7 +115,7 @@ class Manifest implements Arrayable
             url: $data['url'],
             branch: $data['branch'],
             php: $data['php'],
-            server: $data['server'] ?? 'fpm',
+            server: $server,
             frontend: $data['frontend'] ?? 'build',
             exposeServices: $data['expose_services'] ?? false,
             services: static::stringList($data, 'services'),
@@ -114,6 +127,7 @@ class Manifest implements Arrayable
             createdAt: $createdAt,
             cpus: $data['cpus'] ?? null,
             memory: $data['memory'] ?? null,
+            octaneServer: $server === 'octane' ? ($data['octane_server'] ?? 'swoole') : null,
         );
     }
 
@@ -147,6 +161,7 @@ class Manifest implements Arrayable
             'branch' => $this->branch,
             'php' => $this->php,
             'server' => $this->server,
+            'octane_server' => $this->octaneServer,
             'frontend' => $this->frontend,
             'expose_services' => $this->exposeServices,
             'services' => $this->services,

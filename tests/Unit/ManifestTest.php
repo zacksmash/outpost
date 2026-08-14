@@ -43,10 +43,25 @@ it('loads old manifests without a processes field', function () {
     expect(Manifest::fromArray($data)->processes)->toBe([]);
 });
 
+it('loads old octane manifests with the original swoole default', function () {
+    $data = fakeManifest(server: 'octane', octaneServer: 'frankenphp')->toArray();
+
+    unset($data['octane_server']);
+
+    expect(Manifest::fromArray($data)->octaneServer)->toBe('swoole');
+});
+
 it('loads old manifests with the original web and frontend defaults', function () {
     $data = fakeManifest(server: 'octane', frontend: 'vite')->toArray();
 
-    unset($data['server'], $data['frontend'], $data['expose_services'], $data['cpus'], $data['memory']);
+    unset(
+        $data['server'],
+        $data['octane_server'],
+        $data['frontend'],
+        $data['expose_services'],
+        $data['cpus'],
+        $data['memory'],
+    );
 
     $manifest = Manifest::fromArray($data);
 
@@ -65,6 +80,14 @@ it('rejects invalid resource metadata', function (string $key, mixed $value) {
     'empty memory' => ['memory', ''],
     'integer memory' => ['memory', 2048],
 ])->throws(InvalidArgumentException::class);
+
+it('rejects invalid octane server metadata', function (array $values) {
+    Manifest::fromArray([...fakeManifest()->toArray(), ...$values]);
+})->with([
+    'unsupported server' => [['server' => 'octane', 'octane_server' => 'hyper']],
+    'server on fpm instance' => [['server' => 'fpm', 'octane_server' => 'swoole']],
+    'non-string server' => [['server' => 'octane', 'octane_server' => 1]],
+])->throws(InvalidArgumentException::class, 'manifest [octane_server]');
 
 it('rejects a non-boolean service exposure value', function () {
     Manifest::fromArray([...fakeManifest()->toArray(), 'expose_services' => 'yes']);

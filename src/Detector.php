@@ -21,6 +21,11 @@ class Detector
     protected const array DATABASE_DRIVERS = ['sqlite', 'mysql', 'mariadb', 'pgsql'];
 
     /**
+     * The PHP version embedded in the pinned FrankenPHP base-image binary.
+     */
+    protected const string FRANKENPHP_PHP_VERSION = '8.5';
+
+    /**
      * Create a new detector instance.
      */
     public function __construct(
@@ -35,14 +40,31 @@ class Detector
     {
         $database = $this->database();
         $server = $this->server();
+        $octaneServer = $server === 'octane' ? $this->octaneServer() : null;
+        $php = $this->php();
+
+        if ($octaneServer === 'frankenphp' && $php !== self::FRANKENPHP_PHP_VERSION) {
+            throw new RuntimeException(sprintf(
+                'Outpost FrankenPHP uses PHP %s, but this application selected PHP %s. Allow PHP %1$s or choose Swoole or RoadRunner.',
+                self::FRANKENPHP_PHP_VERSION,
+                $php,
+            ));
+        }
+
+        if ($octaneServer === 'roadrunner' && ! $this->hasLockedComposerPackage('spiral/roadrunner-http')) {
+            throw new RuntimeException(
+                'The RoadRunner Octane server requires spiral/roadrunner-http. Run [composer require spiral/roadrunner-http:^3.3 --with-all-dependencies] first.',
+            );
+        }
 
         return new Detection(
             services: $this->services($database),
             deferred: $this->deferred($database, $server),
             database: $database,
-            php: $this->php(),
+            php: $php,
             server: $server,
             frontend: $this->frontend(),
+            octaneServer: $octaneServer,
         );
     }
 
@@ -137,6 +159,32 @@ class Detector
         if ($server === 'octane' && ! $this->config->has('octane')) {
             throw new RuntimeException(
                 'The [outpost.server] value is octane, but this application does not expose an Octane configuration.',
+            );
+        }
+
+        return $server;
+    }
+
+    /**
+     * Determine which application server should power Octane.
+     */
+    protected function octaneServer(): string
+    {
+        $server = $this->config->get('outpost.octane.server', 'auto');
+
+        if (! is_string($server) || ! in_array($server, ['auto', 'swoole', 'roadrunner', 'frankenphp'], true)) {
+            throw new RuntimeException(
+                'The [outpost.octane.server] Octane server must be one of: auto, swoole, roadrunner, frankenphp.',
+            );
+        }
+
+        if ($server === 'auto') {
+            $server = $this->config->get('octane.server', 'swoole');
+        }
+
+        if (! is_string($server) || ! in_array($server, ['swoole', 'roadrunner', 'frankenphp'], true)) {
+            throw new RuntimeException(
+                'The application Octane server must be one of: swoole, roadrunner, frankenphp.',
             );
         }
 
@@ -255,6 +303,30 @@ class Detector
         $constraint = data_get(File::json($path), 'require.php');
 
         return is_string($constraint) ? $constraint : null;
+    }
+
+    /**
+     * Determine whether the application's lock file contains a package.
+     */
+    protected function hasLockedComposerPackage(string $name): bool
+    {
+        $path = $this->basePath.'/composer.lock';
+
+        if (! File::exists($path)) {
+            return false;
+        }
+
+        $lock = File::json($path);
+
+        foreach (['packages', 'packages-dev'] as $group) {
+            foreach ((array) ($lock[$group] ?? []) as $package) {
+                if (is_array($package) && ($package['name'] ?? null) === $name) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

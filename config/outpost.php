@@ -108,6 +108,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Octane Server
+    |--------------------------------------------------------------------------
+    |
+    | "auto" mirrors the application's OCTANE_SERVER setting. Outpost's base
+    | image includes Swoole, RoadRunner, and FrankenPHP, so an override only
+    | needs to be set when an outpost should differ from the primary app.
+    |
+    */
+
+    'octane' => [
+        'server' => env('OUTPOST_OCTANE_SERVER', 'auto'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Frontend Development
     |--------------------------------------------------------------------------
     |
