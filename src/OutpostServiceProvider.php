@@ -24,6 +24,8 @@ class OutpostServiceProvider extends ServiceProvider
             return new Git($app->basePath());
         });
 
+        $this->app->singleton(Provisioner::class);
+
         $this->app->singleton(Outposts::class, function (Application $app) {
             $path = $app->make('config')->string('outpost.path');
 
@@ -45,5 +47,9 @@ class OutpostServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__.'/../config/outpost.php' => config_path('outpost.php'),
         ], ['outpost', 'outpost-config']);
+
+        $this->commands([
+            Console\Commands\BuildCommand::class,
+        ]);
     }
 }

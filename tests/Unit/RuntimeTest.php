@@ -41,6 +41,26 @@ it('checks whether an image exists', function () {
         ->and($this->runtime->hasImage('other'))->toBeTrue();
 });
 
+it('builds an image with dns, tag, and build arguments', function () {
+    Process::fake();
+
+    $this->runtime->build('outpost-base', '1.1.1.1', '/pkg/stubs', ['DB_DATABASE' => 'outpost']);
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'build', '--dns', '1.1.1.1', '--tag', 'outpost-base',
+        '--build-arg', 'DB_DATABASE=outpost',
+        '/pkg/stubs',
+    ]);
+});
+
+it('surfaces the real error when a build fails', function () {
+    Process::fake([
+        processPattern('container', 'build').' *' => Process::result('', 'ppa unreachable', 1),
+    ]);
+
+    $this->runtime->build('outpost-base', '1.1.1.1', '/pkg/stubs');
+})->throws(RuntimeException::class, 'Unable to build the [outpost-base] image: ppa unreachable');
+
 it('boots a detached container with volumes and dns', function () {
     Process::fake();
 

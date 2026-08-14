@@ -40,6 +40,31 @@ class Runtime
     }
 
     /**
+     * Build an image from the given context directory, streaming build output.
+     *
+     * @param  array<string, string>  $buildArgs
+     */
+    public function build(string $image, string $dns, string $context, array $buildArgs = [], ?callable $output = null): void
+    {
+        $command = ['container', 'build', '--dns', $dns, '--tag', $image];
+
+        foreach ($buildArgs as $key => $value) {
+            $command[] = '--build-arg';
+            $command[] = "{$key}={$value}";
+        }
+
+        $command[] = $context;
+
+        $result = Process::forever()->run($command, $output);
+
+        if (! $result->successful()) {
+            throw new RuntimeException(
+                "Unable to build the [{$image}] image: ".trim($result->errorOutput() ?: $result->output()),
+            );
+        }
+    }
+
+    /**
      * Boot a new detached container.
      *
      * @param  list<string>  $volumes

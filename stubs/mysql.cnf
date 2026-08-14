@@ -1,0 +1,8 @@
+# Outpost sandbox overrides. The zz- prefix keeps this file sorting last
+# so its values win over the distribution defaults.
+
+[mysqld]
+bind-address = 0.0.0.0
+skip-name-resolve
+innodb_buffer_pool_size = 256M
+max_connections = 100
