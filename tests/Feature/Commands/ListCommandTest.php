@@ -30,6 +30,17 @@ it('shows a friendly empty state', function () {
     Process::assertNothingRan();
 });
 
+it('emits an empty json collection without consulting the runtime', function () {
+    Process::fake();
+
+    $exit = Artisan::call('outpost:list', ['--json' => true]);
+
+    expect($exit)->toBe(0)
+        ->and(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR))->toBe([]);
+
+    Process::assertNothingRan();
+});
+
 it('lists every instance with its live state', function () {
     app(Outposts::class)->save(fakeManifest('feature-x', processes: ['queue']));
     app(Outposts::class)->save(fakeManifest('feature-y'));
@@ -51,6 +62,35 @@ it('lists every instance with its live state', function () {
         ->and($output)->toContain('8.4 / fpm')
         ->and($output)->toContain('mysql, redis')
         ->and($output)->toContain('queue');
+});
+
+it('emits machine-readable instance state', function () {
+    app(Outposts::class)->save(fakeManifest('feature-x', processes: ['queue']));
+    app(Outposts::class)->save(fakeManifest('feature-y'));
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+    ]);
+
+    $exit = Artisan::call('outpost:list', ['--json' => true]);
+    $instances = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($exit)->toBe(0)
+        ->and($instances)->toHaveCount(2)
+        ->and($instances[0])->toMatchArray([
+            'name' => 'feature-x',
+            'container' => 'feature-x-app',
+            'url' => 'http://feature-x-app.outpost',
+            'php' => '8.4',
+            'server' => 'fpm',
+            'frontend' => 'build',
+            'services' => ['mysql', 'redis'],
+            'processes' => ['queue'],
+            'state' => 'running',
+        ])
+        ->and($instances[1]['state'])->toBe('missing');
 });
 
 it('fails with the real error when the container daemon is unreachable', function () {

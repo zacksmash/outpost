@@ -198,6 +198,20 @@ it('executes commands inside a container and returns the raw result', function (
         ->and(trim($result->errorOutput()))->toBe('warning');
 });
 
+it('streams a non-interactive command and passes its exit code through', function () {
+    Process::fake([
+        processPattern('container', 'exec', 'feature-x-app', 'php', 'artisan', 'test', '--filter=Feature') => Process::result('', '', 3),
+    ]);
+
+    expect($this->runtime->run('feature-x-app', [
+        'php', 'artisan', 'test', '--filter=Feature',
+    ]))->toBe(3);
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', 'feature-x-app', 'php', 'artisan', 'test', '--filter=Feature',
+    ]);
+});
+
 it('reads container state from the json listing', function () {
     Process::fake([
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([

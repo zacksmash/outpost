@@ -193,6 +193,7 @@ Queue workers, the scheduler, Horizon, and other long-running commands can run w
 
 ```bash
 php artisan outpost:list             # every instance, its state, and its URL
+php artisan outpost:list --json      # machine-readable inventory for agents and scripts
 php artisan outpost:info billing     # runtime details, URLs, DSNs, and credentials; --json available
 php artisan outpost:doctor           # diagnose host, runtime, DNS, image, and app readiness
 php artisan outpost:certify          # create or renew trusted local HTTPS; --force renews
@@ -202,6 +203,7 @@ php artisan outpost:open billing mailpit # open Mailpit; `vite` is also supporte
 php artisan outpost:start billing    # start a stopped instance
 php artisan outpost:stop billing     # stop it; worktree and data survive
 php artisan outpost:shell billing    # open a shell inside the instance
+php artisan outpost:exec billing -- php artisan test --filter=Feature
 php artisan outpost:logs billing     # show the service logs; --follow streams
 php artisan outpost:remove billing   # remove the container, worktree, and data
 ```
@@ -209,6 +211,8 @@ php artisan outpost:remove billing   # remove the container, worktree, and data
 If these checks pass but a Chromium-based browser reports `ERR_ADDRESS_UNREACHABLE`, allow that browser under **System Settings → Privacy & Security → Local Network**, quit it completely, and reopen it. macOS applies this permission per browser; another browser working does not imply every browser is allowed.
 
 Stopping an instance preserves its database — the data lives in the container's own writable layer and survives across `stop` and `start`. Removing an instance destroys all of it, which is rather the point. Removal asks first, offers to delete the instance's branch when it's safe to do so, and `--force` skips every question (leaving the branch alone).
+
+`outpost:exec` is the non-interactive path for scripts and agents. Everything after `--` is passed as an argument list directly to `container exec` from the instance's `/app` working directory; no shell interprets it, output streams normally, and the inner command's exit code is returned unchanged. Use `outpost:shell` when you actually need an interactive terminal.
 
 ## How Instances Work
 

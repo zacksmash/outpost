@@ -64,13 +64,14 @@ php artisan outpost origin/review/invoices --name=invoices --open
 php artisan outpost --pr=482 --name=pr-482 --open
 php artisan outpost:doctor
 php artisan outpost:pull --force
-php artisan outpost:list
+php artisan outpost:list                    # add --json for agent-readable inventory
 php artisan outpost:info billing           # URLs, DSNs, credentials, runtime; add --json for agents
 php artisan outpost:open billing           # starts the instance first when needed
 php artisan outpost:open billing mailpit   # browser endpoints: app, mailpit, vite
 php artisan outpost:start billing
 php artisan outpost:stop billing
 php artisan outpost:shell billing
+php artisan outpost:exec billing -- php artisan test --filter=Feature
 php artisan outpost:logs billing --follow
 php artisan outpost:remove billing --force
 ```
@@ -81,6 +82,7 @@ php artisan outpost:remove billing --force
 - commands taking a `name` argument prompt with a select when it is omitted
 - `outpost:open` starts a stopped instance before opening its URL in the macOS default browser
 - `outpost:info --json` is the stable machine-readable way for agents and scripts to discover instance and service endpoints
+- `outpost:list --json` is the stable machine-readable inventory; `outpost:exec <name> -- <command...>` passes argument tokens without a shell, streams output, and preserves the inner exit code
 - `outpost:remove` confirms before destroying; `--force` skips every confirmation and keeps the branch
 
 ### 5. Configure when detection needs help
@@ -117,6 +119,7 @@ Read before executing:
 - A setup fails before instance creation: run `php artisan outpost:doctor`, apply the remedies attached to `FAIL` rows, and rerun it until only `PASS` or non-blocking `WARN` rows remain.
 - A reviewer needs to try a GitHub pull request without disturbing their own branch: `php artisan outpost --pr=482 --name=pr-482 --open`, then `php artisan outpost:remove pr-482` when done.
 - An agent needs database coordinates without parsing terminal tables: `php artisan outpost:info billing --json`, then read `endpoints.mysql.url`, `endpoints.pgsql.url`, or `endpoints.redis.url` when present.
+- An agent needs to run a test without an interactive shell: `php artisan outpost:exec billing -- php artisan test --filter=Feature`, then use the command's unchanged exit code.
 - An app on SQLite needs no services: the instance boots with nginx and PHP-FPM only, and Outpost creates `database/database.sqlite` automatically.
 - A Redis queue needs a worker: add a `queue` process using `['@php', 'artisan', 'queue:work', '--sleep=1']`, recreate the instance, and inspect its output with `php artisan outpost:logs <name> --follow`.
 - An Octane app should use the default `server => auto`; choose `fpm` only when testing the traditional request lifecycle. Use `frontend => vite` when edits need browser HMR and recreate the instance after changing either mode.

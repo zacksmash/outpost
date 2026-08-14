@@ -84,6 +84,7 @@ class OutpostServiceProvider extends ServiceProvider
             Console\Commands\BuildCommand::class,
             Console\Commands\CertifyCommand::class,
             Console\Commands\DoctorCommand::class,
+            Console\Commands\ExecCommand::class,
             Console\Commands\InstallCommand::class,
             Console\Commands\InfoCommand::class,
             Console\Commands\ListCommand::class,

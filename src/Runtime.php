@@ -229,6 +229,18 @@ class Runtime
     }
 
     /**
+     * Stream a non-interactive command inside the given container.
+     *
+     * @param  list<string>  $command
+     */
+    public function run(string $container, array $command, ?callable $output = null): int
+    {
+        return Process::forever()
+            ->run(['container', 'exec', $container, ...$command], $output)
+            ->exitCode() ?? 1;
+    }
+
+    /**
      * Get the state of every container, keyed by container name.
      *
      * @return array<string, string>
