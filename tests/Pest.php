@@ -2,6 +2,23 @@
 
 declare(strict_types=1);
 
+use Carbon\CarbonImmutable;
+use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Tests\TestCase;
 
 uses(TestCase::class)->in(__DIR__);
+
+function fakeManifest(string $name = 'feature-billing'): Manifest
+{
+    return new Manifest(
+        name: $name,
+        container: $name.'-app',
+        url: "http://{$name}-app.outpost",
+        branch: 'feature/billing',
+        php: '8.4',
+        services: ['mysql', 'redis'],
+        deferred: ['horizon'],
+        database: 'mysql',
+        createdAt: CarbonImmutable::parse('2026-08-14T09:00:00+00:00'),
+    );
+}

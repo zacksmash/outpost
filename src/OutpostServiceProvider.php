@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zacksmash\Outpost;
 
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 
 class OutpostServiceProvider extends ServiceProvider
@@ -14,6 +15,14 @@ class OutpostServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/outpost.php', 'outpost');
+
+        $this->app->singleton(Outposts::class, function (Application $app) {
+            $path = $app->make('config')->string('outpost.path');
+
+            return new Outposts(
+                str_starts_with($path, DIRECTORY_SEPARATOR) ? $path : $app->basePath($path),
+            );
+        });
     }
 
     /**
