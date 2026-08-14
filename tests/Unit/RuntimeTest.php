@@ -37,6 +37,16 @@ it('reads the container system status', function () {
     expect($this->runtime->systemStatus())->toBe('running');
 });
 
+it('starts the container system', function () {
+    Process::fake();
+
+    $this->runtime->startSystem();
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'system', 'start',
+    ]);
+});
+
 it('rejects a malformed container system status', function () {
     Process::fake([
         processPattern('container', 'system', 'status', '--format', 'json') => Process::result('not-json'),

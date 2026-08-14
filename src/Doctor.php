@@ -10,6 +10,14 @@ use RuntimeException;
 
 class Doctor
 {
+    public const string PLATFORM_CHECK = 'Platform';
+
+    public const string RUNTIME_VERSION_CHECK = 'Runtime version';
+
+    public const string RUNTIME_CHECK = 'Runtime';
+
+    public const string BASE_IMAGE_CHECK = 'Base image';
+
     /**
      * The oldest Apple container CLI Outpost supports.
      */
@@ -48,7 +56,7 @@ class Doctor
         } catch (RuntimeException $e) {
             $runtimeAvailable = false;
             $checks[] = DoctorCheck::failure(
-                'Runtime version',
+                self::RUNTIME_VERSION_CHECK,
                 $e->getMessage(),
                 'Install Apple container 1.2.x, then run: container system start',
             );
@@ -61,15 +69,15 @@ class Doctor
                 $status = $this->runtime->systemStatus();
                 $runtimeRunning = $status === 'running';
                 $checks[] = $runtimeRunning
-                    ? DoctorCheck::pass('Runtime', 'The Apple container system is running.')
+                    ? DoctorCheck::pass(self::RUNTIME_CHECK, 'The Apple container system is running.')
                     : DoctorCheck::failure(
-                        'Runtime',
+                        self::RUNTIME_CHECK,
                         "The Apple container system is {$status}.",
                         'Run: container system start',
                     );
             } catch (RuntimeException $e) {
                 $checks[] = DoctorCheck::failure(
-                    'Runtime',
+                    self::RUNTIME_CHECK,
                     $e->getMessage(),
                     'Run: container system start',
                 );
@@ -96,7 +104,7 @@ class Doctor
             $version = $operatingSystem === 'Darwin' ? $this->host->macOSVersion() : null;
         } catch (RuntimeException $e) {
             return DoctorCheck::failure(
-                'Platform',
+                self::PLATFORM_CHECK,
                 $e->getMessage(),
                 'Run Outpost on macOS 26 or newer on Apple silicon.',
             );
@@ -111,13 +119,13 @@ class Doctor
             || $version === null
             || version_compare($version, '26.0', '<')) {
             return DoctorCheck::failure(
-                'Platform',
+                self::PLATFORM_CHECK,
                 $detail.' is not supported.',
                 'Run Outpost on macOS 26 or newer on Apple silicon.',
             );
         }
 
-        return DoctorCheck::pass('Platform', $detail);
+        return DoctorCheck::pass(self::PLATFORM_CHECK, $detail);
     }
 
     /**
@@ -127,7 +135,7 @@ class Doctor
     {
         if (version_compare($version, self::MINIMUM_RUNTIME_VERSION, '<')) {
             return DoctorCheck::failure(
-                'Runtime version',
+                self::RUNTIME_VERSION_CHECK,
                 "Apple container {$version} is older than the supported 1.2.x line.",
                 'Upgrade Apple container to 1.2.x, then restart it.',
             );
@@ -135,13 +143,13 @@ class Doctor
 
         if (version_compare($version, self::UNVERIFIED_RUNTIME_VERSION, '>=')) {
             return DoctorCheck::warning(
-                'Runtime version',
+                self::RUNTIME_VERSION_CHECK,
                 "Apple container {$version} is newer than the verified 1.2.x line.",
                 'If Outpost behaves unexpectedly, install the latest Apple container 1.2.x release.',
             );
         }
 
-        return DoctorCheck::pass('Runtime version', "Apple container {$version} is supported.");
+        return DoctorCheck::pass(self::RUNTIME_VERSION_CHECK, "Apple container {$version} is supported.");
     }
 
     /**
@@ -201,9 +209,9 @@ class Doctor
         }
 
         $checks[] = $this->runtime->hasImage($image)
-            ? DoctorCheck::pass('Base image', "The [{$image}] image is available.")
+            ? DoctorCheck::pass(self::BASE_IMAGE_CHECK, "The [{$image}] image is available.")
             : DoctorCheck::failure(
-                'Base image',
+                self::BASE_IMAGE_CHECK,
                 "The [{$image}] image is missing.",
                 'Run: php artisan outpost:build',
             );

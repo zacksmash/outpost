@@ -54,6 +54,17 @@ class Runtime
     }
 
     /**
+     * Start the container system service.
+     */
+    public function startSystem(): void
+    {
+        $this->runOrFail(
+            ['container', 'system', 'start'],
+            'Unable to start the Apple container system',
+        );
+    }
+
+    /**
      * Get the domain the DNS daemon publishes container hostnames under.
      *
      * Read the running service's properties instead of config.toml because

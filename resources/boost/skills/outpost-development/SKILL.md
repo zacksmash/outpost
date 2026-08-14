@@ -33,6 +33,7 @@ php artisan vendor:publish --tag="outpost-config"   # optional; tag "outpost" pu
 ### 3. One-time host setup
 
 ```bash
+php artisan outpost:install                # preferred guided setup
 container system start
 # ~/.config/container/config.toml must set the machine's publication domain:
 #   [dns]
@@ -42,6 +43,8 @@ container system stop && container system start
 php artisan outpost:build                  # builds the shared base image; first run takes minutes
 php artisan outpost:doctor                 # read-only verification of the complete setup
 ```
+
+The installer offers to start the runtime and build a missing image. Pass `--force` to apply those safe actions without prompting. It never invokes `sudo`, rewrites machine configuration, or changes application source files; it prints exact remedies for those steps instead.
 
 If the machine already publishes under another domain, inspect the live value with `container system property list`, then set `OUTPOST_DOMAIN` to that domain instead of changing machine config. Editing `config.toml` does not affect the running service until it is restarted.
 

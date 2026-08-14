@@ -70,6 +70,7 @@ class OutpostServiceProvider extends ServiceProvider
         $this->commands([
             Console\Commands\BuildCommand::class,
             Console\Commands\DoctorCommand::class,
+            Console\Commands\InstallCommand::class,
             Console\Commands\ListCommand::class,
             Console\Commands\LogsCommand::class,
             Console\Commands\OutpostCommand::class,

@@ -44,7 +44,15 @@ php artisan vendor:publish --tag="outpost-config"
 
 ## One-Time Setup
 
-First, make sure the container runtime is running:
+Start with the guided installer:
+
+```bash
+php artisan outpost:install
+```
+
+It inspects the full setup, offers to start the Apple container service and build a missing base image, then prints the exact commands for anything requiring manual or privileged changes. `--force` applies those two safe actions without prompting. The installer never invokes `sudo`, rewrites machine configuration, or changes application source files.
+
+The manual setup it guides you through is described below. First, make sure the container runtime is running:
 
 ```bash
 container system start
