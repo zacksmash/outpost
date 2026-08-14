@@ -6,9 +6,13 @@ arch()->preset()->php();
 
 arch()->preset()->security();
 
-arch('it will not use dd(), ddd(), env(), or exit()')
-    ->expect(['dd', 'ddd', 'env', 'exit'])
+arch('it will not use dd(), ddd(), or exit()')
+    ->expect(['dd', 'ddd', 'exit'])
     ->each->not->toBeUsed();
+
+arch('env() stays out of the package source')
+    ->expect('Zacksmash\Outpost')
+    ->not->toUse(['env']);
 
 arch('the package source declares strict types')
     ->expect('Zacksmash\Outpost')
