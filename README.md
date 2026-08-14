@@ -113,12 +113,21 @@ Everything can be provided up front when you'd rather not be asked:
 
 ```bash
 php artisan outpost feature/billing --name=billing --seed
+php artisan outpost origin/review/invoices --name=invoices --open
+php artisan outpost --pr=482 --name=pr-482 --open
 ```
+
+Local branches, known remote branches, and new branch names all work in the same `branch` argument. When you choose a remote branch such as `origin/review/invoices`, Outpost fetches only that branch and creates a local tracking branch for the editable worktree. If the local branch already exists, Outpost preserves and uses it instead of resetting it.
+
+For a GitHub pull request, `--pr=482` fetches GitHub's pull-request ref through `origin` into an editable `outpost/pr-482` branch. Use `--remote=upstream` when the pull request belongs to a different configured remote. An existing PR branch is preserved, so work committed inside a previous instance is never silently discarded.
 
 | Option | Description |
 | --- | --- |
-| `branch` | The branch the instance should run. Created if it doesn't exist. |
+| `branch` | Local branch, remote branch, or new local branch the instance should run. |
 | `--name` | The instance name. Defaults to the branch name, slugged. |
+| `--pr` | GitHub pull request number to fetch instead of a branch. |
+| `--remote` | Git remote used with `--pr`; defaults to `origin`. |
+| `--open` | Open the URL in the default browser when creation finishes. |
 | `--seed` | Seed the database after migrating. |
 | `--mount-path-repos` | Mount composer path repositories without asking. |
 
@@ -136,6 +145,7 @@ Octane, Horizon, and external Scout drivers are detected but not run inside inst
 php artisan outpost:list             # every instance, its state, and its URL
 php artisan outpost:doctor           # diagnose host, runtime, DNS, image, and app readiness
 php artisan outpost:pull             # refresh the exact configured OCI image
+php artisan outpost:open billing     # start if needed, then open in the default browser
 php artisan outpost:start billing    # start a stopped instance
 php artisan outpost:stop billing     # stop it; worktree and data survive
 php artisan outpost:shell billing    # open a shell inside the instance

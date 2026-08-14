@@ -11,6 +11,7 @@ use Illuminate\Support\Str;
 use RuntimeException;
 use Zacksmash\Outpost\Detector;
 use Zacksmash\Outpost\Git;
+use Zacksmash\Outpost\Host;
 use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Nginx;
 use Zacksmash\Outpost\Outposts;
@@ -37,6 +38,9 @@ class OutpostCommand extends Command
     protected $signature = 'outpost
         {branch? : The branch the instance should run}
         {--name= : The name of the instance}
+        {--pr= : The GitHub pull request number to run}
+        {--remote=origin : The git remote used with --pr}
+        {--open : Open the instance in the default browser when ready}
         {--seed : Seed the database after migrating}
         {--mount-path-repos : Mount discovered composer path repositories without asking}';
 
@@ -50,6 +54,7 @@ class OutpostCommand extends Command
      */
     public function handle(
         Git $git,
+        Host $host,
         Runtime $runtime,
         Detector $detector,
         Outposts $outposts,
@@ -66,6 +71,28 @@ class OutpostCommand extends Command
         try {
             if (! $git->hasCommits()) {
                 error('Outpost needs a git repository with at least one commit to create instances from.');
+
+                return self::FAILURE;
+            }
+
+            $pullRequest = $this->pullRequest();
+
+            if ($pullRequest === false) {
+                return self::FAILURE;
+            }
+
+            $argument = $this->argument('branch');
+
+            if ($pullRequest !== null && is_string($argument) && $argument !== '') {
+                error('Choose either a branch or --pr, not both.');
+
+                return self::FAILURE;
+            }
+
+            $remote = $this->remote();
+
+            if ($pullRequest !== null && $remote === '') {
+                error('The --remote option must name a configured git remote.');
 
                 return self::FAILURE;
             }
@@ -93,7 +120,12 @@ class OutpostCommand extends Command
                 return self::FAILURE;
             }
 
-            $branch = $this->branch($git);
+            $reference = $pullRequest === null
+                ? $this->branch($git)
+                : "outpost/pr-{$pullRequest}";
+            $branch = $pullRequest === null
+                ? $git->localBranchName($reference)
+                : $reference;
 
             if ($git->branchCheckedOut($branch)) {
                 error("The [{$branch}] branch is already checked out in another worktree.");
@@ -101,7 +133,10 @@ class OutpostCommand extends Command
                 return self::FAILURE;
             }
 
-            $name = $this->name($outposts, $branch);
+            $name = $this->name(
+                $outposts,
+                $pullRequest === null ? $branch : "pr-{$pullRequest}",
+            );
 
             if (($invalid = $this->invalidName($outposts, $name)) !== null) {
                 error($invalid);
@@ -145,8 +180,16 @@ class OutpostCommand extends Command
             $saved = $manifest;
 
             spin(
-                fn () => $git->addWorktree($outposts->worktreePath($name), $branch),
-                "Checking out the [{$branch}] branch",
+                fn () => $pullRequest === null
+                    ? $git->addWorktree($outposts->worktreePath($name), $reference)
+                    : $git->addPullRequestWorktree(
+                        $outposts->worktreePath($name),
+                        $pullRequest,
+                        $remote,
+                    ),
+                $pullRequest === null
+                    ? "Checking out the [{$reference}] branch"
+                    : "Fetching GitHub pull request #{$pullRequest}",
             );
 
             $mounts = $this->mounts($pathRepositories, $outposts->worktreePath($name));
@@ -192,6 +235,15 @@ class OutpostCommand extends Command
             return self::FAILURE;
         }
 
+        if ($this->option('open')) {
+            try {
+                $host->open($manifest->url);
+            } catch (RuntimeException $e) {
+                warning($e->getMessage());
+                note("Open it manually: {$manifest->url}");
+            }
+        }
+
         outro("The instance is ready: {$manifest->url}");
 
         return self::SUCCESS;
@@ -210,10 +262,42 @@ class OutpostCommand extends Command
 
         return suggest(
             label: 'Which branch should the instance run?',
-            options: array_values(array_diff($git->branches(), $git->checkedOutBranches())),
+            options: array_values(array_diff($git->branchSuggestions(), $git->checkedOutBranches())),
             required: true,
-            hint: 'Pick an existing branch or type a new name to create one.',
+            hint: 'Pick a local or remote branch, or type a new local branch name.',
         );
+    }
+
+    /**
+     * Get and validate the requested pull request number.
+     */
+    protected function pullRequest(): int|false|null
+    {
+        $pullRequest = $this->option('pr');
+
+        if ($pullRequest === null) {
+            return null;
+        }
+
+        if (! is_string($pullRequest)
+            || ! ctype_digit($pullRequest)
+            || (int) $pullRequest < 1) {
+            error('The pull request number must be a positive whole number.');
+
+            return false;
+        }
+
+        return (int) $pullRequest;
+    }
+
+    /**
+     * Get the git remote used to fetch a pull request.
+     */
+    protected function remote(): string
+    {
+        $remote = $this->option('remote');
+
+        return is_string($remote) ? $remote : 'origin';
     }
 
     /**

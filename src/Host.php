@@ -34,6 +34,20 @@ class Host
     }
 
     /**
+     * Open a URL with the macOS default browser handler.
+     */
+    public function open(string $url): void
+    {
+        $result = Process::run(['open', $url]);
+
+        if (! $result->successful()) {
+            throw new RuntimeException(
+                "Unable to open [{$url}]: ".trim($result->errorOutput() ?: $result->output()),
+            );
+        }
+    }
+
+    /**
      * Run a host inspection command and return its trimmed output.
      *
      * @param  list<string>  $command

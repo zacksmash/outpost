@@ -73,6 +73,7 @@ class OutpostServiceProvider extends ServiceProvider
             Console\Commands\InstallCommand::class,
             Console\Commands\ListCommand::class,
             Console\Commands\LogsCommand::class,
+            Console\Commands\OpenCommand::class,
             Console\Commands\OutpostCommand::class,
             Console\Commands\PullCommand::class,
             Console\Commands\RemoveCommand::class,

@@ -34,6 +34,7 @@ function fakeCreation(array $overrides = []): void
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
         processPattern('git', 'branch', '--show-current') => Process::result("main\n"),
         processPattern('git', 'branch', '--format=%(refname:short)') => Process::result("main\nfeature-x\n"),
+        processPattern('git', 'for-each-ref', '--format=%(refname:short)', 'refs/remotes') => Process::result(''),
         processPattern('git', 'worktree', 'list', '--porcelain') => Process::result("worktree /projects/app\nbranch refs/heads/main\n"),
         processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/feature-x') => Process::result('abc123'),
         processPattern('git', 'worktree', 'add').' *' => Process::result(''),
@@ -69,6 +70,117 @@ it('creates a fully provisioned instance', function () {
     ]);
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === ['dscacheutil', '-flushcache']);
+});
+
+it('creates an instance from a remote branch', function () {
+    File::ensureDirectoryExists($this->root.'/review-invoices/app');
+    File::put($this->root.'/review-invoices/app/.env.example', "APP_NAME=Example\nDB_CONNECTION=sqlite\n");
+
+    fakeCreation([
+        processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/origin/review/invoices') => Process::result('', '', 1),
+        processPattern('git', 'remote') => Process::result("origin\n"),
+        processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/review/invoices') => Process::result('', '', 1),
+        processPattern('git', 'fetch', '--no-tags', 'origin', '+refs/heads/review/invoices:refs/remotes/origin/review/invoices') => Process::result(''),
+        processPattern('git', 'worktree', 'add', '--track', '-b', 'review/invoices', '--', $this->root.'/review-invoices/app', 'origin/review/invoices') => Process::result(''),
+    ]);
+
+    $this->artisan('outpost', [
+        'branch' => 'origin/review/invoices',
+        '--name' => 'review-invoices',
+    ])->assertSuccessful();
+
+    $manifest = json_decode(File::get($this->root.'/review-invoices/outpost.json'), true);
+
+    expect($manifest['branch'])->toBe('review/invoices');
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'git', 'fetch', '--no-tags', 'origin', '+refs/heads/review/invoices:refs/remotes/origin/review/invoices',
+    ]);
+});
+
+it('creates an instance from a github pull request', function () {
+    File::ensureDirectoryExists($this->root.'/pr-42/app');
+    File::put($this->root.'/pr-42/app/.env.example', "APP_NAME=Example\nDB_CONNECTION=sqlite\n");
+
+    fakeCreation([
+        processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/outpost/pr-42') => Process::result('', '', 1),
+        processPattern('git', 'remote') => Process::result("origin\nupstream\n"),
+        processPattern('git', 'fetch', '--no-tags', 'upstream', '+refs/pull/42/head:refs/remotes/upstream/pull/42') => Process::result(''),
+        processPattern('git', 'worktree', 'add', '-b', 'outpost/pr-42', '--', $this->root.'/pr-42/app', 'upstream/pull/42') => Process::result(''),
+    ]);
+
+    $this->artisan('outpost', [
+        '--pr' => '42',
+        '--remote' => 'upstream',
+    ])
+        ->expectsQuestion('What should the instance be named?', 'pr-42')
+        ->assertSuccessful();
+
+    $manifest = json_decode(File::get($this->root.'/pr-42/outpost.json'), true);
+
+    expect($manifest['name'])->toBe('pr-42')
+        ->and($manifest['branch'])->toBe('outpost/pr-42');
+});
+
+it('rejects a branch argument combined with a pull request', function () {
+    fakeCreation();
+
+    $this->artisan('outpost', [
+        'branch' => 'feature-x',
+        '--pr' => '42',
+    ])
+        ->expectsOutputToContain('Choose either a branch or --pr')
+        ->assertFailed();
+});
+
+it('rejects an invalid pull request number', function () {
+    fakeCreation();
+
+    $this->artisan('outpost', ['--pr' => 'nope'])
+        ->expectsOutputToContain('positive whole number')
+        ->assertFailed();
+});
+
+it('rejects an empty pull request remote', function () {
+    fakeCreation();
+
+    $this->artisan('outpost', [
+        '--pr' => '42',
+        '--remote' => '',
+    ])
+        ->expectsOutputToContain('must name a configured git remote')
+        ->assertFailed();
+});
+
+it('opens a newly created instance when requested', function () {
+    fakeCreation([
+        processPattern('open', 'http://feature-x-laravel.outpost') => Process::result(''),
+    ]);
+
+    $this->artisan('outpost', [
+        'branch' => 'feature-x',
+        '--name' => 'feature-x',
+        '--open' => true,
+    ])->assertSuccessful();
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'open', 'http://feature-x-laravel.outpost',
+    ]);
+});
+
+it('keeps a ready instance when its browser cannot be opened', function () {
+    fakeCreation([
+        processPattern('open', 'http://feature-x-laravel.outpost') => Process::result('', 'no browser handler', 1),
+    ]);
+
+    $this->artisan('outpost', [
+        'branch' => 'feature-x',
+        '--name' => 'feature-x',
+        '--open' => true,
+    ])
+        ->expectsOutputToContain('no browser handler')
+        ->expectsOutputToContain('Open it manually: http://feature-x-laravel.outpost')
+        ->assertSuccessful();
 });
 
 it('refuses to run outside a git repository with commits', function () {

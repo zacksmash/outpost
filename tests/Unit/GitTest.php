@@ -37,6 +37,40 @@ it('lists the local branches', function () {
     expect($this->git->branches())->toBe(['main', 'feature/billing']);
 });
 
+it('lists useful remote branches', function () {
+    Process::fake([
+        processPattern('git', 'for-each-ref', '--format=%(refname:short)', 'refs/remotes') => Process::result(implode("\n", [
+            'origin/HEAD',
+            'origin/main',
+            'origin/feature/billing',
+            'origin/pull/42',
+            '',
+        ])),
+    ]);
+
+    expect($this->git->remoteBranches())->toBe([
+        'origin/main',
+        'origin/feature/billing',
+    ]);
+});
+
+it('suggests remote branches only when no local branch represents them', function () {
+    Process::fake([
+        processPattern('git', 'branch', '--format=%(refname:short)') => Process::result("main\nfeature/billing\n"),
+        processPattern('git', 'for-each-ref', '--format=%(refname:short)', 'refs/remotes') => Process::result(implode("\n", [
+            'origin/main',
+            'origin/feature/billing',
+            'origin/review/invoices',
+        ])),
+    ]);
+
+    expect($this->git->branchSuggestions())->toBe([
+        'main',
+        'feature/billing',
+        'origin/review/invoices',
+    ]);
+});
+
 it('knows whether a branch exists', function () {
     Process::fake([
         processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/main') => Process::result('abc123'),
@@ -115,6 +149,70 @@ it('creates the branch when adding a worktree for a new branch', function () {
         'git', 'worktree', 'add', '-b', 'feature-new', '--', '/tmp/wt',
     ]);
 });
+
+it('fetches and tracks a remote branch when adding its worktree', function () {
+    Process::fake([
+        processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/origin/review/invoices') => Process::result('', '', 1),
+        processPattern('git', 'remote') => Process::result("origin\n"),
+        processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/review/invoices') => Process::result('', '', 1),
+        processPattern('git', 'fetch', '--no-tags', 'origin', '+refs/heads/review/invoices:refs/remotes/origin/review/invoices') => Process::result(''),
+        processPattern('git', 'worktree', 'add', '--track', '-b', 'review/invoices', '--', '/tmp/wt', 'origin/review/invoices') => Process::result(''),
+    ]);
+
+    $this->git->addWorktree('/tmp/wt', 'origin/review/invoices');
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'git', 'fetch', '--no-tags', 'origin', '+refs/heads/review/invoices:refs/remotes/origin/review/invoices',
+    ]);
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'git', 'worktree', 'add', '--track', '-b', 'review/invoices', '--', '/tmp/wt', 'origin/review/invoices',
+    ]);
+});
+
+it('preserves an existing local counterpart of a remote branch', function () {
+    Process::fake([
+        processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/origin/review/invoices') => Process::result('', '', 1),
+        processPattern('git', 'remote') => Process::result("origin\n"),
+        processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/review/invoices') => Process::result('abc123'),
+        processPattern('git', 'worktree', 'add', '--', '/tmp/wt', 'review/invoices') => Process::result(''),
+    ]);
+
+    $this->git->addWorktree('/tmp/wt', 'origin/review/invoices');
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'fetch');
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'git', 'worktree', 'add', '--', '/tmp/wt', 'review/invoices',
+    ]);
+});
+
+it('fetches a github pull request into a dedicated local branch', function () {
+    Process::fake([
+        processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/outpost/pr-42') => Process::result('', '', 1),
+        processPattern('git', 'remote') => Process::result("origin\nupstream\n"),
+        processPattern('git', 'fetch', '--no-tags', 'upstream', '+refs/pull/42/head:refs/remotes/upstream/pull/42') => Process::result(''),
+        processPattern('git', 'worktree', 'add', '-b', 'outpost/pr-42', '--', '/tmp/wt', 'upstream/pull/42') => Process::result(''),
+    ]);
+
+    $this->git->addPullRequestWorktree('/tmp/wt', 42, 'upstream');
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'git', 'fetch', '--no-tags', 'upstream', '+refs/pull/42/head:refs/remotes/upstream/pull/42',
+    ]);
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'git', 'worktree', 'add', '-b', 'outpost/pr-42', '--', '/tmp/wt', 'upstream/pull/42',
+    ]);
+});
+
+it('rejects a pull request remote that does not exist', function () {
+    Process::fake([
+        processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/outpost/pr-42') => Process::result('', '', 1),
+        processPattern('git', 'remote') => Process::result("origin\n"),
+    ]);
+
+    $this->git->addPullRequestWorktree('/tmp/wt', 42, 'upstream');
+})->throws(RuntimeException::class, 'The [upstream] git remote does not exist.');
 
 it('surfaces the real error when a worktree cannot be created', function () {
     Process::fake([

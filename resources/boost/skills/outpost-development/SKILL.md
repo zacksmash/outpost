@@ -56,9 +56,12 @@ The doctor treats Apple `container` 1.2.x as verified. It reports older versions
 ```bash
 php artisan outpost                        # prompt-driven: pick a branch, confirm a name
 php artisan outpost feature/billing --name=billing --seed
+php artisan outpost origin/review/invoices --name=invoices --open
+php artisan outpost --pr=482 --name=pr-482 --open
 php artisan outpost:doctor
 php artisan outpost:pull --force
 php artisan outpost:list
+php artisan outpost:open billing           # starts the instance first when needed
 php artisan outpost:start billing
 php artisan outpost:stop billing
 php artisan outpost:shell billing
@@ -66,8 +69,11 @@ php artisan outpost:logs billing --follow
 php artisan outpost:remove billing --force
 ```
 
-- `outpost` options: `branch` argument (created if missing), `--name`, `--seed`, `--mount-path-repos`
+- `outpost` accepts a local branch, a known remote branch, or a new local branch name. Remote branches are fetched and made editable; an existing local counterpart is preserved.
+- `outpost --pr=<number>` fetches a GitHub pull request through `origin` into `outpost/pr-<number>`; use `--remote=<name>` for another configured remote. It cannot be combined with the branch argument.
+- Other `outpost` options: `--name`, `--open`, `--seed`, `--mount-path-repos`
 - commands taking a `name` argument prompt with a select when it is omitted
+- `outpost:open` starts a stopped instance before opening its URL in the macOS default browser
 - `outpost:remove` confirms before destroying; `--force` skips every confirmation and keeps the branch
 
 ### 5. Configure when detection needs help
@@ -86,7 +92,7 @@ Read before executing:
 ## Examples
 
 - A setup fails before instance creation: run `php artisan outpost:doctor`, apply the remedies attached to `FAIL` rows, and rerun it until only `PASS` or non-blocking `WARN` rows remain.
-- A reviewer needs to try a pull request without disturbing their own branch: `php artisan outpost pr-branch`, open the printed `http://<name>-<app>.outpost` URL, then `php artisan outpost:remove <name>` when done.
+- A reviewer needs to try a GitHub pull request without disturbing their own branch: `php artisan outpost --pr=482 --name=pr-482 --open`, then `php artisan outpost:remove pr-482` when done.
 - An app on SQLite needs no services: the instance boots with nginx and PHP-FPM only, and Outpost creates `database/database.sqlite` automatically.
 - The app installs a local package via a composer path repository: Outpost lists the path and asks before mounting it read-only; pass `--mount-path-repos` in scripts that must not prompt.
 
