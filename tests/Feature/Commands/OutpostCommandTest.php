@@ -58,6 +58,7 @@ it('creates a fully provisioned instance', function () {
     expect($manifest['name'])->toBe('feature-x')
         ->and($manifest['container'])->toBe('feature-x-laravel')
         ->and($manifest['branch'])->toBe('feature-x')
+        ->and($manifest['expose_services'])->toBeTrue()
         ->and($manifest['database'])->toBe('sqlite');
 
     expect(File::exists($this->root.'/feature-x/runtime/nginx.conf'))->toBeTrue()
@@ -134,6 +135,38 @@ it('runs detected octane and vite development servers', function () {
         ->and($supervisor)->toContain('[program:outpost-octane]')
         ->and($supervisor)->toContain('[program:outpost-vite]')
         ->and($supervisor)->not->toContain('[program:php-fpm]');
+});
+
+it('boots a trusted https instance with its certificate mounted read only', function () {
+    $tls = $this->root.'/tls';
+    File::ensureDirectoryExists($tls);
+    File::put($tls.'/certificate.pem', 'certificate');
+    File::put($tls.'/key.pem', 'key');
+    File::put($tls.'/domain', "outpost\n");
+    config([
+        'outpost.https' => true,
+        'outpost.tls.path' => $tls,
+    ]);
+
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->expectsOutputToContain('https://feature-x-laravel.outpost')
+        ->assertSuccessful();
+
+    $manifest = json_decode(File::get($this->root.'/feature-x/outpost.json'), true);
+    $nginx = File::get($this->root.'/feature-x/runtime/nginx.conf');
+
+    expect($manifest['url'])->toBe('https://feature-x-laravel.outpost')
+        ->and($nginx)->toContain('listen 443 ssl default_server;');
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'run', '--detach', '--name', 'feature-x-laravel', '--dns', '1.1.1.1',
+        '--volume', $this->root.'/feature-x/app:/app',
+        '--volume', $this->root.'/feature-x/runtime:/outpost:ro',
+        '--volume', $tls.':/outpost-tls:ro',
+        'ghcr.io/zacksmash/outpost:0.1.0',
+    ]);
 });
 
 it('rejects malformed application process configuration before creating state', function () {

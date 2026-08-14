@@ -64,3 +64,27 @@ it('refuses to open an unknown instance', function () {
         ->expectsOutputToContain('The [missing] instance does not exist.')
         ->assertFailed();
 });
+
+it('opens the mailpit endpoint', function () {
+    app(Outposts::class)->save(fakeManifest(name: 'feature-x', services: ['mailpit']));
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+        processPattern('open', 'http://feature-x-app.outpost:8025') => Process::result(''),
+    ]);
+
+    $this->artisan('outpost:open', ['name' => 'feature-x', 'endpoint' => 'mailpit'])
+        ->expectsOutputToContain('http://feature-x-app.outpost:8025')
+        ->assertSuccessful();
+});
+
+it('refuses a browser endpoint the instance does not provide', function () {
+    app(Outposts::class)->save(fakeManifest(name: 'private', services: [], exposeServices: false));
+    Process::fake();
+
+    $this->artisan('outpost:open', ['name' => 'private', 'endpoint' => 'mailpit'])
+        ->expectsOutputToContain('does not expose a [mailpit] browser endpoint')
+        ->assertFailed();
+});

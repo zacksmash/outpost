@@ -4,8 +4,16 @@ declare(strict_types=1);
 
 namespace Zacksmash\Outpost;
 
+use Illuminate\Contracts\Config\Repository;
+use RuntimeException;
+
 class Supervisord
 {
+    /**
+     * Create a Supervisor configuration generator.
+     */
+    public function __construct(protected readonly Repository $config) {}
+
     /**
      * Generate the supervisord program configuration for the given instance.
      *
@@ -16,20 +24,30 @@ class Supervisord
         $programs = [];
 
         if ($manifest->uses('mysql')) {
-            $programs[] = $this->program('mysql', '/usr/sbin/mysqld --user=mysql', 10);
+            $address = $manifest->exposeServices ? '0.0.0.0' : '127.0.0.1';
+            $programs[] = $this->program('mysql', "/usr/sbin/mysqld --user=mysql --bind-address={$address}", 10);
         }
 
         if ($manifest->uses('pgsql')) {
+            $command = '/usr/lib/postgresql/16/bin/postgres -D /var/lib/postgresql/16/main -c config_file=/etc/postgresql/16/main/postgresql.conf';
+
+            if ($manifest->exposeServices) {
+                $command .= ' -c "listen_addresses=*"';
+            }
+
             $programs[] = $this->program(
                 'pgsql',
-                '/usr/lib/postgresql/16/bin/postgres -D /var/lib/postgresql/16/main -c config_file=/etc/postgresql/16/main/postgresql.conf',
+                $command,
                 10,
                 user: 'postgres',
             );
         }
 
         if ($manifest->uses('redis')) {
-            $programs[] = $this->program('redis', '/usr/bin/redis-server --bind 127.0.0.1', 15);
+            $command = $manifest->exposeServices
+                ? '/usr/bin/redis-server --bind 0.0.0.0 --protected-mode yes --requirepass '.$this->credential('password')
+                : '/usr/bin/redis-server --bind 127.0.0.1';
+            $programs[] = $this->program('redis', $command, 15);
         }
 
         if ($manifest->server === 'fpm') {
@@ -41,9 +59,10 @@ class Supervisord
         }
 
         if ($manifest->uses('mailpit')) {
+            $smtp = $manifest->exposeServices ? '0.0.0.0:1025' : '127.0.0.1:1025';
             $programs[] = $this->program(
                 'mailpit',
-                '/usr/local/bin/mailpit --smtp 0.0.0.0:1025 --listen 0.0.0.0:8025',
+                "/usr/local/bin/mailpit --smtp {$smtp} --listen 127.0.0.1:8026",
                 25,
             );
         }
@@ -64,6 +83,22 @@ class Supervisord
         }
 
         return implode("\n", $programs);
+    }
+
+    /**
+     * Read a shell-safe sandbox credential.
+     */
+    protected function credential(string $key): string
+    {
+        $value = $this->config->get("outpost.database.{$key}");
+
+        if (! is_string($value) || preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]*$/D', $value) !== 1) {
+            throw new RuntimeException(
+                "The [outpost.database.{$key}] value must start with a letter or number and may only contain letters, numbers, dots, dashes, and underscores.",
+            );
+        }
+
+        return $value;
     }
 
     /**

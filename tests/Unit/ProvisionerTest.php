@@ -94,6 +94,7 @@ it('writes values containing regex replacement characters literally', function (
         php: '8.4',
         server: 'fpm',
         frontend: 'build',
+        exposeServices: false,
         services: [],
         deferred: [],
         processes: [],
@@ -145,9 +146,23 @@ it('points the environment at redis and mailpit when used', function () {
 
     expect($env)->toContain('REDIS_HOST=127.0.0.1')
         ->and($env)->toContain('REDIS_PORT=6379')
+        ->and($env)->toContain('REDIS_PASSWORD=password')
         ->and($env)->toContain('MAIL_MAILER=smtp')
         ->and($env)->toContain('MAIL_HOST=127.0.0.1')
         ->and($env)->toContain('MAIL_PORT=1025');
+});
+
+it('does not require a redis password when service access is private', function () {
+    Process::fake();
+
+    $this->provisioner->provision(fakeManifest(
+        name: 'feature-x',
+        database: 'sqlite',
+        services: ['redis'],
+        exposeServices: false,
+    ));
+
+    expect(File::get($this->root.'/feature-x/app/.env'))->not->toContain('REDIS_PASSWORD=');
 });
 
 it('runs the container steps in order, pinned to the instance php version', function () {

@@ -7,6 +7,7 @@ namespace Zacksmash\Outpost\Console\Commands;
 use Illuminate\Console\Command;
 use RuntimeException;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
+use Zacksmash\Outpost\Endpoints;
 use Zacksmash\Outpost\Host;
 use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\Runtime;
@@ -21,7 +22,9 @@ class OpenCommand extends Command
     /**
      * The command signature.
      */
-    protected $signature = 'outpost:open {name? : The name of the instance}';
+    protected $signature = 'outpost:open
+        {name? : The name of the instance}
+        {endpoint=app : Browser endpoint: app, mailpit, or vite}';
 
     /**
      * The command description.
@@ -31,26 +34,32 @@ class OpenCommand extends Command
     /**
      * Execute the console command.
      */
-    public function handle(Outposts $outposts, Runtime $runtime, Host $host): int
+    public function handle(Outposts $outposts, Runtime $runtime, Host $host, Endpoints $endpoints): int
     {
         if (($manifest = $this->instance($outposts)) === null) {
             return self::FAILURE;
         }
 
         try {
+            $endpoint = $this->argument('endpoint');
+            $url = $endpoints->browser(
+                $manifest,
+                is_string($endpoint) ? $endpoint : 'app',
+            );
+
             if (! $runtime->running($manifest->container)
                 && $this->call('outpost:start', ['name' => $manifest->name]) !== self::SUCCESS) {
                 return self::FAILURE;
             }
 
-            $host->open($manifest->url);
+            $host->open($url);
         } catch (RuntimeException $e) {
             error($e->getMessage());
 
             return self::FAILURE;
         }
 
-        outro("Opened: {$manifest->url}");
+        outro("Opened: {$url}");
 
         return self::SUCCESS;
     }

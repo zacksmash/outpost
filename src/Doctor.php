@@ -18,6 +18,8 @@ class Doctor
 
     public const string BASE_IMAGE_CHECK = 'Base image';
 
+    public const string TLS_CHECK = 'Local HTTPS';
+
     /**
      * The oldest Apple container CLI Outpost supports.
      */
@@ -38,6 +40,7 @@ class Doctor
         protected readonly Filesystem $files,
         protected readonly string $basePath,
         protected readonly Repository $config,
+        protected readonly Certificates $certificates,
     ) {}
 
     /**
@@ -248,6 +251,39 @@ class Doctor
                     'The application has no [composer.lock] file, so instance dependencies may drift.',
                     'Run composer update and commit [composer.lock].',
                 ),
+            $this->https(),
         ];
+    }
+
+    /**
+     * Check the optional trusted local HTTPS setup.
+     */
+    protected function https(): DoctorCheck
+    {
+        $mode = $this->config->get('outpost.https', 'auto');
+
+        try {
+            $enabled = $this->certificates->enabled();
+        } catch (RuntimeException $e) {
+            return DoctorCheck::failure(
+                self::TLS_CHECK,
+                $e->getMessage(),
+                'Run: brew install mkcert && php artisan outpost:certify',
+            );
+        }
+
+        if ($enabled) {
+            return DoctorCheck::pass(self::TLS_CHECK, 'Trusted wildcard HTTPS is ready for new instances.');
+        }
+
+        return DoctorCheck::warning(
+            self::TLS_CHECK,
+            $mode === false
+                ? 'HTTPS is disabled; new instances use HTTP.'
+                : 'No trusted certificate exists yet; new instances fall back to HTTP.',
+            $mode === false
+                ? 'Set OUTPOST_HTTPS=auto, then run: php artisan outpost:certify'
+                : 'Run: brew install mkcert && php artisan outpost:certify',
+        );
     }
 }

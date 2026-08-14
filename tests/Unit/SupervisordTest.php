@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 use Zacksmash\Outpost\Supervisord;
 
+beforeEach(function () {
+    $this->supervisord = new Supervisord(app('config'));
+});
+
 it('always runs php-fpm and nginx', function () {
-    $config = (new Supervisord)->generate(fakeManifest(services: []));
+    $config = $this->supervisord->generate(fakeManifest(services: []));
 
     expect($config)->toContain('[program:php-fpm]')
         ->and($config)->toContain('command=/usr/sbin/php-fpm8.4 --nodaemonize --fpm-config /etc/php/8.4/fpm/php-fpm.conf')
@@ -18,12 +22,12 @@ it('always runs php-fpm and nginx', function () {
 });
 
 it('pins php-fpm to the instance php version', function () {
-    expect((new Supervisord)->generate(fakeManifest(php: '8.5', services: [])))
+    expect($this->supervisord->generate(fakeManifest(php: '8.5', services: [])))
         ->toContain('command=/usr/sbin/php-fpm8.5 --nodaemonize --fpm-config /etc/php/8.5/fpm/php-fpm.conf');
 });
 
 it('does not run php fpm when octane serves the application', function () {
-    $config = (new Supervisord)->generate(fakeManifest(server: 'octane', processes: ['octane']), [
+    $config = $this->supervisord->generate(fakeManifest(server: 'octane', processes: ['octane']), [
         'octane' => ['php8.5', 'artisan', 'octane:start'],
     ]);
 
@@ -32,7 +36,7 @@ it('does not run php fpm when octane serves the application', function () {
 });
 
 it('runs each detected service', function (string $service, string $needle) {
-    expect((new Supervisord)->generate(fakeManifest(services: [$service])))->toContain($needle);
+    expect($this->supervisord->generate(fakeManifest(services: [$service])))->toContain($needle);
 })->with([
     'mysql' => ['mysql', '[program:mysql]'],
     'pgsql' => ['pgsql', '[program:pgsql]'],
@@ -41,13 +45,19 @@ it('runs each detected service', function (string $service, string $needle) {
 ]);
 
 it('runs postgres as the postgres user', function () {
-    $config = (new Supervisord)->generate(fakeManifest(services: ['pgsql']));
+    $config = $this->supervisord->generate(fakeManifest(services: ['pgsql']));
 
     expect($config)->toContain('user=postgres');
 });
 
+it('keeps mailpit private behind the nginx service endpoint', function () {
+    $config = $this->supervisord->generate(fakeManifest(services: ['mailpit']));
+
+    expect($config)->toContain('--listen 127.0.0.1:8026');
+});
+
 it('starts services before php-fpm and nginx last', function () {
-    $config = (new Supervisord)->generate(fakeManifest(services: ['mysql', 'redis', 'mailpit']));
+    $config = $this->supervisord->generate(fakeManifest(services: ['mysql', 'redis', 'mailpit']));
 
     preg_match_all('/priority=(\d+)/', $config, $matches);
 
@@ -55,7 +65,7 @@ it('starts services before php-fpm and nginx last', function () {
 });
 
 it('sends every program log to the container output', function () {
-    $config = (new Supervisord)->generate(fakeManifest(services: ['mysql']));
+    $config = $this->supervisord->generate(fakeManifest(services: ['mysql']));
 
     expect(substr_count($config, 'stdout_logfile=/dev/stdout'))->toBe(3)
         ->and(substr_count($config, 'stderr_logfile=/dev/stderr'))->toBe(3)
@@ -63,7 +73,7 @@ it('sends every program log to the container output', function () {
 });
 
 it('runs configured application processes after provisioning', function () {
-    $config = (new Supervisord)->generate(fakeManifest(processes: ['queue']), [
+    $config = $this->supervisord->generate(fakeManifest(processes: ['queue']), [
         'queue' => ['php8.4', 'artisan', 'queue:work', '--queue=high priority'],
     ]);
 
@@ -76,9 +86,33 @@ it('runs configured application processes after provisioning', function () {
 });
 
 it('escapes supervisor command arguments without invoking a shell', function () {
-    $config = (new Supervisord)->generate(fakeManifest(processes: ['worker']), [
+    $config = $this->supervisord->generate(fakeManifest(processes: ['worker']), [
         'worker' => ['binary', 'a "quoted" value', 'a\\path', '100%'],
     ]);
 
     expect($config)->toContain('command=/usr/local/bin/outpost-wait "binary" "a \\"quoted\\" value" "a\\\\path" "100%%"');
+});
+
+it('exposes stateful services with sandbox authentication', function () {
+    $config = $this->supervisord->generate(fakeManifest(
+        services: ['mysql', 'pgsql', 'redis', 'mailpit'],
+        exposeServices: true,
+    ));
+
+    expect($config)->toContain('mysqld --user=mysql --bind-address=0.0.0.0')
+        ->and($config)->toContain('listen_addresses=*')
+        ->and($config)->toContain('redis-server --bind 0.0.0.0 --protected-mode yes --requirepass password')
+        ->and($config)->toContain('mailpit --smtp 0.0.0.0:1025 --listen 127.0.0.1:8026');
+});
+
+it('keeps services on loopback when direct access is disabled', function () {
+    $config = $this->supervisord->generate(fakeManifest(
+        services: ['mysql', 'pgsql', 'redis', 'mailpit'],
+        exposeServices: false,
+    ));
+
+    expect($config)->toContain('mysqld --user=mysql --bind-address=127.0.0.1')
+        ->and($config)->not->toContain('listen_addresses=*')
+        ->and($config)->toContain('redis-server --bind 127.0.0.1')
+        ->and($config)->toContain('mailpit --smtp 127.0.0.1:1025 --listen 127.0.0.1:8026');
 });

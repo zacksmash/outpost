@@ -29,6 +29,7 @@ class Manifest implements Arrayable
         public readonly string $php,
         public readonly string $server,
         public readonly string $frontend,
+        public readonly bool $exposeServices,
         public readonly array $services,
         public readonly array $deferred,
         public readonly array $processes,
@@ -63,6 +64,10 @@ class Manifest implements Arrayable
             throw new InvalidArgumentException('The manifest [frontend] value must be build, vite, or none.');
         }
 
+        if (array_key_exists('expose_services', $data) && ! is_bool($data['expose_services'])) {
+            throw new InvalidArgumentException('The manifest [expose_services] value must be a boolean.');
+        }
+
         if (! isset($data['created_at']) || ! is_string($data['created_at'])) {
             throw new InvalidArgumentException('The manifest [created_at] value must be a string.');
         }
@@ -85,6 +90,7 @@ class Manifest implements Arrayable
             php: $data['php'],
             server: $data['server'] ?? 'fpm',
             frontend: $data['frontend'] ?? 'build',
+            exposeServices: $data['expose_services'] ?? false,
             services: static::stringList($data, 'services'),
             deferred: static::stringList($data, 'deferred'),
             processes: array_key_exists('processes', $data)
@@ -104,6 +110,14 @@ class Manifest implements Arrayable
     }
 
     /**
+     * Determine whether the instance serves trusted HTTPS.
+     */
+    public function secure(): bool
+    {
+        return str_starts_with($this->url, 'https://');
+    }
+
+    /**
      * Get the array representation of the manifest.
      *
      * @return array<string, mixed>
@@ -118,6 +132,7 @@ class Manifest implements Arrayable
             'php' => $this->php,
             'server' => $this->server,
             'frontend' => $this->frontend,
+            'expose_services' => $this->exposeServices,
             'services' => $this->services,
             'deferred' => $this->deferred,
             'processes' => $this->processes,

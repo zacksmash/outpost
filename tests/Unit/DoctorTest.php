@@ -6,6 +6,7 @@ use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
+use Zacksmash\Outpost\Certificates;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\DoctorCheck;
 use Zacksmash\Outpost\Git;
@@ -20,6 +21,12 @@ beforeEach(function () {
     File::ensureDirectoryExists($this->root);
     File::put($this->root.'/.env.example', "APP_NAME=Example\n");
     File::put($this->root.'/composer.lock', '{}');
+    File::ensureDirectoryExists($this->root.'/.outpost/tls');
+    File::put($this->root.'/.outpost/tls/certificate.pem', 'certificate');
+    File::put($this->root.'/.outpost/tls/key.pem', 'key');
+    File::put($this->root.'/.outpost/tls/domain', "outpost\n");
+
+    $certificates = new Certificates(new Filesystem, app('config'), $this->root);
 
     $this->doctor = new Doctor(
         new Host,
@@ -28,6 +35,7 @@ beforeEach(function () {
         new Filesystem,
         $this->root,
         app('config'),
+        $certificates,
     );
 });
 
@@ -55,12 +63,34 @@ it('passes a healthy supported environment', function () {
 
     $checks = collect($this->doctor->inspect())->keyBy('name');
 
-    expect($checks)->toHaveCount(9)
+    expect($checks)->toHaveCount(10)
         ->and($checks->every(fn (DoctorCheck $check): bool => $check->status === DoctorCheck::PASS))->toBeTrue()
         ->and($checks['Platform']->detail)->toBe('macOS 27.0 on arm64')
         ->and($checks['Runtime version']->detail)->toContain('1.2.2')
         ->and($checks['Publication domain']->detail)->toContain('[outpost]')
         ->and($checks['Base image']->detail)->toContain('[ghcr.io/zacksmash/outpost:0.1.0]');
+});
+
+it('warns when auto https has not been certified yet', function () {
+    File::deleteDirectory($this->root.'/.outpost/tls');
+    fakeHealthyDoctor();
+
+    $checks = collect($this->doctor->inspect())->keyBy('name');
+
+    expect($checks[Doctor::TLS_CHECK]->status)->toBe(DoctorCheck::WARNING)
+        ->and($checks[Doctor::TLS_CHECK]->detail)->toContain('fall back to HTTP')
+        ->and($checks[Doctor::TLS_CHECK]->remedy)->toContain('outpost:certify');
+});
+
+it('fails when required https certificate files are missing', function () {
+    config(['outpost.https' => true]);
+    File::deleteDirectory($this->root.'/.outpost/tls');
+    fakeHealthyDoctor();
+
+    $checks = collect($this->doctor->inspect())->keyBy('name');
+
+    expect($checks[Doctor::TLS_CHECK]->status)->toBe(DoctorCheck::FAIL)
+        ->and($checks[Doctor::TLS_CHECK]->remedy)->toContain('brew install mkcert');
 });
 
 it('fails unsupported platforms and old runtime versions', function () {

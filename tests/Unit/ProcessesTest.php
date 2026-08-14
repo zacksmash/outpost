@@ -44,8 +44,9 @@ it('adds the octane and vite development processes', function () {
             'http://billing-app.outpost:5173',
             'public/hot',
             'env', 'CHOKIDAR_USEPOLLING=true',
+            '__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=billing-app.outpost',
             'npm', 'run', 'dev', '--',
-            '--host', '0.0.0.0', '--port', '5173', '--strictPort',
+            '--host', '127.0.0.1', '--port', '24678', '--strictPort',
         ],
     ]);
 });
@@ -71,6 +72,7 @@ it('validates the vite port and hot file', function (array $vite) {
     );
 })->with([
     'bad port' => [['port' => 70000, 'hot_file' => 'public/hot']],
+    'reserved internal port' => [['port' => 24678, 'hot_file' => 'public/hot']],
     'absolute hot file' => [['port' => 5173, 'hot_file' => '/tmp/hot']],
     'traversing hot file' => [['port' => 5173, 'hot_file' => '../hot']],
 ])->throws(RuntimeException::class);

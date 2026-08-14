@@ -16,9 +16,19 @@ class OutpostServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/outpost.php', 'outpost');
 
+        $this->app->singleton(Certificates::class, function (Application $app) {
+            return new Certificates(
+                $app->make('files'),
+                $app->make('config'),
+                $app->basePath(),
+            );
+        });
+
         $this->app->singleton(Detector::class, function (Application $app) {
             return new Detector($app->make('config'), $app->basePath());
         });
+
+        $this->app->singleton(Endpoints::class);
 
         $this->app->singleton(Doctor::class, function (Application $app) {
             return new Doctor(
@@ -28,6 +38,7 @@ class OutpostServiceProvider extends ServiceProvider
                 $app->make('files'),
                 $app->basePath(),
                 $app->make('config'),
+                $app->make(Certificates::class),
             );
         });
 
@@ -71,8 +82,10 @@ class OutpostServiceProvider extends ServiceProvider
 
         $this->commands([
             Console\Commands\BuildCommand::class,
+            Console\Commands\CertifyCommand::class,
             Console\Commands\DoctorCommand::class,
             Console\Commands\InstallCommand::class,
+            Console\Commands\InfoCommand::class,
             Console\Commands\ListCommand::class,
             Console\Commands\LogsCommand::class,
             Console\Commands\OpenCommand::class,

@@ -111,6 +111,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Local HTTPS
+    |--------------------------------------------------------------------------
+    |
+    | "auto" uses trusted HTTPS after "outpost:certify" creates a wildcard
+    | certificate, while retaining an HTTP fallback on a fresh install.
+    | Set true to require the certificate or false to always use HTTP.
+    |
+    */
+
+    'https' => env('OUTPOST_HTTPS', 'auto'),
+
+    'tls' => [
+        'path' => env('OUTPOST_TLS_PATH', '.outpost/tls'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Services
     |--------------------------------------------------------------------------
     |
@@ -122,6 +139,19 @@ return [
     */
 
     'services' => null,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Direct Service Access
+    |--------------------------------------------------------------------------
+    |
+    | Expose detected databases, Redis, Mailpit SMTP, and Mailpit's web UI on
+    | the instance hostname using their standard ports. Every instance has
+    | its own private IP, so the ports never collide on the host.
+    |
+    */
+
+    'expose_services' => env('OUTPOST_EXPOSE_SERVICES', true),
 
     /*
     |--------------------------------------------------------------------------

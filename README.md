@@ -27,6 +27,7 @@ Each instance runs in its own lightweight virtual machine with exactly the servi
 - macOS 26 or newer on Apple silicon
 - Apple's `container` CLI 1.2.x — `brew install container`
 - A Laravel application in a git repository with at least one commit
+- Optional trusted HTTPS: [`mkcert`](https://github.com/FiloSottile/mkcert) — `brew install mkcert`
 
 ## Installation
 
@@ -50,7 +51,7 @@ Start with the guided installer:
 php artisan outpost:install
 ```
 
-It inspects the full setup, offers to start the Apple container service and pull the missing versioned base image, then prints the exact commands for anything requiring manual or privileged changes. `--force` applies those two safe actions without prompting. The installer never invokes `sudo`, rewrites machine configuration, or changes application source files.
+It inspects the full setup, offers to start the Apple container service, pull the missing versioned base image, and create a trusted wildcard HTTPS certificate, then prints the exact commands for anything requiring manual or privileged changes. `--force` applies runtime and image actions without prompting but deliberately does not modify the system trust store; combine it with `--https` when that change is intentional. The installer never invokes `sudo` itself, rewrites machine configuration, or changes application source files.
 
 The manual setup it guides you through is described below. First, make sure the container runtime is running:
 
@@ -97,6 +98,15 @@ Run the doctor at any point to inspect the host, live runtime, DNS publication a
 php artisan outpost:doctor
 ```
 
+For trusted local HTTPS, install `mkcert` and let Outpost create one project-local certificate for the configured domain and every instance beneath it:
+
+```bash
+brew install mkcert
+php artisan outpost:certify
+```
+
+`mkcert` may ask for your macOS password while installing its local certificate authority. Outpost keeps only the wildcard leaf certificate and key under `.outpost/tls`, mounts them read-only, redirects the application from HTTP to HTTPS, and uses the same trusted endpoint for Vite and Mailpit. With the default `https => auto`, a fresh installation falls back to HTTP until this command succeeds; changing the domain makes the old certificate ineligible automatically.
+
 Outpost has verified Apple's `container` 1.2.x line. Older versions fail the compatibility check; newer minors produce a warning rather than blocking you.
 
 ## Creating an Instance
@@ -141,6 +151,20 @@ Octane applications run automatically through Swoole and a websocket-aware nginx
 
 External Scout drivers are still reported as deferred. Horizon is reported as deferred unless you configure it as an application process. Outpost records every selected server, front-end mode, deferred capability, and supervised process in the manifest, so a Redis-backed queue never looks active when no worker is actually running.
 
+### Service Access
+
+Detected services are reachable from macOS on the instance hostname and their standard ports: MySQL `3306`, PostgreSQL `5432`, Redis `6379`, Mailpit SMTP `1025`, and the Mailpit UI `8025`. Each instance has its own private IP, so ten MySQL instances can all use `3306` without publishing or juggling host ports. MySQL, PostgreSQL, and Redis require the sandbox credentials from `config/outpost.php`; Mailpit and its SMTP listener contain disposable development mail.
+
+Use one command to get copyable URLs, credentials, state, runtime, and process details:
+
+```bash
+php artisan outpost:info billing
+php artisan outpost:info billing --json   # structured output for agents and scripts
+php artisan outpost:open billing mailpit
+```
+
+Set `expose_services` to `false` when an application should keep every backing service on container loopback. The application URL and an enabled Vite endpoint remain reachable because they are the instance's public development surface.
+
 ### Front-end Workflow
 
 The default `frontend` mode is `build`: Outpost installs npm dependencies and runs the application's `build` script once during provisioning. Set it to `vite` for a supervised Vite development server with HMR, or `none` to skip npm completely:
@@ -149,7 +173,7 @@ The default `frontend` mode is `build`: Outpost installs npm dependencies and ru
 'frontend' => 'vite',
 ```
 
-Vite mode requires a `package.json` `dev` script. Outpost binds Vite to the instance, writes its public `http://<instance>.outpost:5173` address to Laravel's hot file, enables polling for the macOS bind mount, and keeps the process alive with Supervisor. Change `vite.port` or `vite.hot_file` when the application uses nonstandard values. The Vite port is reached directly on the instance's private IP, so it does not reserve a host port or collide with another instance.
+Vite mode requires a `package.json` `dev` script. Outpost keeps Vite on container loopback, explicitly allows only the instance hostname, proxies its public `<scheme>://<instance>.outpost:5173` endpoint through nginx, writes that address to Laravel's hot file, enables polling for the macOS bind mount, and keeps the process alive with Supervisor. This gives HMR the same trusted scheme as the application and avoids mixed-content failures. Change `vite.port` or `vite.hot_file` when the application uses nonstandard values. The public Vite port lives on the instance's private IP, so it does not reserve a host port or collide with another instance.
 
 ### Application Processes
 
@@ -169,9 +193,12 @@ Queue workers, the scheduler, Horizon, and other long-running commands can run w
 
 ```bash
 php artisan outpost:list             # every instance, its state, and its URL
+php artisan outpost:info billing     # runtime details, URLs, DSNs, and credentials; --json available
 php artisan outpost:doctor           # diagnose host, runtime, DNS, image, and app readiness
+php artisan outpost:certify          # create or renew trusted local HTTPS; --force renews
 php artisan outpost:pull             # refresh the exact configured OCI image
 php artisan outpost:open billing     # start if needed, then open in the default browser
+php artisan outpost:open billing mailpit # open Mailpit; `vite` is also supported
 php artisan outpost:start billing    # start a stopped instance
 php artisan outpost:stop billing     # stop it; worktree and data survive
 php artisan outpost:shell billing    # open a shell inside the instance
@@ -187,7 +214,7 @@ Stopping an instance preserves its database — the data lives in the container'
 
 Instances live under `.outpost/` in your project root (Outpost adds it to your `.gitignore`). Each instance keeps three things there: the git worktree at `app/`, generated nginx and supervisord configuration at `runtime/`, and its manifest at `outpost.json`.
 
-The worktree is bind-mounted into the container, so the instance's code is editable right on your Mac — changes appear instantly, no sync step. The container gets its own IP address on Apple's container network, answers on port 80, and is reachable at `http://<name>-<app>.outpost`. No ports are published, so nothing collides with Herd, Sail, or anything else on your machine.
+The worktree is bind-mounted into the container, so the instance's code is editable right on your Mac — changes appear instantly, no sync step. The container gets its own IP address on Apple's container network and is reachable at `<scheme>://<name>-<app>.outpost`. No ports are published onto macOS; web and service endpoints use standard ports on that unique IP, so nothing collides with Herd, Sail, or another instance.
 
 The instance's `.env` is seeded from your `.env.example` — never from your real `.env`, so real credentials stay out of sandboxes — and pointed at the instance's own services with the sandbox credentials from `config/outpost.php`. The published image contains the documented default credentials and PHP versions. Changing either requires a local `outpost:build` before creating more instances.
 
@@ -198,7 +225,7 @@ An instance is a real virtual machine boundary: a destructive command inside it 
 - **The worktree** is mounted read-write at `/app`. That's the product — you're meant to edit the code.
 - **Composer path repositories** outside the worktree can't resolve inside the container, so Outpost offers to mount them **read-only**, lists every path first, and defaults to *no*. Non-interactive runs mount nothing unless you pass `--mount-path-repos` explicitly. Read-only bounds destruction, not disclosure — that's why a human confirms.
 
-Instances are development sandboxes, not production parity. The database accounts inside them are deliberately permissive, exactly like Sail's — but every service answers only on loopback inside its own container, so one instance can never reach another's database or cache across the container network.
+Instances are development sandboxes, not production parity. The database accounts inside them are deliberately permissive, exactly like Sail's. Direct service access binds selected ports to the instance network and protects MySQL, PostgreSQL, and Redis with the documented sandbox credentials; disable `expose_services` when network-level separation from other local containers matters more than host database-tool access.
 
 ## Configuration
 
@@ -211,9 +238,12 @@ Instances are development sandboxes, not production parity. The database account
 | `php` | `['8.4', '8.5']` | PHP versions in the base image. |
 | `server` | `auto` | Use Octane when installed, otherwise PHP-FPM; accepts `auto`, `fpm`, or `octane`. |
 | `frontend` | `build` | Front-end workflow; accepts `build`, `vite`, or `none`. |
-| `vite.port` | `5173` | Private instance port used by the Vite development server. |
+| `vite.port` | `5173` | Public per-instance port for the nginx-proxied Vite development server. |
 | `vite.hot_file` | `public/hot` | Laravel Vite hot-file path, relative to the application. |
+| `https` | `auto` | Use a trusted certificate when present; accepts `auto`, `true`, or `false`. |
+| `tls.path` | `.outpost/tls` | Project-local wildcard certificate directory. |
 | `services` | `null` | Set an array to skip service detection. |
+| `expose_services` | `true` | Make detected services reachable on the instance hostname and standard ports. |
 | `processes` | `[]` | Named, shell-free argument lists supervised with the instance. |
 | `database` | `outpost` / `outpost` / `password` | Sandbox database credentials. |
 | `timeout` | `60` | Seconds to wait for an instance to answer HTTP. |

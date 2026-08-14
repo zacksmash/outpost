@@ -88,7 +88,7 @@ COPY vite.sh /usr/local/bin/outpost-vite
 RUN chmod +x /usr/local/bin/outpost-entrypoint /usr/local/bin/outpost-wait /usr/local/bin/outpost-vite
 
 WORKDIR /app
-EXPOSE 80
+EXPOSE 80 443 1025 3306 5173 5432 6379 8025
 
 ENTRYPOINT ["/usr/local/bin/outpost-entrypoint"]
 CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf", "-n"]

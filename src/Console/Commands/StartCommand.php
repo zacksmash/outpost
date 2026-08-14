@@ -50,8 +50,8 @@ class StartCommand extends Command
 
             $seconds = config()->integer('outpost.timeout');
 
-            if (! spin(fn () => $runtime->awaitReady($manifest->container, $seconds), 'Waiting for the instance to answer')) {
-                error("The instance started but did not answer HTTP within {$seconds} seconds.");
+            if (! spin(fn () => $runtime->awaitReady($manifest->container, $seconds, $manifest->secure()), 'Waiting for the instance to answer')) {
+                error("The instance started but did not answer within {$seconds} seconds.");
                 note("Check its logs with:\n\n  php artisan outpost:logs {$manifest->name}");
 
                 return self::FAILURE;

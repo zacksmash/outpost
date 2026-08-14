@@ -295,6 +295,17 @@ it('waits for a container to answer http', function () {
     Sleep::assertSleptTimes(2);
 });
 
+it('checks an https instance through its tls listener', function () {
+    Process::fake();
+
+    expect($this->runtime->ready('feature-x-app', secure: true))->toBeTrue();
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', 'feature-x-app',
+        'curl', '--fail', '--insecure', '--silent', '--output', '/dev/null', 'https://127.0.0.1',
+    ]);
+});
+
 it('gives up when a container never becomes ready', function () {
     Sleep::fake();
 

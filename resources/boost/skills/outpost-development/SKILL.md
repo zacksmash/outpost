@@ -22,6 +22,7 @@ Use this skill when a Laravel application needs to integrate `zacksmash/outpost`
 
 - macOS 26 or newer on Apple silicon with Apple `container` 1.2.x installed (`brew install container`)
 - a Laravel application inside a git repository with at least one commit
+- `mkcert` (`brew install mkcert`) when trusted local HTTPS is wanted
 
 ### 2. Install
 
@@ -43,9 +44,12 @@ container system stop && container system start
 php artisan outpost:pull                   # pulls the exact configured version from GHCR
 php artisan outpost:build                  # customized local fallback; first run takes minutes
 php artisan outpost:doctor                 # read-only verification of the complete setup
+php artisan outpost:certify                # create/trust the project wildcard certificate
 ```
 
-The installer offers to start the runtime and pull a missing image. Pass `--force` to apply those safe actions without prompting, or `--local` to build the configured image from package stubs instead of pulling it. It never invokes `sudo`, rewrites machine configuration, or changes application source files; it prints exact remedies for those steps instead.
+The installer offers to start the runtime, pull a missing image, and create trusted HTTPS. Pass `--force` to apply runtime/image actions without prompting, `--https` to explicitly allow trust-store setup in a non-interactive run, or `--local` to build the configured image from package stubs instead of pulling it. It never invokes `sudo` itself, rewrites machine configuration, or changes application source files; it prints exact remedies for those steps instead.
+
+`outpost:certify` invokes `mkcert -install`, which may ask for the macOS password, then stores a wildcard leaf certificate under `.outpost/tls`. With `https => auto`, new instances use trusted HTTPS when those files match the configured domain and otherwise fall back to HTTP.
 
 If the machine already publishes under another domain, inspect the live value with `container system property list`, then set `OUTPOST_DOMAIN` to that domain instead of changing machine config. Editing `config.toml` does not affect the running service until it is restarted.
 
@@ -61,7 +65,9 @@ php artisan outpost --pr=482 --name=pr-482 --open
 php artisan outpost:doctor
 php artisan outpost:pull --force
 php artisan outpost:list
+php artisan outpost:info billing           # URLs, DSNs, credentials, runtime; add --json for agents
 php artisan outpost:open billing           # starts the instance first when needed
+php artisan outpost:open billing mailpit   # browser endpoints: app, mailpit, vite
 php artisan outpost:start billing
 php artisan outpost:stop billing
 php artisan outpost:shell billing
@@ -74,6 +80,7 @@ php artisan outpost:remove billing --force
 - Other `outpost` options: `--name`, `--open`, `--seed`, `--mount-path-repos`
 - commands taking a `name` argument prompt with a select when it is omitted
 - `outpost:open` starts a stopped instance before opening its URL in the macOS default browser
+- `outpost:info --json` is the stable machine-readable way for agents and scripts to discover instance and service endpoints
 - `outpost:remove` confirms before destroying; `--force` skips every confirmation and keeps the branch
 
 ### 5. Configure when detection needs help
@@ -82,7 +89,9 @@ Services are detected from the app's own configuration (database driver, redis u
 
 Outpost uses Octane with Swoole automatically when the app exposes Octane configuration; otherwise it uses PHP-FPM. Set `server` to `fpm` to force the traditional request lifecycle or `octane` to require Octane. Octane runs behind nginx with websocket forwarding and polling-based live reload.
 
-The `frontend` mode is `build` by default. Use `vite` to install dependencies and supervise the app's `dev` script with HMR, or `none` to skip npm. Vite mode requires a `package.json` `dev` script and publishes the dev server at the instance hostname on `vite.port` (default `5173`). Set `vite.hot_file` when the app does not use `public/hot`.
+The `frontend` mode is `build` by default. Use `vite` to install dependencies and supervise the app's `dev` script with HMR, or `none` to skip npm. Vite mode requires a `package.json` `dev` script, explicitly allows only the generated instance hostname, and publishes the dev server there on `vite.port` (default `5173`). Set `vite.hot_file` when the app does not use `public/hot`.
+
+By default detected services are reachable on the instance hostname using MySQL `3306`, PostgreSQL `5432`, Redis `6379`, Mailpit SMTP `1025`, and Mailpit UI `8025`. Instance IPs avoid host-port collisions; stateful services use the sandbox credentials. Set `expose_services` to `false` for loopback-only backing services.
 
 Configure long-running Laravel processes as shell-free argument lists. `@php` resolves to the instance's selected PHP version. They wait for provisioning before starting, restart under Supervisor, and write to the normal instance logs:
 
@@ -94,7 +103,7 @@ Configure long-running Laravel processes as shell-free argument lists. `@php` re
 ],
 ```
 
-Key `config/outpost.php` values: `domain` (default `outpost`), `image` (an exact versioned GHCR reference), `dns`, `path`, `php` (versions baked into the image — rebuild locally after changing), `server` (`auto`, `fpm`, or `octane`), `frontend` (`build`, `vite`, or `none`), `vite`, `services`, `processes`, `database` (sandbox credentials baked into the image — rebuild locally after changing; letters, numbers, dots, dashes, underscores only), `timeout`.
+Key `config/outpost.php` values: `domain` (default `outpost`), `image` (an exact versioned GHCR reference), `dns`, `path`, `php` (versions baked into the image — rebuild locally after changing), `server` (`auto`, `fpm`, or `octane`), `frontend` (`build`, `vite`, or `none`), `vite`, `https` (`auto`, `true`, or `false`), `tls.path`, `services`, `expose_services`, `processes`, `database` (sandbox credentials baked into the image — rebuild locally after changing; letters, numbers, dots, dashes, underscores only), `timeout`.
 
 ## Rules, References, and Templates
 
@@ -107,6 +116,7 @@ Read before executing:
 
 - A setup fails before instance creation: run `php artisan outpost:doctor`, apply the remedies attached to `FAIL` rows, and rerun it until only `PASS` or non-blocking `WARN` rows remain.
 - A reviewer needs to try a GitHub pull request without disturbing their own branch: `php artisan outpost --pr=482 --name=pr-482 --open`, then `php artisan outpost:remove pr-482` when done.
+- An agent needs database coordinates without parsing terminal tables: `php artisan outpost:info billing --json`, then read `endpoints.mysql.url`, `endpoints.pgsql.url`, or `endpoints.redis.url` when present.
 - An app on SQLite needs no services: the instance boots with nginx and PHP-FPM only, and Outpost creates `database/database.sqlite` automatically.
 - A Redis queue needs a worker: add a `queue` process using `['@php', 'artisan', 'queue:work', '--sleep=1']`, recreate the instance, and inspect its output with `php artisan outpost:logs <name> --follow`.
 - An Octane app should use the default `server => auto`; choose `fpm` only when testing the traditional request lifecycle. Use `frontend => vite` when edits need browser HMR and recreate the instance after changing either mode.
@@ -116,6 +126,8 @@ Read before executing:
 
 - do not run instances for production parity; instances are development sandboxes with permissive sandbox credentials
 - do not manually change runtime or DNS state before running `php artisan outpost:doctor`; it is read-only and reports the live state
+- do not copy or commit `.outpost/tls/key.pem`; Outpost keeps the project-local leaf key inside the ignored `.outpost` directory and mounts it read-only
+- do not assume direct backing-service access is network-isolated from every other local container; set `expose_services` to `false` when loopback-only services are required
 - do not add `octane` or `vite` entries to `processes` when Outpost manages those modes; those names are reserved and their commands are generated automatically
 - do not expect external Scout drivers to run inside instances; Horizon runs only when it is explicitly configured in `processes`
 - do not put a shell command string or shell operators in `processes`; each command must be an argument array, with one item per argument

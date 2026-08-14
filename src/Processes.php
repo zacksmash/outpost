@@ -10,6 +10,11 @@ use RuntimeException;
 class Processes
 {
     /**
+     * Vite stays on loopback while nginx exposes its public endpoint.
+     */
+    public const int VITE_INTERNAL_PORT = 24678;
+
+    /**
      * Create an application process configuration reader.
      */
     public function __construct(protected readonly Repository $config) {}
@@ -118,8 +123,8 @@ class Processes
         $port = $this->config->get('outpost.vite.port', 5173);
         $hotFile = $this->config->get('outpost.vite.hot_file', 'public/hot');
 
-        if (! is_int($port) || $port < 1 || $port > 65535) {
-            throw new RuntimeException('The [outpost.vite.port] value must be an integer between 1 and 65535.');
+        if (! is_int($port) || $port < 1 || $port > 65535 || $port === self::VITE_INTERNAL_PORT) {
+            throw new RuntimeException('The [outpost.vite.port] value must be an available integer between 1 and 65535.');
         }
 
         if (! is_string($hotFile)
@@ -136,20 +141,27 @@ class Processes
             throw new RuntimeException('Vite mode requires an instance URL.');
         }
 
+        $host = parse_url($url, PHP_URL_HOST);
+
+        if (! is_string($host) || $host === '') {
+            throw new RuntimeException('Vite mode requires an instance URL with a valid hostname.');
+        }
+
         return [
             '/usr/local/bin/outpost-vite',
             rtrim($url, '/').":{$port}",
             $hotFile,
             'env',
             'CHOKIDAR_USEPOLLING=true',
+            "__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS={$host}",
             'npm',
             'run',
             'dev',
             '--',
             '--host',
-            '0.0.0.0',
+            '127.0.0.1',
             '--port',
-            (string) $port,
+            (string) self::VITE_INTERNAL_PORT,
             '--strictPort',
         ];
     }

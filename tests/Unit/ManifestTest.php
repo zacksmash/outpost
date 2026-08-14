@@ -24,6 +24,11 @@ it('reports the services it uses', function () {
         ->and($manifest->uses('pgsql'))->toBeFalse();
 });
 
+it('reports whether the instance uses https', function () {
+    expect(fakeManifest()->secure())->toBeFalse()
+        ->and(fakeManifest(url: 'https://feature-billing-app.outpost')->secure())->toBeTrue();
+});
+
 it('allows a null database', function () {
     $data = [...fakeManifest()->toArray(), 'database' => null];
 
@@ -41,13 +46,18 @@ it('loads old manifests without a processes field', function () {
 it('loads old manifests with the original web and frontend defaults', function () {
     $data = fakeManifest(server: 'octane', frontend: 'vite')->toArray();
 
-    unset($data['server'], $data['frontend']);
+    unset($data['server'], $data['frontend'], $data['expose_services']);
 
     $manifest = Manifest::fromArray($data);
 
     expect($manifest->server)->toBe('fpm')
-        ->and($manifest->frontend)->toBe('build');
+        ->and($manifest->frontend)->toBe('build')
+        ->and($manifest->exposeServices)->toBeFalse();
 });
+
+it('rejects a non-boolean service exposure value', function () {
+    Manifest::fromArray([...fakeManifest()->toArray(), 'expose_services' => 'yes']);
+})->throws(InvalidArgumentException::class, 'manifest [expose_services]');
 
 it('rejects processes that are not a list of strings', function () {
     Manifest::fromArray([...fakeManifest()->toArray(), 'processes' => ['queue', 1]]);

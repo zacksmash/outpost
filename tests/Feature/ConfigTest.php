@@ -11,6 +11,9 @@ it('exposes sensible defaults', function () {
         ->and(config('outpost.server'))->toBe('auto')
         ->and(config('outpost.frontend'))->toBe('build')
         ->and(config('outpost.vite'))->toBe(['port' => 5173, 'hot_file' => 'public/hot'])
+        ->and(config('outpost.https'))->toBe('auto')
+        ->and(config('outpost.tls'))->toBe(['path' => '.outpost/tls'])
+        ->and(config('outpost.expose_services'))->toBeTrue()
         ->and(config('outpost.processes'))->toBe([])
         ->and(config('outpost.timeout'))->toBe(60);
 });

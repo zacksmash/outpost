@@ -23,6 +23,7 @@ class InstallCommand extends Command
      */
     protected $signature = 'outpost:install
         {--force : Apply safe setup steps without asking}
+        {--https : Create and trust a local HTTPS certificate}
         {--local : Build the base image locally instead of pulling it}';
 
     /**
@@ -45,6 +46,16 @@ class InstallCommand extends Command
                 error($e->getMessage());
 
                 return self::FAILURE;
+            }
+
+            $checks = $doctor->inspect();
+        }
+
+        if ($this->needsHttps($checks) && $this->approveHttps()) {
+            $exit = $this->call('outpost:certify');
+
+            if ($exit !== self::SUCCESS) {
+                return $exit;
             }
 
             $checks = $doctor->inspect();
@@ -125,6 +136,42 @@ class InstallCommand extends Command
     protected function approve(string $question): bool
     {
         return (bool) $this->option('force') || confirm($question, true);
+    }
+
+    /**
+     * Determine whether trusted HTTPS is available and wanted.
+     *
+     * @param  list<DoctorCheck>  $checks
+     */
+    protected function needsHttps(array $checks): bool
+    {
+        if (config('outpost.https') === false) {
+            return false;
+        }
+
+        foreach ($checks as $check) {
+            if ($check->name === Doctor::TLS_CHECK && $check->status !== DoctorCheck::PASS) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Ask before modifying the system trust store unless explicitly requested.
+     */
+    protected function approveHttps(): bool
+    {
+        if ($this->option('https')) {
+            return true;
+        }
+
+        if ($this->option('force')) {
+            return false;
+        }
+
+        return confirm('Create and trust a wildcard certificate for local HTTPS now?', true);
     }
 
     /**

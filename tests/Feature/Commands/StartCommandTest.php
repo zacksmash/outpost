@@ -68,7 +68,7 @@ it('points at the logs when the instance starts but never answers', function () 
     ]);
 
     $this->artisan('outpost:start', ['name' => 'feature-x'])
-        ->expectsOutputToContain('did not answer HTTP within 2 seconds')
+        ->expectsOutputToContain('did not answer within 2 seconds')
         ->expectsOutputToContain('php artisan outpost:logs feature-x')
         ->assertFailed();
 });

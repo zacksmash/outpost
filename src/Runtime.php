@@ -287,22 +287,23 @@ class Runtime
     /**
      * Determine if the given container is answering HTTP.
      */
-    public function ready(string $container): bool
+    public function ready(string $container, bool $secure = false): bool
     {
         return $this->exec($container, [
-            'curl', '--fail', '--silent', '--output', '/dev/null', 'http://127.0.0.1',
+            'curl', '--fail', ...($secure ? ['--insecure'] : []), '--silent', '--output', '/dev/null',
+            ($secure ? 'https' : 'http').'://127.0.0.1',
         ])->successful();
     }
 
     /**
      * Wait for the given container to answer HTTP.
      */
-    public function awaitReady(string $container, int $seconds): bool
+    public function awaitReady(string $container, int $seconds, bool $secure = false): bool
     {
         $attempts = max(1, $seconds);
 
         for ($attempt = 1; $attempt <= $attempts; $attempt++) {
-            if ($this->ready($container)) {
+            if ($this->ready($container, $secure)) {
                 return true;
             }
 

@@ -154,6 +154,10 @@ class Provisioner
                 'REDIS_HOST' => '127.0.0.1',
                 'REDIS_PORT' => '6379',
             ];
+
+            if ($manifest->exposeServices) {
+                $values['REDIS_PASSWORD'] = $this->credential('password');
+            }
         }
 
         if ($manifest->uses('mailpit')) {

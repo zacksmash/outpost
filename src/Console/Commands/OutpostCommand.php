@@ -9,6 +9,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Zacksmash\Outpost\Certificates;
 use Zacksmash\Outpost\Detector;
 use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Host;
@@ -57,6 +58,7 @@ class OutpostCommand extends Command
         Git $git,
         Host $host,
         Runtime $runtime,
+        Certificates $certificates,
         Detector $detector,
         Outposts $outposts,
         PathRepositories $pathRepositories,
@@ -155,7 +157,8 @@ class OutpostCommand extends Command
             }
 
             $detection = $detector->detect();
-            $url = "http://{$container}.{$domain}";
+            $secure = $certificates->enabled();
+            $url = ($secure ? 'https' : 'http')."://{$container}.{$domain}";
             $commands = $processes->commands(
                 php: $detection->php,
                 server: $detection->server,
@@ -184,6 +187,7 @@ class OutpostCommand extends Command
                 php: $detection->php,
                 server: $detection->server,
                 frontend: $detection->frontend,
+                exposeServices: config()->boolean('outpost.expose_services'),
                 services: $detection->services,
                 deferred: $detection->deferred,
                 processes: array_keys($commands),
@@ -220,6 +224,7 @@ class OutpostCommand extends Command
                 fn () => $runtime->boot($container, $image, config()->string('outpost.dns'), [
                     $outposts->worktreePath($name).':/app',
                     $outposts->runtimePath($name).':/outpost:ro',
+                    ...($secure ? [$certificates->directory().':/outpost-tls:ro'] : []),
                     ...$mounts,
                 ]),
                 'Booting the instance',
@@ -237,7 +242,7 @@ class OutpostCommand extends Command
 
             $seconds = config()->integer('outpost.timeout');
 
-            if (! spin(fn () => $runtime->awaitReady($container, $seconds), 'Checking the application response')) {
+            if (! spin(fn () => $runtime->awaitReady($container, $seconds, $secure), 'Checking the application response')) {
                 throw new RuntimeException(
                     "The application did not answer HTTP within {$seconds} seconds. Check its logs with [php artisan outpost:logs {$name}].",
                 );
@@ -261,6 +266,10 @@ class OutpostCommand extends Command
                 warning($e->getMessage());
                 note("Open it manually: {$manifest->url}");
             }
+        }
+
+        if ($manifest->services !== []) {
+            note("Inspect service URLs and credentials with:\n\n  php artisan outpost:info {$manifest->name}");
         }
 
         outro("The instance is ready: {$manifest->url}");

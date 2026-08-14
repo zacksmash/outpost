@@ -166,3 +166,39 @@ it('applies safe setup steps without prompting when forced', function () {
         ->doesntExpectOutputToContain('Start the Apple container system now?')
         ->assertSuccessful();
 });
+
+it('offers to create trusted https when the certificate is missing', function () {
+    $doctor = Mockery::mock(Doctor::class);
+    $doctor->shouldReceive('inspect')->twice()->andReturn(
+        [DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS falls back to HTTP.', 'Run outpost:certify')],
+        [DoctorCheck::pass(Doctor::TLS_CHECK, 'Trusted HTTPS is ready.')],
+    );
+
+    app()->instance(Doctor::class, $doctor);
+
+    Process::fake();
+
+    $this->artisan('outpost:install')
+        ->expectsConfirmation('Create and trust a wildcard certificate for local HTTPS now?', 'yes')
+        ->expectsOutputToContain('Outpost is ready')
+        ->assertSuccessful();
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === ['mkcert', '-install']);
+});
+
+it('does not modify the trust store during forced setup unless https is explicit', function () {
+    $doctor = Mockery::mock(Doctor::class);
+    $doctor->shouldReceive('inspect')->once()->andReturn([
+        DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS falls back to HTTP.', 'Run outpost:certify'),
+    ]);
+
+    app()->instance(Doctor::class, $doctor);
+
+    Process::fake();
+
+    $this->artisan('outpost:install', ['--force' => true])
+        ->doesntExpectOutputToContain('Create and trust')
+        ->assertSuccessful();
+
+    Process::assertNothingRan();
+});
