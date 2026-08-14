@@ -32,12 +32,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Outpost\\Outpost\\": "src/"
+            "Zacksmash\\Outpost\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Outpost\\Outpost\\Tests\\": "tests/",
+            "Zacksmash\\Outpost\\Tests\\": "tests/",
             "Workbench\\App\\": "workbench/app/",
             "Workbench\\Database\\Factories\\": "workbench/database/factories/",
             "Workbench\\Database\\Seeders\\": "workbench/database/seeders/"
@@ -87,11 +87,8 @@
     "extra": {
         "laravel": {
             "providers": [
-                "Outpost\\Outpost\\OutpostServiceProvider"
-            ],
-            "aliases": {
-                "Outpost": "Outpost\\Outpost\\Facades\\Outpost"
-            }
+                "Zacksmash\\Outpost\\OutpostServiceProvider"
+            ]
         }
     },
     "config": {

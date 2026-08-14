@@ -2,6 +2,6 @@
 
 declare(strict_types=1);
 
-use Outpost\Outpost\Tests\TestCase;
+use Zacksmash\Outpost\Tests\TestCase;
 
 uses(TestCase::class)->in(__DIR__);

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Outpost\Outpost\Tests;
+namespace Zacksmash\Outpost\Tests;
 
 use Orchestra\Testbench\TestCase as Orchestra;
-use Outpost\Outpost\OutpostServiceProvider;
+use Zacksmash\Outpost\OutpostServiceProvider;
 
 abstract class TestCase extends Orchestra
 {
