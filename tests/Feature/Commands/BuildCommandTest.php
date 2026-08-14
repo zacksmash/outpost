@@ -22,7 +22,8 @@ it('builds the base image from the package stubs', function () {
 
         return array_slice($process->command, 0, 6) === [
             'container', 'build', '--dns', '1.1.1.1', '--tag', 'ghcr.io/zacksmash/outpost:0.1.0',
-        ] && is_file($context.'/Dockerfile');
+        ] && is_file($context.'/Dockerfile')
+            && is_file($context.'/wait-for-app.sh');
     });
 });
 

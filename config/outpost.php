@@ -93,6 +93,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Application Processes
+    |--------------------------------------------------------------------------
+    |
+    | Long-running commands are supervised with the instance and start only
+    | after provisioning succeeds. Each command is a shell-free argument list;
+    | use "@php" to select the same PHP version as the application.
+    |
+    | Examples: queue workers, schedule:work, Horizon, or another daemon.
+    |
+    */
+
+    'processes' => [
+        // 'queue' => ['@php', 'artisan', 'queue:work', '--sleep=1', '--tries=1'],
+        // 'scheduler' => ['@php', 'artisan', 'schedule:work'],
+        // 'horizon' => ['@php', 'artisan', 'horizon'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Instance Database
     |--------------------------------------------------------------------------
     |

@@ -19,6 +19,7 @@ function fakeManifest(
     ?string $database = 'mysql',
     array $services = ['mysql', 'redis'],
     array $deferred = ['horizon'],
+    array $processes = [],
 ): Manifest {
     return new Manifest(
         name: $name,
@@ -28,6 +29,7 @@ function fakeManifest(
         php: $php,
         services: $services,
         deferred: $deferred,
+        processes: $processes,
         database: $database,
         createdAt: CarbonImmutable::parse('2026-08-14T09:00:00+00:00'),
     );

@@ -52,3 +52,24 @@ it('sends every program log to the container output', function () {
         ->and(substr_count($config, 'stderr_logfile=/dev/stderr'))->toBe(3)
         ->and($config)->not->toContain('logfile_maxbytes=10');
 });
+
+it('runs configured application processes after provisioning', function () {
+    $config = (new Supervisord)->generate(fakeManifest(processes: ['queue']), [
+        'queue' => ['php8.4', 'artisan', 'queue:work', '--queue=high priority'],
+    ]);
+
+    expect($config)->toContain('[program:outpost-queue]')
+        ->and($config)->toContain('command=/usr/local/bin/outpost-wait "php8.4" "artisan" "queue:work" "--queue=high priority"')
+        ->and($config)->toContain('directory=/app')
+        ->and($config)->toContain('user=www-data')
+        ->and($config)->toContain('stopasgroup=true')
+        ->and($config)->toContain('killasgroup=true');
+});
+
+it('escapes supervisor command arguments without invoking a shell', function () {
+    $config = (new Supervisord)->generate(fakeManifest(processes: ['worker']), [
+        'worker' => ['binary', 'a "quoted" value', 'a\\path', '100%'],
+    ]);
+
+    expect($config)->toContain('command=/usr/local/bin/outpost-wait "binary" "a \\"quoted\\" value" "a\\\\path" "100%%"');
+});

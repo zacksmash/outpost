@@ -94,6 +94,7 @@ it('writes values containing regex replacement characters literally', function (
         php: '8.4',
         services: [],
         deferred: [],
+        processes: [],
         database: 'sqlite',
         createdAt: CarbonImmutable::parse('2026-08-14T09:00:00+00:00'),
     );

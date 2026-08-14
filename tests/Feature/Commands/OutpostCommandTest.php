@@ -72,6 +72,44 @@ it('creates a fully provisioned instance', function () {
     Process::assertRan(fn (PendingProcess $process) => $process->command === ['dscacheutil', '-flushcache']);
 });
 
+it('configures and releases application processes after provisioning', function () {
+    config(['outpost.processes' => [
+        'queue' => ['@php', 'artisan', 'queue:work', '--sleep=1'],
+    ]]);
+
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->assertSuccessful();
+
+    $manifest = json_decode(File::get($this->root.'/feature-x/outpost.json'), true);
+    $supervisor = File::get($this->root.'/feature-x/runtime/supervisord.conf');
+
+    expect($manifest['processes'])->toBe(['queue'])
+        ->and($supervisor)->toContain('[program:outpost-queue]')
+        ->and($supervisor)->toContain('"php8.5" "artisan" "queue:work" "--sleep=1"');
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', 'feature-x-laravel', 'touch', '/var/lib/outpost/ready',
+    ]);
+});
+
+it('rejects malformed application process configuration before creating state', function () {
+    config(['outpost.processes' => [
+        'queue' => 'php artisan queue:work',
+    ]]);
+
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->expectsOutputToContain('outpost.processes.queue')
+        ->assertFailed();
+
+    expect(File::exists($this->root.'/feature-x/outpost.json'))->toBeFalse();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'run');
+});
+
 it('creates an instance from a remote branch', function () {
     File::ensureDirectoryExists($this->root.'/review-invoices/app');
     File::put($this->root.'/review-invoices/app/.env.example', "APP_NAME=Example\nDB_CONNECTION=sqlite\n");

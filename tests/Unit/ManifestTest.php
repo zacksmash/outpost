@@ -30,6 +30,18 @@ it('allows a null database', function () {
     expect(Manifest::fromArray($data)->database)->toBeNull();
 });
 
+it('loads old manifests without a processes field', function () {
+    $data = fakeManifest(processes: ['queue'])->toArray();
+
+    unset($data['processes']);
+
+    expect(Manifest::fromArray($data)->processes)->toBe([]);
+});
+
+it('rejects processes that are not a list of strings', function () {
+    Manifest::fromArray([...fakeManifest()->toArray(), 'processes' => ['queue', 1]]);
+})->throws(InvalidArgumentException::class, 'The manifest [processes] value must only contain strings.');
+
 it('rejects a missing name', function () {
     $data = fakeManifest()->toArray();
 

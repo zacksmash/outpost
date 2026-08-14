@@ -31,7 +31,7 @@ it('shows a friendly empty state', function () {
 });
 
 it('lists every instance with its live state', function () {
-    app(Outposts::class)->save(fakeManifest('feature-x'));
+    app(Outposts::class)->save(fakeManifest('feature-x', processes: ['queue']));
     app(Outposts::class)->save(fakeManifest('feature-y'));
 
     Process::fake([
@@ -48,7 +48,8 @@ it('lists every instance with its live state', function () {
         ->and($output)->toContain('running')
         ->and($output)->toContain('missing')
         ->and($output)->toContain('http://feature-x-app.outpost')
-        ->and($output)->toContain('mysql, redis');
+        ->and($output)->toContain('mysql, redis')
+        ->and($output)->toContain('queue');
 });
 
 it('fails with the real error when the container daemon is unreachable', function () {

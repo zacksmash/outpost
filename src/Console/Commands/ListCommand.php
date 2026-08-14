@@ -48,12 +48,13 @@ class ListCommand extends Command
         }
 
         table(
-            ['Name', 'Branch', 'PHP', 'Services', 'State', 'URL'],
+            ['Name', 'Branch', 'PHP', 'Services', 'Processes', 'State', 'URL'],
             array_map(fn (Manifest $manifest): array => [
                 $manifest->name,
                 $manifest->branch,
                 $manifest->php,
                 $manifest->services === [] ? '—' : implode(', ', $manifest->services),
+                $manifest->processes === [] ? '—' : implode(', ', $manifest->processes),
                 $states[$manifest->container] ?? 'missing',
                 $manifest->url,
             ], $manifests),

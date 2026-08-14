@@ -106,6 +106,17 @@ it('defers horizon and octane', function () {
     expect($detection->deferred)->toBe(['horizon', 'octane']);
 });
 
+it('does not defer horizon when a horizon process is configured', function () {
+    $detection = detectorWith([
+        'horizon' => ['use' => 'default'],
+        'outpost.processes' => [
+            'horizon' => ['@php', 'artisan', 'horizon'],
+        ],
+    ]);
+
+    expect($detection->deferred)->toBe([]);
+});
+
 it('defers external scout drivers', function () {
     expect(detectorWith(['scout.driver' => 'meilisearch'])->deferred)->toBe(['meilisearch'])
         ->and(detectorWith(['scout.driver' => 'typesense'])->deferred)->toBe(['typesense'])

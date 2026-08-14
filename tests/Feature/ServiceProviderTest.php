@@ -8,6 +8,7 @@ use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\OutpostServiceProvider;
+use Zacksmash\Outpost\Processes;
 
 it('merges the package config', function () {
     expect(config('outpost'))->toBeArray();
@@ -28,6 +29,10 @@ it('binds the environment doctor as a singleton', function () {
 
 it('binds the git manager as a singleton', function () {
     expect(app(Git::class))->toBe(app(Git::class));
+});
+
+it('binds the process configuration as a singleton', function () {
+    expect(app(Processes::class))->toBe(app(Processes::class));
 });
 
 it('publishes the package config', function () {

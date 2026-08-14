@@ -43,6 +43,8 @@ class OutpostServiceProvider extends ServiceProvider
 
         $this->app->singleton(Provisioner::class);
 
+        $this->app->singleton(Processes::class);
+
         $this->app->singleton(Runtime::class);
 
         $this->app->singleton(Outposts::class, function (Application $app) {

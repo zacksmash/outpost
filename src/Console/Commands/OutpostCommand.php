@@ -16,6 +16,7 @@ use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Nginx;
 use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\PathRepositories;
+use Zacksmash\Outpost\Processes;
 use Zacksmash\Outpost\Provisioner;
 use Zacksmash\Outpost\Runtime;
 use Zacksmash\Outpost\Supervisord;
@@ -60,6 +61,7 @@ class OutpostCommand extends Command
         Outposts $outposts,
         PathRepositories $pathRepositories,
         Provisioner $provisioner,
+        Processes $processes,
         Nginx $nginx,
         Supervisord $supervisord,
     ): int {
@@ -153,11 +155,13 @@ class OutpostCommand extends Command
             }
 
             $detection = $detector->detect();
+            $commands = $processes->commands($detection->php);
 
             info(sprintf(
-                'PHP %s · Services: %s',
+                'PHP %s · Services: %s · Processes: %s',
                 $detection->php,
                 $detection->services === [] ? 'none' : implode(', ', $detection->services),
+                $commands === [] ? 'none' : implode(', ', array_keys($commands)),
             ));
 
             if ($detection->deferred !== []) {
@@ -172,6 +176,7 @@ class OutpostCommand extends Command
                 php: $detection->php,
                 services: $detection->services,
                 deferred: $detection->deferred,
+                processes: array_keys($commands),
                 database: $detection->database,
                 createdAt: CarbonImmutable::now(),
             );
@@ -196,7 +201,7 @@ class OutpostCommand extends Command
 
             $outposts->writeRuntime($name, [
                 'nginx.conf' => $nginx->generate($manifest),
-                'supervisord.conf' => $supervisord->generate($manifest),
+                'supervisord.conf' => $supervisord->generate($manifest, $commands),
             ]);
 
             $this->ensureInstancesIgnored();
@@ -215,6 +220,10 @@ class OutpostCommand extends Command
                 seed: (bool) $this->option('seed'),
                 onStep: fn (string $step) => info($step),
             );
+
+            if ($commands !== []) {
+                $runtime->releaseProcesses($container);
+            }
 
             $seconds = config()->integer('outpost.timeout');
 

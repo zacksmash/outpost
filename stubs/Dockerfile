@@ -79,7 +79,8 @@ RUN bash /usr/local/share/outpost/setup-mysql.sh "$DB_DATABASE" "$DB_USERNAME" "
     && bash /usr/local/share/outpost/setup-pgsql.sh "$DB_DATABASE" "$DB_USERNAME" "$DB_PASSWORD"
 
 COPY entrypoint.sh /usr/local/bin/outpost-entrypoint
-RUN chmod +x /usr/local/bin/outpost-entrypoint
+COPY wait-for-app.sh /usr/local/bin/outpost-wait
+RUN chmod +x /usr/local/bin/outpost-entrypoint /usr/local/bin/outpost-wait
 
 WORKDIR /app
 EXPOSE 80

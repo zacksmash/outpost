@@ -159,6 +159,24 @@ it('starts, stops, and deletes containers', function (string $method, string $ve
     'delete' => ['delete', 'delete'],
 ]);
 
+it('releases application processes after provisioning', function () {
+    Process::fake();
+
+    $this->runtime->releaseProcesses('billing-app');
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', 'billing-app', 'touch', '/var/lib/outpost/ready',
+    ]);
+});
+
+it('surfaces the real error when application processes cannot be released', function () {
+    Process::fake([
+        processPattern('container', 'exec', 'billing-app', 'touch', '/var/lib/outpost/ready') => Process::result('', 'container stopped', 1),
+    ]);
+
+    $this->runtime->releaseProcesses('billing-app');
+})->throws(RuntimeException::class, 'Unable to release the application processes in [billing-app]: container stopped');
+
 it('surfaces the real error when a lifecycle command fails', function (string $method) {
     Process::fake([
         "'container'*" => Process::result('', 'went sideways', 1),

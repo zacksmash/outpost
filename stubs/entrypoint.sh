@@ -15,7 +15,7 @@ done
 cp /outpost/nginx.conf /etc/nginx/sites-available/default
 cp /outpost/supervisord.conf /etc/supervisor/conf.d/outpost.conf
 
-mkdir -p /run/php /var/run/mysqld
+mkdir -p /run/php /var/run/mysqld /var/lib/outpost
 chown mysql:mysql /var/run/mysqld
 
 # Bind mounts from macOS refuse ownership changes; that must not be fatal.

@@ -184,6 +184,17 @@ class Runtime
     }
 
     /**
+     * Release application processes that wait for provisioning to finish.
+     */
+    public function releaseProcesses(string $container): void
+    {
+        $this->runOrFail(
+            ['container', 'exec', $container, 'touch', '/var/lib/outpost/ready'],
+            "Unable to release the application processes in [{$container}]",
+        );
+    }
+
+    /**
      * Stop the given container.
      */
     public function stop(string $container): void

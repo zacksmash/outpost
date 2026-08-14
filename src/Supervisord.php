@@ -8,8 +8,10 @@ class Supervisord
 {
     /**
      * Generate the supervisord program configuration for the given instance.
+     *
+     * @param  array<string, list<string>>  $processes
      */
-    public function generate(Manifest $manifest): string
+    public function generate(Manifest $manifest, array $processes = []): string
     {
         $programs = [];
 
@@ -46,14 +48,50 @@ class Supervisord
 
         $programs[] = $this->program('nginx', "/usr/sbin/nginx -g 'daemon off;'", 30);
 
+        $priority = 40;
+
+        foreach ($processes as $name => $command) {
+            $programs[] = $this->program(
+                "outpost-{$name}",
+                '/usr/local/bin/outpost-wait '.$this->command($command),
+                $priority++,
+                user: 'www-data',
+                directory: '/app',
+                stopAsGroup: true,
+            );
+        }
+
         return implode("\n", $programs);
+    }
+
+    /**
+     * Quote a shell-free argument list for Supervisor's command parser.
+     *
+     * @param  list<string>  $arguments
+     */
+    protected function command(array $arguments): string
+    {
+        return implode(' ', array_map(
+            fn (string $argument): string => '"'.str_replace(
+                ['\\', '"', '%'],
+                ['\\\\', '\\"', '%%'],
+                $argument,
+            ).'"',
+            $arguments,
+        ));
     }
 
     /**
      * Build a single supervisord program block.
      */
-    protected function program(string $name, string $command, int $priority, ?string $user = null): string
-    {
+    protected function program(
+        string $name,
+        string $command,
+        int $priority,
+        ?string $user = null,
+        ?string $directory = null,
+        bool $stopAsGroup = false,
+    ): string {
         $lines = [
             "[program:{$name}]",
             "command={$command}",
@@ -62,6 +100,15 @@ class Supervisord
 
         if ($user !== null) {
             $lines[] = "user={$user}";
+        }
+
+        if ($directory !== null) {
+            $lines[] = "directory={$directory}";
+        }
+
+        if ($stopAsGroup) {
+            $lines[] = 'stopasgroup=true';
+            $lines[] = 'killasgroup=true';
         }
 
         return implode("\n", [

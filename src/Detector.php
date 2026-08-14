@@ -92,7 +92,10 @@ class Detector
     {
         $deferred = [];
 
-        if ($this->config->has('horizon')) {
+        $processes = $this->config->get('outpost.processes', []);
+
+        if ($this->config->has('horizon')
+            && (! is_array($processes) || ! array_key_exists('horizon', $processes))) {
             $deferred[] = 'horizon';
         }
 

@@ -137,7 +137,21 @@ Outpost inspects your application's own configuration — the same sources `php 
 
 When detection guesses wrong, set `services` in `config/outpost.php` to skip detection entirely, then remove and recreate the instance. Each instance's manifest at `.outpost/<name>/outpost.json` records what was detected, so you can always see exactly what an instance is running and why.
 
-Octane, Horizon, and external Scout drivers are detected but not run inside instances. Outpost records them in the manifest and tells you at creation time — which means Redis-queued jobs will not process inside an instance. Honest limits beat silent ones.
+Octane and external Scout drivers are detected but not run inside instances yet. Horizon is reported as deferred unless you configure it as an application process. Outpost records every deferred capability and configured process in the manifest, so a Redis-backed queue never looks active when no worker is actually running.
+
+### Application Processes
+
+Queue workers, the scheduler, Horizon, and other long-running commands can run with the instance under Supervisor. Publish `config/outpost.php`, then define each command as a shell-free argument list:
+
+```php
+'processes' => [
+    'queue' => ['@php', 'artisan', 'queue:work', '--sleep=1', '--tries=1'],
+    'scheduler' => ['@php', 'artisan', 'schedule:work'],
+    'horizon' => ['@php', 'artisan', 'horizon'],
+],
+```
+
+`@php` resolves to the PHP version Outpost selected from the application's Composer constraint. Processes run from `/app` as the same user as PHP-FPM, send output to `outpost:logs`, and do not start until dependencies, the environment, and migrations are ready. Supervisor restarts them after crashes and normal container restarts. Argument arrays are passed directly without a shell; use one item per argument and do not use shell operators.
 
 ## Day-to-Day
 
@@ -184,6 +198,7 @@ Instances are development sandboxes, not production parity. The database account
 | `path` | `.outpost` | Where instances live, relative to your project. |
 | `php` | `['8.4', '8.5']` | PHP versions in the base image. |
 | `services` | `null` | Set an array to skip service detection. |
+| `processes` | `[]` | Named, shell-free argument lists supervised with the instance. |
 | `database` | `outpost` / `outpost` / `password` | Sandbox database credentials. |
 | `timeout` | `60` | Seconds to wait for an instance to answer HTTP. |
 

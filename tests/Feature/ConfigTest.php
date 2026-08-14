@@ -8,6 +8,7 @@ it('exposes sensible defaults', function () {
         ->and(config('outpost.dns'))->toBe('1.1.1.1')
         ->and(config('outpost.path'))->toBe('.outpost')
         ->and(config('outpost.php'))->toBe(['8.4', '8.5'])
+        ->and(config('outpost.processes'))->toBe([])
         ->and(config('outpost.timeout'))->toBe(60);
 });
 

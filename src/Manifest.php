@@ -19,6 +19,7 @@ class Manifest implements Arrayable
      *
      * @param  list<string>  $services
      * @param  list<string>  $deferred
+     * @param  list<string>  $processes
      */
     public function __construct(
         public readonly string $name,
@@ -28,6 +29,7 @@ class Manifest implements Arrayable
         public readonly string $php,
         public readonly array $services,
         public readonly array $deferred,
+        public readonly array $processes,
         public readonly ?string $database,
         public readonly CarbonImmutable $createdAt,
     ) {}
@@ -71,6 +73,9 @@ class Manifest implements Arrayable
             php: $data['php'],
             services: static::stringList($data, 'services'),
             deferred: static::stringList($data, 'deferred'),
+            processes: array_key_exists('processes', $data)
+                ? static::stringList($data, 'processes')
+                : [],
             database: $data['database'] ?? null,
             createdAt: $createdAt,
         );
@@ -99,6 +104,7 @@ class Manifest implements Arrayable
             'php' => $this->php,
             'services' => $this->services,
             'deferred' => $this->deferred,
+            'processes' => $this->processes,
             'database' => $this->database,
             'created_at' => $this->createdAt->toIso8601String(),
         ];
