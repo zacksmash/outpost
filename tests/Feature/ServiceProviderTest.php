@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Support\ServiceProvider;
 use Zacksmash\Outpost\Detector;
+use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\OutpostServiceProvider;
 
@@ -18,6 +19,10 @@ it('binds the instance store as a singleton rooted at the configured path', func
 
 it('binds the detector as a singleton', function () {
     expect(app(Detector::class))->toBe(app(Detector::class));
+});
+
+it('binds the git manager as a singleton', function () {
+    expect(app(Git::class))->toBe(app(Git::class));
 });
 
 it('publishes the package config', function () {

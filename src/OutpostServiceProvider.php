@@ -20,6 +20,10 @@ class OutpostServiceProvider extends ServiceProvider
             return new Detector($app->make('config'), $app->basePath());
         });
 
+        $this->app->singleton(Git::class, function (Application $app) {
+            return new Git($app->basePath());
+        });
+
         $this->app->singleton(Outposts::class, function (Application $app) {
             $path = $app->make('config')->string('outpost.path');
 
