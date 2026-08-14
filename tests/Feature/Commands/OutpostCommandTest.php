@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
+use Zacksmash\Outpost\ApplicationHttps;
 use Zacksmash\Outpost\Detection;
 use Zacksmash\Outpost\Detector;
 use Zacksmash\Outpost\Doctor;
@@ -276,6 +277,33 @@ it('boots a trusted https instance with its certificate mounted read only', func
         '--volume', $this->root.'/feature-x/runtime/tls:/outpost-tls:ro',
         'ghcr.io/zacksmash/outpost:0.1.0',
     ]);
+});
+
+it('automatically boots an https instance when the primary application uses https', function () {
+    $tls = $this->root.'/tls';
+    File::ensureDirectoryExists($tls);
+    File::put($tls.'/domain', "outpost\n");
+    File::put($tls.'/trusted', "mkcert\n");
+    config([
+        'outpost.https' => 'auto',
+        'outpost.tls.path' => $tls,
+    ]);
+
+    $applicationHttps = Mockery::mock(ApplicationHttps::class);
+    $applicationHttps->shouldReceive('detected')->once()->andReturnTrue();
+    app()->instance(ApplicationHttps::class, $applicationHttps);
+
+    fakeCreation([
+        processPattern('mkcert', '-cert-file').' *' => Process::result('created'),
+    ]);
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->expectsOutputToContain('https://feature-x-laravel.outpost')
+        ->assertSuccessful();
+
+    $manifest = json_decode(File::get($this->root.'/feature-x/outpost.json'), true);
+
+    expect($manifest['url'])->toBe('https://feature-x-laravel.outpost');
 });
 
 it('rejects malformed application process configuration before creating state', function () {

@@ -43,7 +43,7 @@ That's the normal path. On the first run, Outpost inspects the Mac and presents 
 - start the Apple container service;
 - configure its machine-wide publication domain as `outpost` and restart it;
 - register the macOS `.outpost` resolver;
-- prepare trusted HTTPS when `mkcert` is installed; and
+- prepare trusted HTTPS when the primary application uses it and `mkcert` is installed; and
 - pull the exact shared base image.
 
 The resolver command and certificate trust store are protected by macOS, so the operating system may still ask for an administrator password. Outpost shows both operations in the plan first. It updates only Apple container's user-level configuration and Outpost's ignored `.outpost` state; it does not change application source files.
@@ -78,14 +78,14 @@ Run the doctor at any point to inspect the host, live runtime, DNS publication a
 php artisan outpost:doctor
 ```
 
-For trusted local HTTPS, install `mkcert`; the first `outpost` run includes authority setup in its plan. It can also be prepared explicitly:
+For trusted local HTTPS, install `mkcert`. With the default `https => auto`, Outpost mirrors the primary Laravel application's scheme. It first reads the root URL Laravel generates from the current application; when that still says HTTP, Outpost briefly checks the same hostname for a trusted HTTPS listener. That catches secured Herd and Valet sites even when `APP_URL` was not updated. The first `outpost` run includes authority setup in its plan when HTTPS is detected. It can also be prepared explicitly:
 
 ```bash
 brew install mkcert
 php artisan outpost:certify
 ```
 
-`mkcert` may ask for your macOS password while installing its local certificate authority. Each new instance then receives a certificate for its exact hostname—never a wildcard—under `.outpost/<name>/runtime/tls`, and that directory is mounted read-only. The application, Vite, and Mailpit use the same trusted hostname on their respective ports. With the default `https => auto`, a fresh installation falls back to HTTP until this command succeeds; changing the domain invalidates the setup marker automatically. Recreate HTTPS instances made by an older Outpost version so they receive exact-host certificates.
+`mkcert` may ask for your macOS password while installing its local certificate authority. Each secure instance then receives a certificate for its exact hostname—never a wildcard—under `.outpost/<name>/runtime/tls`, and that directory is mounted read-only. The application, Vite, and Mailpit use the same trusted hostname on their respective ports. If automatic detection needs an override, set `OUTPOST_HTTPS=true` to require HTTPS or `OUTPOST_HTTPS=false` to require HTTP. A detected HTTPS app falls back to HTTP until trusted Outpost HTTPS is prepared; changing the domain invalidates the setup marker automatically. Existing instances retain the scheme recorded in their manifest, so recreate one when its scheme should change.
 
 Already publishing under another domain? Set `OUTPOST_DOMAIN` to match it before the first run. Otherwise, the approved setup plan changes Apple container's shared publication domain to `outpost` and restarts the runtime.
 
@@ -231,7 +231,7 @@ Instances are development sandboxes, not production parity. The database account
 | `frontend` | `build` | Front-end workflow; accepts `build`, `vite`, or `none`. |
 | `vite.port` | `5173` | Public per-instance port for the nginx-proxied Vite development server. |
 | `vite.hot_file` | `public/hot` | Laravel Vite hot-file path, relative to the application. |
-| `https` | `auto` | Use a trusted certificate when present; accepts `auto`, `true`, or `false`. |
+| `https` | `auto` | Mirror the primary app's detected local scheme; `true` requires HTTPS and `false` requires HTTP. |
 | `tls.path` | `.outpost/tls` | Project-local HTTPS trust metadata; exact leaf certificates live in each instance's runtime directory. |
 | `services` | `null` | Set an array to skip service detection. |
 | `expose_services` | `true` | Make detected services reachable on the instance hostname and standard ports. |

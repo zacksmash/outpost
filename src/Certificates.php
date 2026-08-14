@@ -19,6 +19,7 @@ class Certificates
         protected readonly Filesystem $files,
         protected readonly Repository $config,
         protected readonly string $basePath,
+        protected readonly ApplicationHttps $applicationHttps,
     ) {}
 
     /**
@@ -30,6 +31,28 @@ class Certificates
     }
 
     /**
+     * Determine whether new instances should prefer HTTPS.
+     */
+    public function wantsHttps(): bool
+    {
+        $mode = $this->config->get('outpost.https', 'auto');
+
+        if ($mode === false) {
+            return false;
+        }
+
+        if ($mode === true) {
+            return true;
+        }
+
+        if ($mode === 'auto') {
+            return $this->applicationHttps->detected();
+        }
+
+        throw new RuntimeException('The [outpost.https] value must be true, false, or auto.');
+    }
+
+    /**
      * Determine whether new instances should use HTTPS.
      */
     public function enabled(): bool
@@ -37,25 +60,21 @@ class Certificates
         $this->validateDomain($this->configuredDomain());
         $mode = $this->config->get('outpost.https', 'auto');
 
-        if ($mode === false) {
+        if (! $this->wantsHttps()) {
             return false;
         }
 
-        if ($mode === 'auto') {
-            return $this->exists();
+        if ($this->exists()) {
+            return true;
         }
 
-        if ($mode !== true) {
-            throw new RuntimeException('The [outpost.https] value must be true, false, or auto.');
-        }
-
-        if (! $this->exists()) {
+        if ($mode === true) {
             throw new RuntimeException(
                 'HTTPS is enabled, but trusted HTTPS has not been prepared. Run [php artisan outpost:certify].',
             );
         }
 
-        return true;
+        return false;
     }
 
     /**

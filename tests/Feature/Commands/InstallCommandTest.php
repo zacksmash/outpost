@@ -6,6 +6,7 @@ use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
+use Zacksmash\Outpost\ApplicationHttps;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\DoctorCheck;
 use Zacksmash\Outpost\Runtime;
@@ -21,6 +22,10 @@ beforeEach(function () {
         'outpost.https' => 'auto',
         'outpost.tls.path' => $this->root.'/tls',
     ]);
+
+    $this->applicationHttps = Mockery::mock(ApplicationHttps::class);
+    $this->applicationHttps->shouldReceive('detected')->byDefault()->andReturnTrue();
+    app()->instance(ApplicationHttps::class, $this->applicationHttps);
 });
 
 afterEach(function () {
@@ -300,6 +305,23 @@ it('offers to prepare trusted https when setup is missing', function () {
         ->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === ['mkcert', '-install']);
+});
+
+it('does not prepare trusted https in auto mode when the primary application uses http', function () {
+    $doctor = Mockery::mock(Doctor::class);
+    $doctor->shouldReceive('inspect')->once()->andReturn([
+        DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS is not prepared.', 'Prepare it.'),
+    ]);
+    $this->applicationHttps->shouldReceive('detected')->once()->andReturnFalse();
+
+    app()->instance(Doctor::class, $doctor);
+    Process::fake();
+
+    $this->artisan('outpost:install')
+        ->doesntExpectOutputToContain('Prepare trusted local HTTPS')
+        ->assertSuccessful();
+
+    Process::assertNothingRan();
 });
 
 it('keeps https optional in auto mode when mkcert is not installed', function () {

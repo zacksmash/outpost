@@ -20,7 +20,7 @@ Use this skill when a Laravel application needs to integrate `zacksmash/outpost`
 
 ### 1. Confirm the environment
 
-- macOS 26 or newer on Apple silicon with Apple `container` 1.2.x installed (`brew install container`)
+- macOS 26 or newer on Apple silicon with Apple `container` 1.2.x installed from its signed release package
 - a Laravel application inside a git repository with at least one commit
 - `mkcert` (`brew install mkcert`) when trusted local HTTPS is wanted
 
@@ -42,9 +42,9 @@ php artisan outpost:doctor                 # read-only verification of the compl
 php artisan outpost:certify                # prepare the trusted local certificate authority
 ```
 
-The first interactive `outpost` run invokes setup automatically when needed. One consolidated confirmation can start Apple container, update `~/.config/container/config.toml` without replacing unrelated settings, restart the runtime, invoke Apple's administrator-protected resolver registration, prepare trusted HTTPS, and pull the image. Pass `--local` to `outpost:install` to build the configured image instead. Forced or non-interactive setup requires `--https` before Outpost may modify the trust store, and DNS registration must already exist unless setup is running in an attached administrator terminal. Application source files are never changed.
+The first interactive `outpost` run invokes setup automatically when needed. One consolidated confirmation can start Apple container, update `~/.config/container/config.toml` without replacing unrelated settings, restart the runtime, invoke Apple's administrator-protected resolver registration, prepare trusted HTTPS when the primary application uses it, and pull the image. Pass `--local` to `outpost:install` to build the configured image instead. Forced or non-interactive setup requires `--https` before Outpost may modify the trust store, and DNS registration must already exist unless setup is running in an attached administrator terminal. Application source files are never changed.
 
-`outpost:certify` invokes `mkcert -install`, which may ask for the macOS password, and records that the configured domain is prepared. Each new HTTPS instance receives a leaf certificate for its exact hostname under `.outpost/<name>/runtime/tls`; no wildcard matching is used. With `https => auto`, new instances use trusted HTTPS when setup matches the configured domain and otherwise fall back to HTTP. Recreate instances made by an older version to replace their shared wildcard certificate.
+`outpost:certify` invokes `mkcert -install`, which may ask for the macOS password, and records that the configured domain is prepared. Each new HTTPS instance receives a leaf certificate for its exact hostname under `.outpost/<name>/runtime/tls`; no wildcard matching is used. With `https => auto`, Outpost mirrors the root URL Laravel generates and briefly probes the same hostname for a trusted HTTPS listener when that URL still uses HTTP. This catches secured Herd and Valet sites with a stale `APP_URL`. Set `OUTPOST_HTTPS=true` or `false` to override detection. A detected HTTPS app falls back to HTTP until certification is ready, and existing instances keep the scheme in their manifest until recreated.
 
 If the machine should keep another publication domain, set `OUTPOST_DOMAIN` before setup. Otherwise, an approved setup plan changes the shared domain to `outpost` and restarts Apple container. Non-interactive `outpost` creation never attempts this setup implicitly; run `php artisan outpost:install --force` first, adding `--https` only when trust-store changes are explicitly allowed.
 
@@ -101,7 +101,7 @@ Configure long-running Laravel processes as shell-free argument lists. `@php` re
 ],
 ```
 
-Key `config/outpost.php` values: `domain` (default `outpost`), `image` (an exact versioned GHCR reference), `dns`, `path`, `resources` (4 CPUs and `2G` memory by default), `php` (versions baked into the image — rebuild locally after changing), `server` (`auto`, `fpm`, or `octane`), `frontend` (`build`, `vite`, or `none`), `vite`, `https` (`auto`, `true`, or `false`), `tls.path`, `services`, `expose_services`, `processes`, `database` (sandbox credentials baked into the image — rebuild locally after changing; letters, numbers, dots, dashes, underscores only), `lifecycle_timeout` (30 seconds by default for bounded Apple container lifecycle operations), `timeout`.
+Key `config/outpost.php` values: `domain` (default `outpost`), `image` (an exact versioned GHCR reference), `dns`, `path`, `resources` (4 CPUs and `2G` memory by default), `php` (versions baked into the image — rebuild locally after changing), `server` (`auto`, `fpm`, or `octane`), `frontend` (`build`, `vite`, or `none`), `vite`, `https` (`auto` mirrors the primary app, `true` requires HTTPS, `false` requires HTTP), `tls.path`, `services`, `expose_services`, `processes`, `database` (sandbox credentials baked into the image — rebuild locally after changing; letters, numbers, dots, dashes, underscores only), `lifecycle_timeout` (30 seconds by default for bounded Apple container lifecycle operations), `timeout`.
 
 ## Rules, References, and Templates
 

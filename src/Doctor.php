@@ -122,9 +122,18 @@ class Doctor
             }
 
             if ($check->name === self::TLS_CHECK
-                && $check->status !== DoctorCheck::PASS
-                && ($mode = $this->config->get('outpost.https', 'auto')) !== false) {
-                return $mode !== 'auto' || $this->certificates->available();
+                && $check->status !== DoctorCheck::PASS) {
+                $mode = $this->config->get('outpost.https', 'auto');
+
+                if ($mode === false) {
+                    return false;
+                }
+
+                if ($mode === 'auto') {
+                    return $this->certificates->wantsHttps() && $this->certificates->available();
+                }
+
+                return true;
             }
         }
 
@@ -298,6 +307,21 @@ class Doctor
         $mode = $this->config->get('outpost.https', 'auto');
 
         try {
+            $wanted = $this->certificates->wantsHttps();
+
+            if (! $wanted) {
+                return $mode === false
+                    ? DoctorCheck::warning(
+                        self::TLS_CHECK,
+                        'HTTPS is disabled; new instances use HTTP.',
+                        'Set OUTPOST_HTTPS=auto to mirror the primary application, or true to require HTTPS.',
+                    )
+                    : DoctorCheck::pass(
+                        self::TLS_CHECK,
+                        'The primary application uses HTTP; automatic mode creates HTTP instances.',
+                    );
+            }
+
             $enabled = $this->certificates->enabled();
         } catch (RuntimeException $e) {
             return DoctorCheck::failure(
@@ -313,12 +337,10 @@ class Doctor
 
         return DoctorCheck::warning(
             self::TLS_CHECK,
-            $mode === false
-                ? 'HTTPS is disabled; new instances use HTTP.'
-                : 'No trusted certificate exists yet; new instances fall back to HTTP.',
-            $mode === false
-                ? 'Set OUTPOST_HTTPS=auto, then run: php artisan outpost:certify'
-                : 'Run: brew install mkcert && php artisan outpost:certify',
+            $mode === 'auto'
+                ? 'The primary application uses HTTPS, but trusted Outpost HTTPS is not prepared; new instances fall back to HTTP.'
+                : 'No trusted certificate exists yet; new instances cannot use HTTPS.',
+            'Run: brew install mkcert && php artisan outpost:certify',
         );
     }
 }

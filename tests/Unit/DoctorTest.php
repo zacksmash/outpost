@@ -6,6 +6,7 @@ use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
+use Zacksmash\Outpost\ApplicationHttps;
 use Zacksmash\Outpost\Certificates;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\DoctorCheck;
@@ -26,7 +27,14 @@ beforeEach(function () {
     File::put($this->root.'/.outpost/tls/key.pem', 'key');
     File::put($this->root.'/.outpost/tls/domain', "outpost\n");
 
-    $certificates = new Certificates(new Filesystem, app('config'), $this->root);
+    $this->applicationHttps = Mockery::mock(ApplicationHttps::class);
+    $this->applicationHttps->shouldReceive('detected')->byDefault()->andReturnTrue();
+    $certificates = new Certificates(
+        new Filesystem,
+        app('config'),
+        $this->root,
+        $this->applicationHttps,
+    );
 
     $this->doctor = new Doctor(
         new Host,
@@ -111,6 +119,28 @@ it('warns when auto https has not been certified yet', function () {
     expect($checks[Doctor::TLS_CHECK]->status)->toBe(DoctorCheck::WARNING)
         ->and($checks[Doctor::TLS_CHECK]->detail)->toContain('fall back to HTTP')
         ->and($checks[Doctor::TLS_CHECK]->remedy)->toContain('outpost:certify');
+});
+
+it('passes the local https check when automatic mode detects an http primary application', function () {
+    File::deleteDirectory($this->root.'/.outpost/tls');
+    $this->applicationHttps->shouldReceive('detected')->once()->andReturnFalse();
+    fakeHealthyDoctor();
+
+    $checks = collect($this->doctor->inspect())->keyBy('name');
+
+    expect($checks[Doctor::TLS_CHECK]->status)->toBe(DoctorCheck::PASS)
+        ->and($checks[Doctor::TLS_CHECK]->detail)->toContain('primary application uses HTTP');
+});
+
+it('does not request https setup when automatic mode detects an http primary application', function () {
+    $this->applicationHttps->shouldReceive('detected')->once()->andReturnFalse();
+    Process::fake([
+        processPattern('mkcert', '-version') => Process::result('v1.4.4'),
+    ]);
+
+    expect($this->doctor->requiresSetup([
+        DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS falls back to HTTP.'),
+    ]))->toBeFalse();
 });
 
 it('fails when required trusted https setup is missing', function () {

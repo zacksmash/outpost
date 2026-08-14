@@ -273,15 +273,19 @@ class InstallCommand extends Command
      */
     protected function needsHttps(array $checks, Certificates $certificates): bool
     {
-        $mode = config('outpost.https');
+        if ($this->option('https')) {
+            return ! $certificates->exists();
+        }
 
-        if ($mode === false) {
+        if (! $certificates->wantsHttps()) {
             return false;
         }
 
+        $mode = config('outpost.https');
+
         foreach ($checks as $check) {
             if ($check->name === Doctor::TLS_CHECK && $check->status !== DoctorCheck::PASS) {
-                return $mode !== 'auto' || $this->option('https') || $certificates->available();
+                return $mode !== 'auto' || $certificates->available();
             }
         }
 

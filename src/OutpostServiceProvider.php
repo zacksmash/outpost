@@ -16,11 +16,16 @@ class OutpostServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/outpost.php', 'outpost');
 
+        $this->app->singleton(ApplicationHttps::class, function (Application $app) {
+            return new ApplicationHttps($app->make('url'));
+        });
+
         $this->app->singleton(Certificates::class, function (Application $app) {
             return new Certificates(
                 $app->make('files'),
                 $app->make('config'),
                 $app->basePath(),
+                $app->make(ApplicationHttps::class),
             );
         });
 

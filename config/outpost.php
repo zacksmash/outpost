@@ -130,9 +130,10 @@ return [
     | Local HTTPS
     |--------------------------------------------------------------------------
     |
-    | "auto" uses trusted HTTPS after "outpost:certify" prepares the local
-    | authority. Each instance receives an exact-host certificate. Set true
-    | to require HTTPS or false to always use HTTP.
+    | "auto" mirrors the primary application's local URL scheme, including
+    | trusted HTTPS listeners that sit in front of an APP_URL using http.
+    | Each secure instance receives an exact-host certificate. Set true to
+    | require HTTPS or false to always use HTTP.
     |
     */
 
