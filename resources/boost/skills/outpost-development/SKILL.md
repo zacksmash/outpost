@@ -2,7 +2,8 @@
 name: outpost-development
 description: >
   Install, configure, and operate the Outpost package in Laravel applications
-  to run branches as isolated container instances on Apple's container runtime.
+  to run branches as isolated container instances on Apple's container runtime,
+  including safe, non-destructive workflows for coding agents.
 license: MIT
 metadata:
   author: Zack Warren
@@ -14,7 +15,7 @@ Use this skill when a Laravel application needs to integrate `zacksmash/outpost`
 
 ## Primary Goal
 
-- apply the `zacksmash/outpost` package's public API in the smallest correct way
+- apply the `zacksmash/outpost` package's public API in the smallest correct and non-destructive way
 
 ## Workflow
 
@@ -81,7 +82,34 @@ php artisan outpost:remove billing --forget --force # local cleanup when Apple's
 - `outpost:list --json` is the stable machine-readable inventory; `outpost:exec <name> -- <command...>` passes argument tokens without a shell, streams output, and preserves the inner exit code
 - `outpost:remove` confirms before destroying; `--force` skips every confirmation and keeps the branch. Quick lifecycle calls stop after `lifecycle_timeout` seconds (30 by default); `--forget` deliberately removes only the local worktree and manifest when Apple's VM cannot be reached, leaving an orphaned container and printing its cleanup command.
 
-### 5. Configure when detection needs help
+### 5. Use an outpost safely as an agent
+
+Treat an outpost as a disposable runtime attached to a real Git worktree. Runtime state and sandbox data are disposable; source changes are not safely preserved until they are committed on the outpost's branch.
+
+Use this default lifecycle:
+
+```bash
+php artisan outpost:doctor
+php artisan outpost agent/task-482 --name=agent-task-482 --no-interaction
+php artisan outpost:info agent-task-482 --json
+php artisan outpost:exec agent-task-482 -- php artisan test
+git -C .outpost/agent-task-482/app status --short
+```
+
+- edit only `.outpost/<name>/app` when the task assigns an outpost; it is the dedicated branch's read-write host worktree mounted at `/app` in the instance
+- use `outpost:list --json` and `outpost:info <name> --json` for discovery instead of parsing human-readable tables or guessing URLs and credentials
+- prefer `outpost:exec <name> -- <command...>` for non-interactive work; it passes argument tokens without a shell, but the invoked command can still be destructive
+- use `outpost:shell` only when the task genuinely requires an interactive terminal
+- do not pass `--mount-path-repos` unless the user explicitly authorizes the listed source directories; read-only prevents modification, not disclosure
+- recommend `expose_services => false` for agent-heavy or untrusted-review workflows unless host access to backing services is required
+- inspect `git -C .outpost/<name>/app status --short` before cleanup; when it is not clean, preserve the work in a commit only when authorized, or leave the outpost stopped and report it
+- prefer `outpost:stop <name>` whenever cleanup safety is uncertain; it preserves the worktree and container data
+- run `outpost:remove <name> --force` only after confirming the worktree is clean; `--force` keeps the branch but destroys uncommitted work with the worktree and data
+- reserve `--forget` for an unreachable Apple container VM; it deletes local Outpost state while deliberately leaving an orphaned container to clean up later
+
+The instance protects the rest of the host, but it is not an adversarial-code sandbox. The worktree is intentionally writable, dependency scripts execute inside the instance, outbound network access is available, and `outpost:exec` uses the container's default execution user rather than a restricted agent identity. The primary `.env` is never copied, but source code and any explicitly mounted path repositories remain readable. Never provide production secrets or sensitive mounts to code that is not trusted.
+
+### 6. Configure when detection needs help
 
 Services are detected from the app's own configuration (database driver, redis usage across cache/session/queue/broadcast, smtp mailer). When detection guesses wrong, set `services` in `config/outpost.php` (e.g. `['mysql', 'redis']`) to skip detection, then remove and recreate the instance. The manifest at `.outpost/<name>/outpost.json` records what was detected.
 
@@ -118,6 +146,7 @@ Read before executing:
 - A reviewer needs to try a GitHub pull request without disturbing their own branch: `php artisan outpost --pr=482 --name=pr-482 --open`, then `php artisan outpost:remove pr-482` when done.
 - An agent needs database coordinates without parsing terminal tables: `php artisan outpost:info billing --json`, then read `endpoints.mysql.url`, `endpoints.pgsql.url`, or `endpoints.redis.url` when present.
 - An agent needs to run a test without an interactive shell: `php artisan outpost:exec billing -- php artisan test --filter=Feature`, then use the command's unchanged exit code.
+- An agent has finished changing an outpost: inspect `git -C .outpost/<name>/app status --short`; commit only with authorization, stop the instance when work remains uncommitted, and remove it only after the worktree is clean.
 - An app on SQLite needs no services: the instance boots with nginx and PHP-FPM only, and Outpost creates `database/database.sqlite` automatically.
 - A Redis queue needs a worker: add a `queue` process using `['@php', 'artisan', 'queue:work', '--sleep=1']`, recreate the instance, and inspect its output with `php artisan outpost:logs <name> --follow`.
 - An Octane app should use the default `server => auto` and `octane.server => auto`; Outpost then mirrors `OCTANE_SERVER`. Choose `fpm` only when testing the traditional request lifecycle. Use `frontend => vite` when edits need browser HMR and recreate the instance after changing any mode.
@@ -127,6 +156,11 @@ Read before executing:
 
 - do not run instances for production parity; instances are development sandboxes with permissive sandbox credentials
 - do not manually change runtime or DNS state before trying interactive `php artisan outpost`; its one-time setup plan handles supported fixes, while `outpost:doctor` remains the read-only diagnostic path
+- do not edit the primary checkout when the task assigns an outpost worktree
+- do not remove an outpost with a dirty worktree; `--force` skips confirmation but does not preserve uncommitted changes
+- do not treat shell-free execution as a command allowlist or the instance as a sandbox for adversarial code
+- do not use `outpost:shell` when `outpost:exec` can express the command directly
+- do not mount external path repositories for an agent unless the user has reviewed and authorized the readable source paths
 - do not copy or commit `.outpost/<name>/runtime/tls/key.pem`; Outpost keeps each exact-host leaf key inside the ignored `.outpost` directory and mounts it read-only
 - do not assume direct backing-service access is network-isolated from every other local container; set `expose_services` to `false` when loopback-only services are required
 - do not add `octane` or `vite` entries to `processes` when Outpost manages those modes; those names are reserved and their commands are generated automatically
