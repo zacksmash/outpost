@@ -11,6 +11,7 @@ use Illuminate\Support\Str;
 use RuntimeException;
 use Zacksmash\Outpost\Certificates;
 use Zacksmash\Outpost\Detector;
+use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Host;
 use Zacksmash\Outpost\Manifest;
@@ -57,6 +58,7 @@ class OutpostCommand extends Command
     public function handle(
         Git $git,
         Host $host,
+        Doctor $doctor,
         Runtime $runtime,
         Certificates $certificates,
         Detector $detector,
@@ -99,6 +101,23 @@ class OutpostCommand extends Command
                 error('The --remote option must name a configured git remote.');
 
                 return self::FAILURE;
+            }
+
+            $checks = $doctor->inspect();
+
+            if ($doctor->requiresSetup($checks)) {
+                if (! $this->input->isInteractive()) {
+                    error('Outpost needs one-time machine setup before it can create an instance.');
+                    note('Run [php artisan outpost:install --force]. Add [--https] when the non-interactive run may modify the system trust store.');
+
+                    return self::FAILURE;
+                }
+
+                note('This Mac needs one-time Outpost setup before the first instance can be created.');
+
+                if ($this->call('outpost:install') !== self::SUCCESS) {
+                    return self::FAILURE;
+                }
             }
 
             $published = $runtime->publicationDomain();

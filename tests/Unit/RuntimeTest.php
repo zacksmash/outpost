@@ -50,6 +50,26 @@ it('starts the container system', function () {
     ] && $process->timeout === 600);
 });
 
+it('stops the container system for configuration changes', function () {
+    Process::fake();
+
+    $this->runtime->stopSystem();
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'system', 'stop',
+    ] && $process->timeout === 30);
+});
+
+it('registers a local dns domain with administrator privileges', function () {
+    Process::fake();
+
+    $this->runtime->registerDomain('outpost');
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'sudo', 'container', 'system', 'dns', 'create', 'outpost',
+    ]);
+});
+
 it('rejects a malformed container system status', function () {
     Process::fake([
         processPattern('container', 'system', 'status', '--format', 'json') => Process::result('not-json'),

@@ -67,6 +67,17 @@ class Runtime
     }
 
     /**
+     * Stop the container system before changing machine-wide configuration.
+     */
+    public function stopSystem(): void
+    {
+        $this->runOrFail(
+            ['container', 'system', 'stop'],
+            'Unable to stop the Apple container system',
+        );
+    }
+
+    /**
      * Get the domain the DNS daemon publishes container hostnames under.
      *
      * Read the running service's properties instead of config.toml because
@@ -103,6 +114,29 @@ class Runtime
         $domains = array_slice(array_map('trim', explode("\n", trim($result->output()))), 1);
 
         return in_array($domain, $domains, true);
+    }
+
+    /**
+     * Register a machine-wide local DNS resolver with administrator privileges.
+     */
+    public function registerDomain(string $domain): void
+    {
+        if (preg_match(
+            '/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/Di',
+            $domain,
+        ) !== 1) {
+            throw new RuntimeException('The Outpost domain is not valid for DNS registration.');
+        }
+
+        $result = Process::forever()
+            ->tty(SymfonyProcess::isTtySupported())
+            ->run(['sudo', 'container', 'system', 'dns', 'create', $domain]);
+
+        if (! $result->successful()) {
+            throw new RuntimeException(
+                "Unable to register the [{$domain}] DNS resolver: ".trim($result->errorOutput() ?: $result->output()),
+            );
+        }
     }
 
     /**

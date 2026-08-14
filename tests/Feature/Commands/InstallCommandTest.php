@@ -9,6 +9,7 @@ use Illuminate\Support\Str;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\DoctorCheck;
 use Zacksmash\Outpost\Runtime;
+use Zacksmash\Outpost\RuntimeConfiguration;
 
 beforeEach(function () {
     Process::preventStrayProcesses();
@@ -59,7 +60,7 @@ it('offers to start a stopped runtime and verifies the result', function () {
     app()->instance(Runtime::class, $runtime);
 
     $this->artisan('outpost:install')
-        ->expectsConfirmation('Start the Apple container system now?', 'yes')
+        ->expectsConfirmation('Prepare Outpost now?', 'yes')
         ->expectsOutputToContain('Outpost is ready')
         ->assertSuccessful();
 });
@@ -77,7 +78,7 @@ it('leaves a stopped runtime untouched when the action is declined', function ()
     app()->instance(Runtime::class, $runtime);
 
     $this->artisan('outpost:install')
-        ->expectsConfirmation('Start the Apple container system now?', 'no')
+        ->expectsConfirmation('Prepare Outpost now?', 'no')
         ->expectsOutputToContain('Run: container system start')
         ->assertFailed();
 });
@@ -97,7 +98,7 @@ it('offers to pull a missing base image and verifies the result', function () {
     ]);
 
     $this->artisan('outpost:install')
-        ->expectsConfirmation('Pull the shared [ghcr.io/zacksmash/outpost:0.1.0] image now?', 'yes')
+        ->expectsConfirmation('Prepare Outpost now?', 'yes')
         ->expectsOutputToContain('Outpost is ready')
         ->assertSuccessful();
 
@@ -119,32 +120,133 @@ it('builds the base image locally when requested', function () {
     ]);
 
     $this->artisan('outpost:install', ['--local' => true])
-        ->expectsConfirmation('Build the shared [ghcr.io/zacksmash/outpost:0.1.0] image locally now?', 'yes')
+        ->expectsConfirmation('Prepare Outpost now?', 'yes')
         ->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'build');
 });
 
-it('prints manual remedies without applying privileged changes', function () {
+it('registers the local dns resolver after one setup confirmation', function () {
+    $doctor = Mockery::mock(Doctor::class);
+    $doctor->shouldReceive('inspect')->twice()->andReturn(
+        [DoctorCheck::failure(
+            Doctor::DNS_RESOLVER_CHECK,
+            'The [outpost] resolver is not registered.',
+            'Run: sudo container system dns create outpost',
+        )],
+        [DoctorCheck::pass(Doctor::DNS_RESOLVER_CHECK, 'The [outpost] resolver is registered.')],
+    );
+
+    $runtime = Mockery::mock(Runtime::class);
+    $runtime->shouldReceive('registerDomain')->once()->with('outpost');
+
+    app()->instance(Doctor::class, $doctor);
+    app()->instance(Runtime::class, $runtime);
+
+    Process::fake();
+
+    $this->artisan('outpost:install')
+        ->expectsConfirmation('Prepare Outpost now?', 'yes')
+        ->expectsOutputToContain('Outpost is ready')
+        ->assertSuccessful();
+});
+
+it('does not wait for administrator authentication in a non-interactive run', function () {
     $doctor = Mockery::mock(Doctor::class);
     $doctor->shouldReceive('inspect')->once()->andReturn([
         DoctorCheck::failure(
-            'DNS resolver',
+            Doctor::DNS_RESOLVER_CHECK,
             'The [outpost] resolver is not registered.',
             'Run: sudo container system dns create outpost',
         ),
     ]);
 
+    $runtime = Mockery::mock(Runtime::class);
+    $runtime->shouldNotReceive('registerDomain');
+
     app()->instance(Doctor::class, $doctor);
+    app()->instance(Runtime::class, $runtime);
+
+    $this->artisan('outpost:install', [
+        '--force' => true,
+        '--no-interaction' => true,
+    ])
+        ->expectsOutputToContain('sudo container system dns create outpost')
+        ->assertFailed();
+});
+
+it('configures the publication domain and restarts the runtime', function () {
+    $doctor = Mockery::mock(Doctor::class);
+    $doctor->shouldReceive('inspect')->twice()->andReturn(
+        [DoctorCheck::failure(
+            Doctor::PUBLICATION_DOMAIN_CHECK,
+            'The running system publishes [test].',
+            'Configure outpost.',
+        )],
+        [DoctorCheck::pass(Doctor::PUBLICATION_DOMAIN_CHECK, 'The live [outpost] domain matches.')],
+    );
+
+    $runtime = Mockery::mock(Runtime::class);
+    $runtime->shouldReceive('stopSystem')->once();
+    $runtime->shouldReceive('startSystem')->once();
+
+    $configuration = Mockery::mock(RuntimeConfiguration::class);
+    $configuration->shouldReceive('setDomain')->once()->with('outpost');
+
+    app()->instance(Doctor::class, $doctor);
+    app()->instance(Runtime::class, $runtime);
+    app()->instance(RuntimeConfiguration::class, $configuration);
+
+    $this->artisan('outpost:install')
+        ->expectsConfirmation('Prepare Outpost now?', 'yes')
+        ->expectsOutputToContain('Outpost is ready')
+        ->assertSuccessful();
+});
+
+it('uses one confirmation for networking https and the shared image', function () {
+    $doctor = Mockery::mock(Doctor::class);
+    $doctor->shouldReceive('inspect')->times(3)->andReturn(
+        [
+            DoctorCheck::failure(Doctor::PUBLICATION_DOMAIN_CHECK, 'Publishes [test].', 'Configure it.'),
+            DoctorCheck::failure(Doctor::DNS_RESOLVER_CHECK, 'Resolver missing.', 'Register it.'),
+            DoctorCheck::failure(Doctor::BASE_IMAGE_CHECK, 'Image missing.', 'Pull it.'),
+            DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS not prepared.', 'Prepare it.'),
+        ],
+        [
+            DoctorCheck::pass(Doctor::PUBLICATION_DOMAIN_CHECK, 'Publishes [outpost].'),
+            DoctorCheck::failure(Doctor::DNS_RESOLVER_CHECK, 'Resolver missing.', 'Register it.'),
+            DoctorCheck::failure(Doctor::BASE_IMAGE_CHECK, 'Image missing.', 'Pull it.'),
+            DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS not prepared.', 'Prepare it.'),
+        ],
+        [
+            DoctorCheck::pass(Doctor::PUBLICATION_DOMAIN_CHECK, 'Publishes [outpost].'),
+            DoctorCheck::pass(Doctor::DNS_RESOLVER_CHECK, 'Resolver registered.'),
+            DoctorCheck::pass(Doctor::BASE_IMAGE_CHECK, 'Image available.'),
+            DoctorCheck::pass(Doctor::TLS_CHECK, 'HTTPS ready.'),
+        ],
+    );
+
+    $runtime = Mockery::mock(Runtime::class);
+    $runtime->shouldReceive('stopSystem')->once();
+    $runtime->shouldReceive('startSystem')->once();
+    $runtime->shouldReceive('registerDomain')->once()->with('outpost');
+    $runtime->shouldReceive('pull')->once()->with('ghcr.io/zacksmash/outpost:0.1.0', Mockery::type('callable'));
+
+    $configuration = Mockery::mock(RuntimeConfiguration::class);
+    $configuration->shouldReceive('setDomain')->once()->with('outpost');
+
+    app()->instance(Doctor::class, $doctor);
+    app()->instance(Runtime::class, $runtime);
+    app()->instance(RuntimeConfiguration::class, $configuration);
 
     Process::fake();
 
     $this->artisan('outpost:install')
-        ->expectsOutputToContain('sudo container system dns create outpost')
-        ->expectsOutputToContain('Run [php artisan outpost:install] again')
-        ->assertFailed();
+        ->expectsConfirmation('Prepare Outpost now?', 'yes')
+        ->expectsOutputToContain('Outpost is ready')
+        ->assertSuccessful();
 
-    Process::assertNothingRan();
+    Process::assertRan(fn (PendingProcess $process) => $process->command === ['mkcert', '-install']);
 });
 
 it('does not build an image while the runtime contract is blocked', function () {
@@ -193,11 +295,38 @@ it('offers to prepare trusted https when setup is missing', function () {
     Process::fake();
 
     $this->artisan('outpost:install')
-        ->expectsConfirmation('Prepare trusted local HTTPS now?', 'yes')
+        ->expectsConfirmation('Prepare Outpost now?', 'yes')
         ->expectsOutputToContain('Outpost is ready')
         ->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === ['mkcert', '-install']);
+});
+
+it('keeps https optional in auto mode when mkcert is not installed', function () {
+    $doctor = Mockery::mock(Doctor::class);
+    $doctor->shouldReceive('inspect')->twice()->andReturn(
+        [
+            DoctorCheck::failure(Doctor::BASE_IMAGE_CHECK, 'Image missing.', 'Pull it.'),
+            DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS not prepared.', 'Install mkcert.'),
+        ],
+        [
+            DoctorCheck::pass(Doctor::BASE_IMAGE_CHECK, 'Image available.'),
+            DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS not prepared.', 'Install mkcert.'),
+        ],
+    );
+
+    app()->instance(Doctor::class, $doctor);
+
+    Process::fake([
+        processPattern('mkcert', '-version') => Process::result('', 'not found', 127),
+        processPattern('container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.1.0') => Process::result('pulled'),
+    ]);
+
+    $this->artisan('outpost:install')
+        ->expectsConfirmation('Prepare Outpost now?', 'yes')
+        ->assertSuccessful();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => $process->command === ['mkcert', '-install']);
 });
 
 it('does not modify the trust store during forced setup unless https is explicit', function () {

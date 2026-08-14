@@ -16,6 +16,10 @@ class Doctor
 
     public const string RUNTIME_CHECK = 'Runtime';
 
+    public const string PUBLICATION_DOMAIN_CHECK = 'Publication domain';
+
+    public const string DNS_RESOLVER_CHECK = 'DNS resolver';
+
     public const string BASE_IMAGE_CHECK = 'Base image';
 
     public const string TLS_CHECK = 'Local HTTPS';
@@ -97,6 +101,37 @@ class Doctor
     }
 
     /**
+     * Determine whether instance creation should offer one-time machine setup.
+     *
+     * @param  list<DoctorCheck>  $checks
+     */
+    public function requiresSetup(array $checks): bool
+    {
+        $machineChecks = [
+            self::PLATFORM_CHECK,
+            self::RUNTIME_VERSION_CHECK,
+            self::RUNTIME_CHECK,
+            self::PUBLICATION_DOMAIN_CHECK,
+            self::DNS_RESOLVER_CHECK,
+            self::BASE_IMAGE_CHECK,
+        ];
+
+        foreach ($checks as $check) {
+            if ($check->status === DoctorCheck::FAIL && in_array($check->name, $machineChecks, true)) {
+                return true;
+            }
+
+            if ($check->name === self::TLS_CHECK
+                && $check->status !== DoctorCheck::PASS
+                && ($mode = $this->config->get('outpost.https', 'auto')) !== false) {
+                return $mode !== 'auto' || $this->certificates->available();
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Check the supported host platform.
      */
     protected function platform(): DoctorCheck
@@ -171,25 +206,25 @@ class Doctor
 
             if ($published === null) {
                 $checks[] = DoctorCheck::failure(
-                    'Publication domain',
+                    self::PUBLICATION_DOMAIN_CHECK,
                     'The running container system has no DNS publication domain.',
                     "Set [dns] domain = \"{$domain}\" in ~/.config/container/config.toml, then restart the runtime.",
                 );
             } elseif ($published !== $domain) {
                 $checks[] = DoctorCheck::failure(
-                    'Publication domain',
+                    self::PUBLICATION_DOMAIN_CHECK,
                     "Outpost uses [{$domain}], but the running container system publishes [{$published}].",
                     "Set OUTPOST_DOMAIN={$published}, or change config.toml to [{$domain}] and restart the runtime.",
                 );
             } else {
                 $checks[] = DoctorCheck::pass(
-                    'Publication domain',
+                    self::PUBLICATION_DOMAIN_CHECK,
                     "The live [{$published}] domain matches Outpost configuration.",
                 );
             }
         } catch (RuntimeException $e) {
             $checks[] = DoctorCheck::failure(
-                'Publication domain',
+                self::PUBLICATION_DOMAIN_CHECK,
                 $e->getMessage(),
                 'Restart the runtime, then run Outpost doctor again.',
             );
@@ -197,15 +232,15 @@ class Doctor
 
         try {
             $checks[] = $this->runtime->domainRegistered($domain)
-                ? DoctorCheck::pass('DNS resolver', "The [{$domain}] resolver is registered.")
+                ? DoctorCheck::pass(self::DNS_RESOLVER_CHECK, "The [{$domain}] resolver is registered.")
                 : DoctorCheck::failure(
-                    'DNS resolver',
+                    self::DNS_RESOLVER_CHECK,
                     "The [{$domain}] resolver is not registered.",
                     "Run: sudo container system dns create {$domain}",
                 );
         } catch (RuntimeException $e) {
             $checks[] = DoctorCheck::failure(
-                'DNS resolver',
+                self::DNS_RESOLVER_CHECK,
                 $e->getMessage(),
                 "Run: sudo container system dns create {$domain}",
             );

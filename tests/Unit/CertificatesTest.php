@@ -30,6 +30,14 @@ afterEach(function () {
     File::deleteDirectory($this->root);
 });
 
+it('detects whether mkcert is installed', function (bool $successful) {
+    Process::fake([
+        processPattern('mkcert', '-version') => Process::result(exitCode: $successful ? 0 : 127),
+    ]);
+
+    expect($this->certificates->available())->toBe($successful);
+})->with([true, false]);
+
 it('falls back to http in auto mode until trusted https is prepared', function () {
     expect($this->certificates->enabled())->toBeFalse();
 

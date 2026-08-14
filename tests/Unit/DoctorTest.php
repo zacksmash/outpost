@@ -71,6 +71,37 @@ it('passes a healthy supported environment', function () {
         ->and($checks['Base image']->detail)->toContain('[ghcr.io/zacksmash/outpost:0.1.0]');
 });
 
+it('identifies machine setup required before instance creation', function () {
+    Process::fake([
+        processPattern('mkcert', '-version') => Process::result('v1.4.4'),
+    ]);
+
+    expect($this->doctor->requiresSetup([
+        DoctorCheck::failure(Doctor::BASE_IMAGE_CHECK, 'Missing.', 'Pull it.'),
+    ]))->toBeTrue()
+        ->and($this->doctor->requiresSetup([
+            DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS falls back to HTTP.'),
+        ]))->toBeTrue()
+        ->and($this->doctor->requiresSetup([
+            DoctorCheck::warning('Composer lock', 'Dependencies may drift.'),
+        ]))->toBeFalse();
+
+    config(['outpost.https' => false]);
+
+    expect($this->doctor->requiresSetup([
+        DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS is disabled.'),
+    ]))->toBeFalse();
+
+    config(['outpost.https' => 'auto']);
+    Process::fake([
+        processPattern('mkcert', '-version') => Process::result('', 'not found', 127),
+    ]);
+
+    expect($this->doctor->requiresSetup([
+        DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS falls back to HTTP.'),
+    ]))->toBeFalse();
+});
+
 it('warns when auto https has not been certified yet', function () {
     File::deleteDirectory($this->root.'/.outpost/tls');
     fakeHealthyDoctor();

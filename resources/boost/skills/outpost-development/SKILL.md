@@ -34,24 +34,19 @@ php artisan vendor:publish --tag="outpost-config"   # optional; tag "outpost" pu
 ### 3. One-time host setup
 
 ```bash
-php artisan outpost:install                # preferred guided setup; starts runtime and pulls image
-container system start
-# ~/.config/container/config.toml must set the machine's publication domain:
-#   [dns]
-#   domain = "outpost"
-sudo container system dns create outpost   # Outpost prints this command but never runs sudo itself
-container system stop && container system start
+php artisan outpost                        # preferred: offers setup once, then continues to instance creation
+php artisan outpost:install                # optional: prepare the Mac without creating an instance
 php artisan outpost:pull                   # pulls the exact configured version from GHCR
 php artisan outpost:build                  # customized local fallback; first run takes minutes
 php artisan outpost:doctor                 # read-only verification of the complete setup
 php artisan outpost:certify                # prepare the trusted local certificate authority
 ```
 
-The installer offers to start the runtime, pull a missing image, and create trusted HTTPS. Pass `--force` to apply runtime/image actions without prompting, `--https` to explicitly allow trust-store setup in a non-interactive run, or `--local` to build the configured image from package stubs instead of pulling it. It never invokes `sudo` itself, rewrites machine configuration, or changes application source files; it prints exact remedies for those steps instead.
+The first interactive `outpost` run invokes setup automatically when needed. One consolidated confirmation can start Apple container, update `~/.config/container/config.toml` without replacing unrelated settings, restart the runtime, invoke Apple's administrator-protected resolver registration, prepare trusted HTTPS, and pull the image. Pass `--local` to `outpost:install` to build the configured image instead. Forced or non-interactive setup requires `--https` before Outpost may modify the trust store, and DNS registration must already exist unless setup is running in an attached administrator terminal. Application source files are never changed.
 
 `outpost:certify` invokes `mkcert -install`, which may ask for the macOS password, and records that the configured domain is prepared. Each new HTTPS instance receives a leaf certificate for its exact hostname under `.outpost/<name>/runtime/tls`; no wildcard matching is used. With `https => auto`, new instances use trusted HTTPS when setup matches the configured domain and otherwise fall back to HTTP. Recreate instances made by an older version to replace their shared wildcard certificate.
 
-If the machine already publishes under another domain, inspect the live value with `container system property list`, then set `OUTPOST_DOMAIN` to that domain instead of changing machine config. Editing `config.toml` does not affect the running service until it is restarted.
+If the machine should keep another publication domain, set `OUTPOST_DOMAIN` before setup. Otherwise, an approved setup plan changes the shared domain to `outpost` and restarts Apple container. Non-interactive `outpost` creation never attempts this setup implicitly; run `php artisan outpost:install --force` first, adding `--https` only when trust-store changes are explicitly allowed.
 
 The doctor treats Apple `container` 1.2.x as verified. It reports older versions as blocking and newer unverified minors as warnings. It never changes host or runtime state and prints the command or file change for every failed check. If every check passes but one browser reports `ERR_ADDRESS_UNREACHABLE`, enable that browser under System Settings > Privacy & Security > Local Network, quit it fully, and reopen it.
 
@@ -129,7 +124,7 @@ Read before executing:
 ## Anti-patterns
 
 - do not run instances for production parity; instances are development sandboxes with permissive sandbox credentials
-- do not manually change runtime or DNS state before running `php artisan outpost:doctor`; it is read-only and reports the live state
+- do not manually change runtime or DNS state before trying interactive `php artisan outpost`; its one-time setup plan handles supported fixes, while `outpost:doctor` remains the read-only diagnostic path
 - do not copy or commit `.outpost/<name>/runtime/tls/key.pem`; Outpost keeps each exact-host leaf key inside the ignored `.outpost` directory and mounts it read-only
 - do not assume direct backing-service access is network-isolated from every other local container; set `expose_services` to `false` when loopback-only services are required
 - do not add `octane` or `vite` entries to `processes` when Outpost manages those modes; those names are reserved and their commands are generated automatically

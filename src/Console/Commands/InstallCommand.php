@@ -6,9 +6,11 @@ namespace Zacksmash\Outpost\Console\Commands;
 
 use Illuminate\Console\Command;
 use RuntimeException;
+use Zacksmash\Outpost\Certificates;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\DoctorCheck;
 use Zacksmash\Outpost\Runtime;
+use Zacksmash\Outpost\RuntimeConfiguration;
 
 use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\error;
@@ -22,7 +24,7 @@ class InstallCommand extends Command
      * The command signature.
      */
     protected $signature = 'outpost:install
-        {--force : Apply safe setup steps without asking}
+        {--force : Apply setup without the consolidated confirmation}
         {--https : Prepare trusted local HTTPS}
         {--local : Build the base image locally instead of pulling it}';
 
@@ -34,52 +36,122 @@ class InstallCommand extends Command
     /**
      * Execute the console command.
      */
-    public function handle(Doctor $doctor, Runtime $runtime): int
-    {
+    public function handle(
+        Certificates $certificates,
+        Doctor $doctor,
+        Runtime $runtime,
+        RuntimeConfiguration $runtimeConfiguration,
+    ): int {
         $checks = $doctor->inspect();
 
-        if ($this->failed($checks, Doctor::RUNTIME_CHECK)
-            && $this->approve('Start the Apple container system now?')) {
-            try {
+        if ($this->hasHardBlocker($checks)) {
+            return $this->finish($checks);
+        }
+
+        $actions = $this->actions($checks, $certificates);
+
+        if ($actions === []) {
+            return $this->finish($checks);
+        }
+
+        note("Outpost will prepare this Mac:\n\n  • ".implode("\n  • ", $actions));
+
+        if (! $this->approveSetup()) {
+            return $this->finish($checks, declined: true);
+        }
+
+        try {
+            if ($this->failed($checks, Doctor::RUNTIME_CHECK)) {
                 spin(fn () => $runtime->startSystem(), 'Starting the Apple container system');
-            } catch (RuntimeException $e) {
-                error($e->getMessage());
 
-                return self::FAILURE;
+                $checks = $doctor->inspect();
             }
 
-            $checks = $doctor->inspect();
-        }
+            if (! $this->hasRuntimeBlocker($checks)
+                && $this->failed($checks, Doctor::PUBLICATION_DOMAIN_CHECK)) {
+                spin(function () use ($runtime, $runtimeConfiguration): void {
+                    $runtime->stopSystem();
+                    $runtimeConfiguration->setDomain(config()->string('outpost.domain'));
+                    $runtime->startSystem();
+                }, 'Configuring the Outpost publication domain');
 
-        if ($this->needsHttps($checks) && $this->approveHttps()) {
-            $exit = $this->call('outpost:certify');
-
-            if ($exit !== self::SUCCESS) {
-                return $exit;
+                $checks = $doctor->inspect();
             }
 
-            $checks = $doctor->inspect();
-        }
+            $refresh = false;
 
-        if ($this->failed($checks, Doctor::BASE_IMAGE_CHECK)
-            && ! $this->hasRuntimeBlocker($checks)
-            && $this->approve($this->imageQuestion())) {
-            $command = $this->option('local') ? 'outpost:build' : 'outpost:pull';
-            $exit = $this->call($command, [
-                '--force' => (bool) $this->option('force'),
-            ]);
+            if (! $this->hasRuntimeBlocker($checks)
+                && $this->failed($checks, Doctor::DNS_RESOLVER_CHECK)) {
+                $domain = config()->string('outpost.domain');
 
-            if ($exit !== self::SUCCESS) {
-                return $exit;
+                if (! $this->input->isInteractive()) {
+                    throw new RuntimeException(
+                        "DNS registration requires an interactive administrator session. Run [sudo container system dns create {$domain}], then rerun setup.",
+                    );
+                }
+
+                note('macOS may ask for your administrator password while registering the local resolver.');
+                $runtime->registerDomain($domain);
+                $refresh = true;
             }
 
-            $checks = $doctor->inspect();
+            if ($this->shouldPrepareHttps() && $this->needsHttps($checks, $certificates)) {
+                $exit = $this->call('outpost:certify');
+
+                if ($exit !== self::SUCCESS) {
+                    return $exit;
+                }
+
+                $refresh = true;
+            }
+
+            if ($this->failed($checks, Doctor::BASE_IMAGE_CHECK)
+                && ! $this->hasRuntimeBlocker($checks)) {
+                $command = $this->option('local') ? 'outpost:build' : 'outpost:pull';
+                $exit = $this->call($command, ['--force' => true]);
+
+                if ($exit !== self::SUCCESS) {
+                    return $exit;
+                }
+
+                $refresh = true;
+            }
+
+            if ($refresh) {
+                $checks = $doctor->inspect();
+            }
+        } catch (RuntimeException $e) {
+            error($e->getMessage());
+
+            return self::FAILURE;
         }
 
+        return $this->finish($checks);
+    }
+
+    /**
+     * Finish setup with either actionable failures or the happy path.
+     *
+     * @param  list<DoctorCheck>  $checks
+     */
+    protected function finish(array $checks, bool $declined = false): int
+    {
         $failures = array_values(array_filter(
             $checks,
             fn (DoctorCheck $check): bool => $check->status === DoctorCheck::FAIL,
         ));
+
+        if ($declined) {
+            error('Outpost setup was not changed.');
+
+            foreach ($failures as $check) {
+                note("{$check->name}: {$check->remedy}");
+            }
+
+            note('Run [php artisan outpost:install] when you are ready.');
+
+            return self::FAILURE;
+        }
 
         if ($failures !== []) {
             error(sprintf('Outpost still needs %d setup step%s.', count($failures), count($failures) === 1 ? '' : 's'));
@@ -88,7 +160,7 @@ class InstallCommand extends Command
                 note("{$check->name}: {$check->remedy}");
             }
 
-            note('Run [php artisan outpost:install] again after applying these steps. Use [php artisan outpost:doctor] for the full diagnostic report.');
+            note('Run [php artisan outpost:install] again when you are ready. Use [php artisan outpost:doctor] for the full diagnostic report.');
 
             return self::FAILURE;
         }
@@ -96,6 +168,46 @@ class InstallCommand extends Command
         outro('Outpost is ready. Create an instance with [php artisan outpost].');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Describe the setup actions covered by one confirmation.
+     *
+     * @param  list<DoctorCheck>  $checks
+     * @return list<string>
+     */
+    protected function actions(array $checks, Certificates $certificates): array
+    {
+        if ($this->hasHardBlocker($checks)) {
+            return [];
+        }
+
+        $domain = config()->string('outpost.domain');
+        $actions = [];
+
+        if ($this->failed($checks, Doctor::RUNTIME_CHECK)) {
+            $actions[] = 'Start the Apple container system';
+            $actions[] = "Finish [{$domain}] networking after it starts";
+            $actions[] = 'Download the shared Outpost image if it is missing';
+        } else {
+            if ($this->failed($checks, Doctor::PUBLICATION_DOMAIN_CHECK)) {
+                $actions[] = "Configure Apple container to publish [{$domain}] and restart it";
+            }
+
+            if ($this->failed($checks, Doctor::DNS_RESOLVER_CHECK)) {
+                $actions[] = "Register the machine-wide [{$domain}] resolver (administrator password required)";
+            }
+
+            if ($this->failed($checks, Doctor::BASE_IMAGE_CHECK)) {
+                $actions[] = $this->imageAction();
+            }
+        }
+
+        if ($this->shouldPrepareHttps() && $this->needsHttps($checks, $certificates)) {
+            $actions[] = 'Prepare trusted local HTTPS';
+        }
+
+        return $actions;
     }
 
     /**
@@ -131,11 +243,27 @@ class InstallCommand extends Command
     }
 
     /**
-     * Confirm a safe setup action unless force was requested.
+     * Determine whether unsupported host or runtime versions block setup.
+     *
+     * @param  list<DoctorCheck>  $checks
      */
-    protected function approve(string $question): bool
+    protected function hasHardBlocker(array $checks): bool
     {
-        return (bool) $this->option('force') || confirm($question, true);
+        foreach ([Doctor::PLATFORM_CHECK, Doctor::RUNTIME_VERSION_CHECK] as $name) {
+            if ($this->failed($checks, $name)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Confirm the complete setup plan unless force was requested.
+     */
+    protected function approveSetup(): bool
+    {
+        return (bool) $this->option('force') || confirm('Prepare Outpost now?', true);
     }
 
     /**
@@ -143,15 +271,17 @@ class InstallCommand extends Command
      *
      * @param  list<DoctorCheck>  $checks
      */
-    protected function needsHttps(array $checks): bool
+    protected function needsHttps(array $checks, Certificates $certificates): bool
     {
-        if (config('outpost.https') === false) {
+        $mode = config('outpost.https');
+
+        if ($mode === false) {
             return false;
         }
 
         foreach ($checks as $check) {
             if ($check->name === Doctor::TLS_CHECK && $check->status !== DoctorCheck::PASS) {
-                return true;
+                return $mode !== 'auto' || $this->option('https') || $certificates->available();
             }
         }
 
@@ -161,7 +291,7 @@ class InstallCommand extends Command
     /**
      * Ask before modifying the system trust store unless explicitly requested.
      */
-    protected function approveHttps(): bool
+    protected function shouldPrepareHttps(): bool
     {
         if ($this->option('https')) {
             return true;
@@ -171,17 +301,17 @@ class InstallCommand extends Command
             return false;
         }
 
-        return confirm('Prepare trusted local HTTPS now?', true);
+        return true;
     }
 
     /**
-     * Get the prompt for acquiring the configured image.
+     * Describe how the configured image will be acquired.
      */
-    protected function imageQuestion(): string
+    protected function imageAction(): string
     {
         $action = $this->option('local') ? 'Build' : 'Pull';
         $suffix = $this->option('local') ? ' locally' : '';
 
-        return "{$action} the shared [".config()->string('outpost.image')."] image{$suffix} now?";
+        return "{$action} the shared [".config()->string('outpost.image')."] image{$suffix}";
     }
 }

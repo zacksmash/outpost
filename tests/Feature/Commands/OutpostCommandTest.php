@@ -10,6 +10,8 @@ use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use Zacksmash\Outpost\Detection;
 use Zacksmash\Outpost\Detector;
+use Zacksmash\Outpost\Doctor;
+use Zacksmash\Outpost\DoctorCheck;
 
 beforeEach(function () {
     Process::preventStrayProcesses();
@@ -20,6 +22,14 @@ beforeEach(function () {
         'outpost.path' => $this->root,
         'outpost.https' => false,
     ]);
+
+    $this->doctor = Mockery::mock(Doctor::class);
+    $this->doctor->shouldReceive('inspect')->byDefault()->andReturn([
+        DoctorCheck::pass(Doctor::RUNTIME_CHECK, 'The Apple container system is running.'),
+        DoctorCheck::pass(Doctor::BASE_IMAGE_CHECK, 'The base image is available.'),
+    ]);
+    $this->doctor->shouldReceive('requiresSetup')->byDefault()->andReturnFalse();
+    app()->instance(Doctor::class, $this->doctor);
 
     File::ensureDirectoryExists($this->root.'/feature-x/app');
     File::put($this->root.'/feature-x/app/.env.example', "APP_NAME=Example\nDB_CONNECTION=sqlite\n");
@@ -48,6 +58,69 @@ function fakeCreation(array $overrides = []): void
         processPattern('dscacheutil', '-flushcache') => Process::result(''),
     ]);
 }
+
+it('prepares missing prerequisites and continues creating the instance', function () {
+    $doctor = Mockery::mock(Doctor::class);
+    $doctor->shouldReceive('inspect')->times(3)->andReturn(
+        [DoctorCheck::failure(Doctor::BASE_IMAGE_CHECK, 'The base image is missing.', 'Pull it.')],
+        [DoctorCheck::failure(Doctor::BASE_IMAGE_CHECK, 'The base image is missing.', 'Pull it.')],
+        [DoctorCheck::pass(Doctor::BASE_IMAGE_CHECK, 'The base image is available.')],
+    );
+    $doctor->shouldReceive('requiresSetup')->once()->andReturnTrue();
+    app()->instance(Doctor::class, $doctor);
+
+    fakeCreation([
+        processPattern('container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.1.0') => Process::result('pulled'),
+    ]);
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->expectsConfirmation('Prepare Outpost now?', 'yes')
+        ->expectsOutputToContain('The instance is ready')
+        ->assertSuccessful();
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.1.0',
+    ]);
+});
+
+it('does not begin setup or instance creation when preparation is declined', function () {
+    $doctor = Mockery::mock(Doctor::class);
+    $doctor->shouldReceive('inspect')->twice()->andReturn([
+        DoctorCheck::failure(Doctor::BASE_IMAGE_CHECK, 'The base image is missing.', 'Pull it.'),
+    ]);
+    $doctor->shouldReceive('requiresSetup')->once()->andReturnTrue();
+    app()->instance(Doctor::class, $doctor);
+
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->expectsConfirmation('Prepare Outpost now?', 'no')
+        ->assertFailed();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'pull');
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'worktree');
+});
+
+it('explains explicit setup in non-interactive runs instead of prompting', function () {
+    $doctor = Mockery::mock(Doctor::class);
+    $doctor->shouldReceive('inspect')->once()->andReturn([
+        DoctorCheck::failure(Doctor::BASE_IMAGE_CHECK, 'The base image is missing.', 'Pull it.'),
+    ]);
+    $doctor->shouldReceive('requiresSetup')->once()->andReturnTrue();
+    app()->instance(Doctor::class, $doctor);
+
+    fakeCreation();
+
+    $this->artisan('outpost', [
+        'branch' => 'feature-x',
+        '--name' => 'feature-x',
+        '--no-interaction' => true,
+    ])
+        ->expectsOutputToContain('php artisan outpost:install --force')
+        ->assertFailed();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'worktree');
+});
 
 it('creates a fully provisioned instance', function () {
     fakeCreation();

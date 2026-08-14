@@ -22,6 +22,14 @@ class Certificates
     ) {}
 
     /**
+     * Determine whether mkcert is available on this Mac.
+     */
+    public function available(): bool
+    {
+        return Process::run(['mkcert', '-version'])->successful();
+    }
+
+    /**
      * Determine whether new instances should use HTTPS.
      */
     public function enabled(): bool
@@ -128,9 +136,7 @@ class Certificates
     {
         $this->validateDomain($domain);
 
-        $version = Process::run(['mkcert', '-version']);
-
-        if (! $version->successful()) {
+        if (! $this->available()) {
             throw new RuntimeException(
                 'Outpost uses mkcert for trusted local HTTPS. Install it first with [brew install mkcert].',
             );

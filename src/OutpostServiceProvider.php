@@ -58,6 +58,15 @@ class OutpostServiceProvider extends ServiceProvider
 
         $this->app->singleton(Runtime::class);
 
+        $this->app->singleton(RuntimeConfiguration::class, function (Application $app) {
+            $home = $_SERVER['HOME'] ?? null;
+
+            return new RuntimeConfiguration(
+                $app->make('files'),
+                is_string($home) ? $home : null,
+            );
+        });
+
         $this->app->singleton(Outposts::class, function (Application $app) {
             $path = $app->make('config')->string('outpost.path');
 
