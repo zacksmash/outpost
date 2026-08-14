@@ -25,5 +25,6 @@
 
 ### Changed
 
+- Octane instances now route nginx's `/index.php` fallback through the Octane server instead of exposing it as a static download, accept modern Laravel asset-preload headers without a 502 response, and reject arbitrary public PHP files rather than serving their source in either server mode.
 - Quick Apple container lifecycle and inventory calls now time out after a configurable 30 seconds instead of appearing frozen for up to ten minutes when a per-container VM stops responding, with cautious runtime restart guidance in the resulting error. `outpost:remove --forget` provides an explicit last-resort cleanup path for the local worktree and manifest without contacting a stuck runtime, while reporting the orphaned container and its later cleanup command.
 - Release image publishing now waits for the full package gate, verifies the semantic release matches the package's exact default image tag, and grants registry write access only to the publishing job; pull-request CI also validates Composer metadata strictly.

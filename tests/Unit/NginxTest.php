@@ -23,12 +23,21 @@ it('pins the fastcgi socket to the instance php version', function () {
         ->toContain('fastcgi_pass unix:/run/php/php8.5-fpm.sock;');
 });
 
-it('accepts modern laravel responses with large preload headers', function () {
-    $config = $this->nginx->generate(fakeManifest());
+it('never serves arbitrary php files as static content', function (string $server) {
+    expect($this->nginx->generate(fakeManifest(server: $server)))
+        ->toContain("location ~ \\.php$ {\n        return 404;\n    }");
+})->with(['fpm', 'octane']);
 
-    expect($config)->toContain('fastcgi_buffer_size 32k;')
-        ->and($config)->toContain('fastcgi_buffers 8 32k;')
-        ->and($config)->toContain('fastcgi_busy_buffers_size 64k;');
+it('accepts modern laravel responses with large preload headers', function () {
+    $fpm = $this->nginx->generate(fakeManifest());
+    $octane = $this->nginx->generate(fakeManifest(server: 'octane'));
+
+    expect($fpm)->toContain('fastcgi_buffer_size 32k;')
+        ->and($fpm)->toContain('fastcgi_buffers 8 32k;')
+        ->and($fpm)->toContain('fastcgi_busy_buffers_size 64k;')
+        ->and($octane)->toContain('proxy_buffer_size 32k;')
+        ->and($octane)->toContain('proxy_buffers 8 32k;')
+        ->and($octane)->toContain('proxy_busy_buffers_size 64k;');
 });
 
 it('denies access to hidden files except well-known', function () {
@@ -39,7 +48,9 @@ it('denies access to hidden files except well-known', function () {
 it('proxies dynamic requests and websockets to octane', function () {
     $config = $this->nginx->generate(fakeManifest(server: 'octane'));
 
-    expect($config)->toContain('location @octane')
+    expect($config)->toContain("location = /index.php {\n        try_files /not_exists @octane;\n    }")
+        ->and($config)->toContain("location ~ \\.php$ {\n        return 404;\n    }")
+        ->and($config)->toContain('location @octane')
         ->and($config)->toContain('proxy_pass http://127.0.0.1:8000$suffix;')
         ->and($config)->toContain('proxy_set_header Upgrade $http_upgrade;')
         ->and($config)->toContain('proxy_set_header Connection $connection_upgrade;')
