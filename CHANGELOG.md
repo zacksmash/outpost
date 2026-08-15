@@ -2,16 +2,6 @@
 
 ## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.4.0...HEAD)
 
-### Added
-
-- Added `outpost:doctor --json` for a stable, machine-readable readiness report.
-
-### Changed
-
-- Refined every command's description, option help, status messages, and detail output for a consistent Laravel-first console experience.
-- JSON commands now avoid interactive prompts, require explicit instance names, and return a top-level `error` document for failures that prevent a report.
-- The package and release image are pinned together at `ghcr.io/zacksmash/outpost:0.4.0`.
-
 ## [v0.4.0](https://github.com/zacksmash/outpost/commits/main/compare/v0.3.0...v0.4.0) - 2026-08-15
 
 ### Added
