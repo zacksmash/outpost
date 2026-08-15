@@ -1,6 +1,6 @@
 # Release Notes
 
-## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.2...HEAD)
+## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.2.0...HEAD)
 
 ### Added
 
@@ -18,6 +18,39 @@
 - Removed automatic Octane runtime mirroring, Swoole, RoadRunner, FrankenPHP, the polling worker watcher, and `outpost:reload`.
 - Removed managed Vite/HMR mode and its image-level watcher dependency. Use the default reproducible asset build or run additional commands explicitly with `outpost:exec`.
 - Removed detected-but-deferred Horizon, Scout, Octane, and unsupported-database reporting. Outpost now reports only the services and processes it actually runs.
+
+## [v0.2.0](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.2...v0.2.0) - 2026-08-15
+
+Outpost is now deliberately an isolated Laravel branch sandbox for parallel agents and reviewers—not a replacement for the primary development environment. Instances use predictable PHP-FPM and production-built front-end assets so the browser preview reflects what is actually going to ship.
+
+### Breaking changes
+
+- Removed automatic Octane runtime mirroring, Swoole, RoadRunner, FrankenPHP, the polling watcher, and `outpost:reload`.
+- Removed managed Vite/HMR mode. Outpost builds production assets once; agents must rebuild after front-end changes before previewing or handing off work.
+- Trusted HTTPS is now an explicit `OUTPOST_HTTPS=true` opt-in. HTTP is the default.
+- Removed detected-but-deferred capability reporting. Outpost reports only services and processes it actually runs.
+
+### Added
+
+- Added `php artisan outpost:upgrade <name>` and `outpost:upgrade --all` to replace outdated or missing containers while preserving clean worktrees and branches.
+- Instance manifests now record the OCI image reference and immutable digest used to create each container.
+- `outpost:list` and `outpost:info --json` expose image identities and a tri-state `outdated` flag.
+
+### Changed
+
+- Missing containers are recreated automatically by `outpost:start`.
+- Recovery and upgrades regenerate Outpost-owned runtime configuration, preserve the application key, and refresh Composer dependencies, front-end builds, and migrations.
+- Doctor requires both the runtime-path contract and an immutable image digest before reporting the configured image ready.
+- The package and release image are pinned together at `ghcr.io/zacksmash/outpost:0.2.0`.
+
+### Upgrade
+
+```bash
+composer update zacksmash/outpost --with-all-dependencies
+php artisan outpost:upgrade --all
+
+```
+Upgrade refuses dirty worktrees and keeps source and branches. Replacing a container resets its container-local database and service data.
 
 ## [v0.1.2](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.1...v0.1.2) - 2026-08-15
 
