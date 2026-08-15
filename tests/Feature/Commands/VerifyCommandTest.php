@@ -360,3 +360,22 @@ it('rejects malformed configured checks before executing them', function () {
 
     Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'exec');
 });
+
+it('returns configuration failures as json when requested', function () {
+    config([
+        'outpost.checks' => [
+            'tests' => 'php artisan test',
+        ],
+    ]);
+
+    Process::fake();
+
+    $exit = Artisan::call('outpost:verify', ['name' => 'billing', '--json' => true]);
+
+    expect($exit)->toBe(1)
+        ->and(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR))->toBe([
+            'error' => 'The [outpost.checks.tests] command must be a non-empty list of argument strings.',
+        ]);
+
+    Process::assertNothingRan();
+});

@@ -33,7 +33,7 @@ trait ResolvesPathRepositoryMounts
             return [];
         }
 
-        warning('This application uses composer path repositories outside the worktree:');
+        warning('This application uses Composer path repositories outside the worktree:');
         note(implode("\n", $scan->paths));
 
         if ($approved || confirm('Mount these path repositories read-only into the instance?', false)) {

@@ -41,7 +41,7 @@ class StartCommand extends Command
      */
     protected $signature = 'outpost:start
         {name? : The name of the instance}
-        {--mount-path-repos : Remount discovered composer path repositories without asking}';
+        {--mount-path-repos : Mount discovered Composer path repositories without prompting}';
 
     /**
      * The command description.
@@ -112,7 +112,7 @@ class StartCommand extends Command
                     null,
                 );
 
-                outro("Recreated: {$manifest->url}");
+                outro("Recreated [{$manifest->name}]: {$manifest->url}");
 
                 return self::SUCCESS;
             }
@@ -145,7 +145,7 @@ class StartCommand extends Command
             return self::FAILURE;
         }
 
-        outro("Started: {$manifest->url}");
+        outro("Started [{$manifest->name}]: {$manifest->url}");
 
         return self::SUCCESS;
     }

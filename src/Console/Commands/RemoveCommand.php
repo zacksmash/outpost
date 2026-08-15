@@ -36,14 +36,14 @@ class RemoveCommand extends Command
      */
     protected $signature = 'outpost:remove
         {name? : The name of the instance}
-        {--force : Remove without asking}
-        {--discard-changes : Explicitly remove a worktree with uncommitted changes}
-        {--forget : Remove local state without contacting the container runtime}';
+        {--force : Skip confirmation without bypassing worktree protection}
+        {--discard-changes : Remove even when the worktree has uncommitted changes}
+        {--forget : Remove local state without contacting the runtime or running teardown hooks}';
 
     /**
      * The command description.
      */
-    protected $description = 'Remove an instance entirely: container, worktree, and data';
+    protected $description = 'Remove an instance and its container, worktree, and data';
 
     /**
      * Execute the console command.
@@ -93,9 +93,10 @@ class RemoveCommand extends Command
 
         try {
             if ($forget) {
-                warning('Skipped configured teardown hooks because --forget bypasses hook parsing and the container runtime.');
-                warning("Skipped container [{$manifest->container}].");
-                warning("Remove it later with [container delete --force {$manifest->container}].");
+                warning("Forgetting [{$manifest->name}] without contacting the runtime.");
+                note('Teardown hooks will not run.');
+                note("Container [{$manifest->container}] may remain.");
+                note("Remove it later with [container delete --force {$manifest->container}].");
             } else {
                 $runtimeState = $runtime->state($manifest->container);
 

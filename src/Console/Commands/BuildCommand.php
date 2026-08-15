@@ -21,12 +21,12 @@ class BuildCommand extends Command
     /**
      * The command signature.
      */
-    protected $signature = 'outpost:build {--force : Rebuild the image even if it already exists}';
+    protected $signature = 'outpost:build {--force : Rebuild the image if it already exists}';
 
     /**
      * The command description.
      */
-    protected $description = 'Build a customized Outpost base image locally';
+    protected $description = 'Build the configured Outpost image locally';
 
     /**
      * Execute the console command.

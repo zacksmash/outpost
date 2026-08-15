@@ -30,7 +30,7 @@ class ExecCommand extends Command
     /**
      * The command description.
      */
-    protected $description = 'Run a non-interactive command inside an instance';
+    protected $description = 'Run a command inside an instance';
 
     /**
      * Execute the console command.

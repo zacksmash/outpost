@@ -12,7 +12,6 @@ use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Outposts;
 
-use function Laravel\Prompts\error;
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\outro;
 use function Laravel\Prompts\table;
@@ -27,14 +26,14 @@ class ProcessCommand extends Command
      */
     protected $signature = 'outpost:process
         {name? : The name of the instance}
-        {process? : The configured application process}
-        {--restart : Restart the selected process before reporting its state}
-        {--json : Emit machine-readable JSON}';
+        {process? : The configured application process to inspect or restart}
+        {--restart : Restart the selected process}
+        {--json : Output process states as JSON}';
 
     /**
      * The command description.
      */
-    protected $description = 'Inspect or restart supervised application processes';
+    protected $description = "Inspect or restart an instance's application processes";
 
     /**
      * Execute the console command.
@@ -49,14 +48,14 @@ class ProcessCommand extends Command
         $selected = is_string($selected) && $selected !== '' ? $selected : null;
 
         if ($this->option('restart') && $selected === null) {
-            error('Choose a configured process to restart.');
+            $this->renderError('Choose a configured process to restart.');
 
             return self::FAILURE;
         }
 
         if ($selected !== null && ! in_array($selected, $manifest->processes, true)) {
             $configured = $manifest->processes === [] ? 'none' : implode(', ', $manifest->processes);
-            error("The [{$selected}] process is not configured for [{$manifest->name}]. Configured processes: {$configured}.");
+            $this->renderError("The [{$selected}] process is not configured for [{$manifest->name}]. Configured processes: {$configured}.");
 
             return self::FAILURE;
         }
@@ -65,10 +64,10 @@ class ProcessCommand extends Command
 
         if ($processes === []) {
             if ($this->option('json')) {
-                $this->line(json_encode([
+                $this->writeJson([
                     'name' => $manifest->name,
                     'processes' => [],
-                ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+                ]);
             } else {
                 info("The [{$manifest->name}] instance has no configured application processes.");
             }
@@ -78,13 +77,13 @@ class ProcessCommand extends Command
 
         try {
             if (! $runtime->running($manifest->container)) {
-                error("The [{$manifest->name}] instance is not running. Start it with [php artisan outpost:start {$manifest->name}].");
+                $this->renderError("The [{$manifest->name}] instance is not running. Start it with [php artisan outpost:start {$manifest->name}].");
 
                 return self::FAILURE;
             }
 
             if ($manifest->status !== 'ready') {
-                error("The [{$manifest->name}] provisioning status is [{$manifest->status}]. Application processes are not available until provisioning is ready.");
+                $this->renderError("The [{$manifest->name}] provisioning status is [{$manifest->status}]. Application processes are not available until provisioning is ready.");
 
                 return self::FAILURE;
             }
@@ -104,10 +103,7 @@ class ProcessCommand extends Command
             ];
 
             if ($this->option('json')) {
-                $this->line(json_encode(
-                    $report,
-                    JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
-                ));
+                $this->writeJson($report);
 
                 return self::SUCCESS;
             }
@@ -122,10 +118,10 @@ class ProcessCommand extends Command
             );
 
             if ($this->option('restart') && $selected !== null) {
-                outro("Restarted [{$selected}] in [{$manifest->name}].");
+                outro("Restarted [{$selected}] for [{$manifest->name}].");
             }
         } catch (JsonException|RuntimeException $e) {
-            error($e->getMessage());
+            $this->renderError($e->getMessage());
 
             return self::FAILURE;
         }

@@ -134,3 +134,18 @@ it('fails with the real error when the container daemon is unreachable', functio
         ->expectsOutputToContain('daemon unavailable')
         ->assertFailed();
 });
+
+it('returns runtime failures as json when requested', function () {
+    app(Outposts::class)->save(fakeManifest('feature-x'));
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result('', 'daemon unavailable', 1),
+    ]);
+
+    $exit = Artisan::call('outpost:list', ['--json' => true]);
+
+    expect($exit)->toBe(1)
+        ->and(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR))->toBe([
+            'error' => 'Unable to list the existing containers: daemon unavailable',
+        ]);
+});

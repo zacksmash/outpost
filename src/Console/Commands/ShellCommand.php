@@ -29,7 +29,7 @@ class ShellCommand extends Command
     /**
      * The command description.
      */
-    protected $description = 'Open a shell inside an instance';
+    protected $description = 'Open an interactive shell inside an instance';
 
     /**
      * Execute the console command.

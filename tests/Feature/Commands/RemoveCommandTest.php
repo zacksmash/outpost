@@ -153,7 +153,7 @@ it('skips teardown hooks and directly deletes a stopped container', function () 
     ]);
 
     $this->artisan('outpost:remove', ['name' => 'feature-x', '--force' => true])
-        ->expectsOutputToContain('Skipped configured teardown hooks')
+        ->expectsOutputToContain('Skipped configured teardown hooks because container state is [stopped]')
         ->assertSuccessful();
 
     expect(File::isDirectory($this->root.'/feature-x'))->toBeFalse();
@@ -194,7 +194,7 @@ it('explicitly skips teardown hooks when forgetting local state', function () {
         '--force' => true,
         '--forget' => true,
     ])
-        ->expectsOutputToContain('Skipped configured teardown hooks')
+        ->expectsOutputToContain('Teardown hooks will not run')
         ->assertSuccessful();
 
     Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[0] ?? null) === 'container');
@@ -273,7 +273,7 @@ it('can forget local instance state without contacting a stuck runtime', functio
         '--force' => true,
         '--forget' => true,
     ])
-        ->expectsOutputToContain('Skipped container [feature-x-app]')
+        ->expectsOutputToContain('Container [feature-x-app] may remain')
         ->expectsOutputToContain('Remove it later')
         ->expectsOutputToContain('Removed [feature-x].')
         ->assertSuccessful();

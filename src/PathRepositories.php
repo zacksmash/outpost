@@ -15,7 +15,7 @@ class PathRepositories
     public function __construct(protected readonly ?string $home = null) {}
 
     /**
-     * Find composer path repositories that live outside the given worktree.
+     * Find Composer path repositories that live outside the given worktree.
      *
      * The repository list is read from a file inside the writable worktree,
      * so treat every result as untrusted input: the caller must show these

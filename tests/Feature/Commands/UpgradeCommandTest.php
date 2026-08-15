@@ -70,8 +70,8 @@ it('upgrades only the container while preserving and reprovisioning the worktree
     fakeUpgradeProcesses($this->root, $this->currentDigest);
 
     $this->artisan('outpost:upgrade', ['name' => 'feature-x'])
-        ->expectsOutputToContain('Kept: source worktree and branch [feature/billing]')
-        ->expectsOutputToContain('Reset: container-local database and service data')
+        ->expectsOutputToContain('resets its container-local database and service data')
+        ->expectsOutputToContain('branch [feature/billing] are preserved')
         ->expectsOutputToContain('Upgraded [feature-x]')
         ->assertSuccessful();
 

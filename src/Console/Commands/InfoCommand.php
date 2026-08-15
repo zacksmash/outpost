@@ -14,9 +14,6 @@ use Zacksmash\Outpost\Endpoints;
 use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Outposts;
 
-use function Laravel\Prompts\error;
-use function Laravel\Prompts\table;
-
 #[AsCommand(name: 'outpost:info')]
 class InfoCommand extends Command
 {
@@ -27,12 +24,12 @@ class InfoCommand extends Command
      */
     protected $signature = 'outpost:info
         {name? : The name of the instance}
-        {--json : Emit machine-readable JSON}';
+        {--json : Output instance details as JSON}';
 
     /**
      * The command description.
      */
-    protected $description = 'Show an instance and its service connection details';
+    protected $description = 'Display instance details, endpoints, and credentials';
 
     /**
      * Execute the console command.
@@ -80,23 +77,26 @@ class InfoCommand extends Command
             ];
 
             if ($this->option('json')) {
-                $this->line(json_encode(
-                    $details,
-                    JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
-                ));
+                $this->writeJson($details);
 
                 return self::SUCCESS;
             }
 
-            table(['Detail', 'Value'], $this->rows(
+            $this->newLine();
+
+            foreach ($this->rows(
                 $manifest,
                 $state,
                 $resolvedEndpoints,
                 $configuredImage,
                 $outdated,
-            ));
+            ) as [$label, $value]) {
+                $this->components->twoColumnDetail($label, $value);
+            }
+
+            $this->newLine();
         } catch (JsonException|RuntimeException $e) {
-            error($e->getMessage());
+            $this->renderError($e->getMessage());
 
             return self::FAILURE;
         }

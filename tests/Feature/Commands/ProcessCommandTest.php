@@ -93,7 +93,7 @@ it('restarts one configured process and reports its new state', function () {
         'process' => 'queue',
         '--restart' => true,
     ])
-        ->expectsOutputToContain('Restarted [queue] in [billing].')
+        ->expectsOutputToContain('Restarted [queue] for [billing].')
         ->expectsOutputToContain('running')
         ->assertSuccessful();
 
@@ -111,6 +111,23 @@ it('requires a process name when restarting', function () {
     $this->artisan('outpost:process', ['name' => 'billing', '--restart' => true])
         ->expectsOutputToContain('Choose a configured process to restart')
         ->assertFailed();
+
+    Process::assertNothingRan();
+});
+
+it('returns input failures as json when requested', function () {
+    Process::fake();
+
+    $exit = Artisan::call('outpost:process', [
+        'name' => 'billing',
+        '--restart' => true,
+        '--json' => true,
+    ]);
+
+    expect($exit)->toBe(1)
+        ->and(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR))->toBe([
+            'error' => 'Choose a configured process to restart.',
+        ]);
 
     Process::assertNothingRan();
 });

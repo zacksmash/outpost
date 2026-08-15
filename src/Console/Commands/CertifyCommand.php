@@ -21,12 +21,12 @@ class CertifyCommand extends Command
      * The command signature.
      */
     protected $signature = 'outpost:certify
-        {--force : Repeat trusted HTTPS setup even when already prepared}';
+        {--force : Recreate trusted HTTPS certificates}';
 
     /**
      * The command description.
      */
-    protected $description = 'Prepare the trusted local authority for exact Outpost HTTPS certificates';
+    protected $description = 'Configure trusted HTTPS for Outpost instances';
 
     /**
      * Execute the console command.
@@ -35,7 +35,7 @@ class CertifyCommand extends Command
     {
         try {
             if ($certificates->exists() && ! $this->option('force')) {
-                info('Trusted Outpost HTTPS is already ready.');
+                info('Trusted Outpost HTTPS is already configured.');
 
                 return self::SUCCESS;
             }

@@ -28,7 +28,7 @@ class LogsCommand extends Command
     /**
      * The command description.
      */
-    protected $description = 'Show the service logs of an instance';
+    protected $description = "Display an instance's service logs";
 
     /**
      * Execute the console command.

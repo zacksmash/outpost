@@ -360,7 +360,7 @@ class Git
     }
 
     /**
-     * Get every configured git remote name.
+     * Get every configured Git remote name.
      *
      * @return list<string>
      */

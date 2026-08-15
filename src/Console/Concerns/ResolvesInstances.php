@@ -9,11 +9,12 @@ use RuntimeException;
 use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Outposts;
 
-use function Laravel\Prompts\error;
 use function Laravel\Prompts\select;
 
 trait ResolvesInstances
 {
+    use RendersJsonOutput;
+
     /**
      * Resolve the instance the command should act on, prompting if needed.
      */
@@ -26,13 +27,13 @@ trait ResolvesInstances
         try {
             $manifest = $outposts->exists($name) ? $outposts->find($name) : null;
         } catch (InvalidArgumentException|RuntimeException $e) {
-            error($e->getMessage());
+            $this->renderError($e->getMessage());
 
             return null;
         }
 
         if ($manifest === null) {
-            error("The [{$name}] instance does not exist. See [php artisan outpost:list].");
+            $this->renderError("The [{$name}] instance does not exist. See [php artisan outpost:list].");
 
             return null;
         }
@@ -51,10 +52,16 @@ trait ResolvesInstances
             return $name;
         }
 
+        if ($this->wantsJsonOutput()) {
+            $this->renderError('An instance name is required when using --json.');
+
+            return null;
+        }
+
         $names = array_map(fn (Manifest $manifest): string => $manifest->name, $outposts->all());
 
         if ($names === []) {
-            error('No instances exist yet. Create one with [php artisan outpost].');
+            $this->renderError('No instances exist yet. Create one with [php artisan outpost].');
 
             return null;
         }

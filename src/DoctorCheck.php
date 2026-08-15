@@ -45,4 +45,19 @@ class DoctorCheck
     {
         return new self($name, self::FAIL, $detail, $remedy);
     }
+
+    /**
+     * Serialize the check for command output.
+     *
+     * @return array{name: string, status: string, detail: string, remedy: string|null}
+     */
+    public function toArray(): array
+    {
+        return [
+            'name' => $this->name,
+            'status' => $this->status,
+            'detail' => $this->detail,
+            'remedy' => $this->remedy,
+        ];
+    }
 }

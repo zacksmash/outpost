@@ -26,12 +26,12 @@ class OpenCommand extends Command
      */
     protected $signature = 'outpost:open
         {name? : The name of the instance}
-        {endpoint=app : Browser endpoint: app, mailpit, or a configured preview}';
+        {endpoint=app : The endpoint to open: app, mailpit, or a configured preview}';
 
     /**
      * The command description.
      */
-    protected $description = 'Open an instance in the default browser, starting it if needed';
+    protected $description = 'Open an instance endpoint in the default browser';
 
     /**
      * Execute the console command.
@@ -61,7 +61,7 @@ class OpenCommand extends Command
             return self::FAILURE;
         }
 
-        outro("Opened: {$url}");
+        outro("Opened [{$manifest->name}]: {$url}");
 
         return self::SUCCESS;
     }

@@ -17,7 +17,7 @@ Outpost turns any branch of your Laravel application into an isolated, reviewabl
 ```shell
 php artisan outpost feature/billing
 
-# ⚡ The instance is ready: https://feature-billing-app.outpost
+# Created [feature-billing]: https://feature-billing-app.outpost
 ```
 
 Each instance receives its own editable Git worktree, VM, URL, database, and detected services. Outpost doesn't replace your primary development environment — it gives your branches and agents somewhere to build in parallel, so you can preview their actual, compiled output before it ships.
@@ -48,7 +48,7 @@ Of course, you may also prepare or inspect your machine explicitly:
 ```shell
 php artisan outpost:install
 
-php artisan outpost:doctor    # Read-only diagnostics
+php artisan outpost:doctor    # Read-only diagnostics; --json available
 ```
 
 ### HTTPS
@@ -223,6 +223,8 @@ php artisan outpost:remove billing                # Destroys the VM and its data
 
 The `outpost:exec` command passes every token after `--` directly to the command — no shell involved — while streaming output and preserving the command's exit code. Both `outpost:exec` and `outpost:shell` run as a host-ID-mapped, non-root user; reach for `--root` only when elevation is truly required.
 
+The `doctor`, `list`, `info`, `process`, and `verify` commands support stable `--json` output. Instance-specific JSON commands require an explicit name, never prompt, and return a top-level `error` with an unsuccessful exit code when a report cannot be produced.
+
 ### Verifying Instances
 
 The `outpost:verify` command produces a truthful handoff report. It runs your configured `verify` hooks, checks the runtime, container, exact image, final Git state, and application response, and creates a fresh production build when front-end management is enabled and `package.json` defines a `build` script. API-only applications skip that check, just as provisioning skips front-end work.
@@ -285,7 +287,7 @@ php artisan vendor:publish --tag="outpost-config"
 | Key | Default | Description |
 | --- | --- | --- |
 | `domain` | `outpost` | Local publication domain. |
-| `image` | `ghcr.io/zacksmash/outpost:0.3.0` | Exact OCI image used by instances. |
+| `image` | `ghcr.io/zacksmash/outpost:0.4.0` | Exact OCI image used by instances. |
 | `dns` | `1.1.1.1` | Nameserver injected into builds and instances. |
 | `path` | `.outpost` | Project-relative instance directory. |
 | `resources.cpus` | `4` | Virtual CPUs per instance. |

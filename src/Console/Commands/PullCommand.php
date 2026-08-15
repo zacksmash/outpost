@@ -22,12 +22,12 @@ class PullCommand extends Command
      * The command signature.
      */
     protected $signature = 'outpost:pull
-        {--force : Pull the image even when it already exists locally}';
+        {--force : Pull the image if it already exists locally}';
 
     /**
      * The command description.
      */
-    protected $description = 'Pull the versioned Outpost base image';
+    protected $description = 'Pull the configured Outpost image';
 
     /**
      * Execute the console command.

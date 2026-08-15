@@ -26,14 +26,14 @@ class InstallCommand extends Command
      * The command signature.
      */
     protected $signature = 'outpost:install
-        {--force : Apply setup without the consolidated confirmation}
+        {--force : Run setup without prompting for confirmation}
         {--https : Prepare trusted local HTTPS}
         {--local : Build a missing or incompatible base image locally instead of pulling it}';
 
     /**
      * The command description.
      */
-    protected $description = 'Guide the one-time host and application setup for Outpost';
+    protected $description = 'Configure Outpost for this application';
 
     /**
      * Execute the console command.
@@ -52,7 +52,7 @@ class InstallCommand extends Command
 
         if ($this->option('local') && $this->passed($checks, Doctor::BASE_IMAGE_CHECK)) {
             note('The configured image is already compatible, so --local is not rebuilding it.');
-            note('Replace it with: php artisan outpost:build --force');
+            note('Rebuild it with [php artisan outpost:build --force].');
         }
 
         try {

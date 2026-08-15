@@ -29,7 +29,7 @@ class StopCommand extends Command
     /**
      * The command description.
      */
-    protected $description = 'Stop an instance; its worktree and data survive';
+    protected $description = 'Stop an instance without removing its worktree or data';
 
     /**
      * Execute the console command.
@@ -62,7 +62,7 @@ class StopCommand extends Command
             return self::FAILURE;
         }
 
-        outro("Stopped [{$manifest->name}]. Start it again with [php artisan outpost:start {$manifest->name}].");
+        outro("Stopped [{$manifest->name}].");
 
         return self::SUCCESS;
     }

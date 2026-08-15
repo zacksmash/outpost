@@ -41,13 +41,13 @@ class UpgradeCommand extends Command
      */
     protected $signature = 'outpost:upgrade
         {name? : The name of the instance}
-        {--all : Upgrade every outdated or missing instance}
-        {--mount-path-repos : Remount discovered composer path repositories without asking}';
+        {--all : Upgrade all outdated or missing instances}
+        {--mount-path-repos : Mount discovered Composer path repositories without prompting}';
 
     /**
      * The command description.
      */
-    protected $description = 'Rebuild instance containers with the configured image while preserving worktrees';
+    protected $description = 'Rebuild instance containers with the configured image';
 
     /**
      * Execute the console command.
@@ -141,8 +141,6 @@ class UpgradeCommand extends Command
                 );
 
                 info(($state === null ? 'Recreated' : 'Upgraded')." [{$manifest->name}] to [{$image}].");
-                note("Kept: source worktree and branch [{$manifest->branch}].");
-                note('Reset: container-local database and service data.');
             }
         } catch (RuntimeException $e) {
             error($e->getMessage());

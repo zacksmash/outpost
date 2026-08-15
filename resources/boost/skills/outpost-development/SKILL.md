@@ -24,7 +24,7 @@ Outpost requires macOS 26 or newer on Apple silicon, Apple `container` 1.2.x, an
 
 ```bash
 composer require zacksmash/outpost --dev
-php artisan outpost:doctor
+php artisan outpost:doctor         # --json available
 php artisan outpost:install        # optional explicit host setup
 ```
 
@@ -45,6 +45,7 @@ php artisan outpost:exec billing -- curl --fail --silent --show-error --insecure
 php artisan outpost feature/billing --name=billing --seed
 php artisan outpost origin/review/invoices --name=invoices --open
 php artisan outpost --pr=482 --name=pr-482 --open
+php artisan outpost:doctor --json
 php artisan outpost:list --json
 php artisan outpost:info billing --json
 php artisan outpost:open billing
@@ -65,7 +66,7 @@ php artisan outpost:remove billing
 - Other creation options are `--name`, `--open`, `--seed`, `--remote`, and `--mount-path-repos`.
 - Commands with an omitted instance name prompt interactively.
 - `outpost:exec` passes tokens without a shell, streams output, preserves the inner exit code, and runs as the host-ID-mapped non-root user. Use `--root` only for intentional elevation.
-- `outpost:list --json` and `outpost:info --json` are the stable discovery interfaces for agents. Missing containers and failed provisioning report degraded state.
+- `outpost:doctor`, `outpost:list`, `outpost:info`, `outpost:process`, and `outpost:verify` expose stable `--json` reports. Instance-specific JSON commands require an explicit name and never prompt. Pre-report failures return a top-level `error` and an unsuccessful exit code. Missing containers and failed provisioning report degraded state.
 - Repository-configured `outpost.previews` entries resolve same-origin review paths and optional notes for every instance. Open one with `outpost:open <name> <preview>` or read it from `endpoints.<preview>` in info JSON. Invalid custom entries are omitted from discovery; requesting one explicitly reports its configuration error.
 - `outpost:process <name> --json` reports configured application process state. Add a process name and `--restart` to restart only that supervised process after long-lived PHP code changes. `outpost:info --json` also exposes the keyed `process_states` map; `unavailable` means the container is stopped or missing, `waiting` means provisioning is incomplete, and `unknown` isolates a failed live-state probe. Table info does not probe Supervisor.
 - `outpost:verify --json` is the stable handoff report. It runs host-owned `verify` hooks, checks runtime, container, image, final Git state, a fresh production asset build when `package.json` defines a `build` script, configured project checks, and the application response. API-only apps skip asset building. Dirty worktrees warn without failing; a skipped `Configured checks` row means no project-specific test or lint command ran.

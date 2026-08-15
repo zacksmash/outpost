@@ -8,27 +8,29 @@ use Illuminate\Console\Command;
 use JsonException;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
+use Zacksmash\Outpost\Console\Concerns\RendersJsonOutput;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Outposts;
 
-use function Laravel\Prompts\error;
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\table;
 
 #[AsCommand(name: 'outpost:list')]
 class ListCommand extends Command
 {
+    use RendersJsonOutput;
+
     /**
      * The command signature.
      */
     protected $signature = 'outpost:list
-        {--json : Emit machine-readable JSON}';
+        {--json : Output instances as JSON}';
 
     /**
      * The command description.
      */
-    protected $description = 'List the instances of this application';
+    protected $description = "List this application's Outpost instances";
 
     /**
      * Execute the console command.
@@ -39,7 +41,7 @@ class ListCommand extends Command
 
         if ($manifests === []) {
             if ($this->option('json')) {
-                $this->line('[]');
+                $this->writeJson([]);
 
                 return self::SUCCESS;
             }
@@ -72,7 +74,7 @@ class ListCommand extends Command
             }
 
             if ($this->option('json')) {
-                $this->line(json_encode(array_map(
+                $this->writeJson(array_map(
                     fn (Manifest $manifest): array => [
                         ...$manifest->toArray(),
                         'state' => $instanceStates[$manifest->name],
@@ -85,12 +87,12 @@ class ListCommand extends Command
                         'outdated' => $outdated[$manifest->name],
                     ],
                     $manifests,
-                ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+                ));
 
                 return self::SUCCESS;
             }
         } catch (JsonException|RuntimeException $e) {
-            error($e->getMessage());
+            $this->renderError($e->getMessage());
 
             return self::FAILURE;
         }

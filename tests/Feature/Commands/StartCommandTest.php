@@ -35,7 +35,7 @@ it('starts a stopped instance and flushes the dns cache', function () {
     ]);
 
     $this->artisan('outpost:start', ['name' => 'feature-x'])
-        ->expectsOutputToContain('Started: http://feature-x-app.outpost')
+        ->expectsOutputToContain('Started [feature-x]: http://feature-x-app.outpost')
         ->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
@@ -111,7 +111,7 @@ it('recreates a missing container without replacing the surviving worktree', fun
         'name' => 'feature-x',
         '--mount-path-repos' => true,
     ])
-        ->expectsOutputToContain('Recreated: http://feature-x-app.outpost')
+        ->expectsOutputToContain('Recreated [feature-x]: http://feature-x-app.outpost')
         ->assertSuccessful();
 
     expect(File::get($worktree.'/.env'))->toContain('APP_KEY=base64:existing')

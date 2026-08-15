@@ -192,7 +192,8 @@ trait RebuildsInstanceContainers
                 ->withImage($image, $digest);
             $outposts->save($manifest);
 
-            warning('Container-local database and service data is reset; the source worktree and branch are preserved.');
+            warning("Rebuilding [{$manifest->name}] resets its container-local database and service data.");
+            note("The worktree and branch [{$manifest->branch}] are preserved.");
 
             spin(
                 fn () => $runtime->boot(

@@ -41,7 +41,7 @@ it('leaves existing trusted https setup alone without force', function () {
     Process::fake();
 
     $this->artisan('outpost:certify')
-        ->expectsOutputToContain('already ready')
+        ->expectsOutputToContain('already configured')
         ->assertSuccessful();
 
     Process::assertNothingRan();

@@ -31,7 +31,7 @@ it('opens a running instance in the default browser', function () {
     ]);
 
     $this->artisan('outpost:open', ['name' => 'feature-x'])
-        ->expectsOutputToContain('Opened: http://feature-x-app.outpost')
+        ->expectsOutputToContain('Opened [feature-x]: http://feature-x-app.outpost')
         ->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
@@ -52,7 +52,7 @@ it('opens the application even when an unrelated preview is invalid', function (
     ]);
 
     $this->artisan('outpost:open', ['name' => 'feature-x'])
-        ->expectsOutputToContain('Opened: http://feature-x-app.outpost')
+        ->expectsOutputToContain('Opened [feature-x]: http://feature-x-app.outpost')
         ->assertSuccessful();
 });
 

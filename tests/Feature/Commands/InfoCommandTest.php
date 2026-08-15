@@ -78,6 +78,31 @@ it('provides structured json for agents and scripts', function () {
         ->and($output['expose_services'])->toBeFalse();
 });
 
+it('returns a json error instead of prompting when an instance name is missing', function () {
+    app(Outposts::class)->save(fakeManifest(name: 'billing'));
+    Process::fake();
+
+    $exit = Artisan::call('outpost:info', ['--json' => true]);
+
+    expect($exit)->toBe(1)
+        ->and(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR))->toBe([
+            'error' => 'An instance name is required when using --json.',
+        ]);
+
+    Process::assertNothingRan();
+});
+
+it('returns a json error for an unknown instance', function () {
+    Process::fake();
+
+    $exit = Artisan::call('outpost:info', ['name' => 'missing', '--json' => true]);
+
+    expect($exit)->toBe(1)
+        ->and(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR))->toBe([
+            'error' => 'The [missing] instance does not exist. See [php artisan outpost:list].',
+        ]);
+});
+
 it('includes named review links and their notes in endpoint details', function () {
     config(['outpost.previews' => [
         'posts' => ['path' => '/acme/posts', 'note' => 'Review CRUD behavior'],

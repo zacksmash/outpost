@@ -50,15 +50,15 @@ class OutpostCommand extends Command
         {branch? : The branch the instance should run}
         {--name= : The name of the instance}
         {--pr= : The GitHub pull request number to run}
-        {--remote=origin : The git remote used with --pr}
+        {--remote=origin : The Git remote used with --pr}
         {--open : Open the instance in the default browser when ready}
         {--seed : Seed the database after migrating}
-        {--mount-path-repos : Mount discovered composer path repositories without asking}';
+        {--mount-path-repos : Mount discovered Composer path repositories without prompting}';
 
     /**
      * The command description.
      */
-    protected $description = 'Create an isolated instance of the application';
+    protected $description = 'Create an isolated application instance';
 
     /**
      * Execute the console command.
@@ -85,15 +85,15 @@ class OutpostCommand extends Command
         $saved = null;
 
         try {
-            if (! $git->hasCommits()) {
-                error('Outpost needs a git repository with at least one commit to create instances from.');
-
-                return self::FAILURE;
-            }
-
             $pullRequest = $this->pullRequest();
 
             if ($pullRequest === false) {
+                return self::FAILURE;
+            }
+
+            if ($pullRequest === null && $this->input->hasParameterOption('--remote')) {
+                error('The --remote option may only be used with --pr.');
+
                 return self::FAILURE;
             }
 
@@ -108,7 +108,13 @@ class OutpostCommand extends Command
             $remote = $this->remote();
 
             if ($pullRequest !== null && $remote === '') {
-                error('The --remote option must name a configured git remote.');
+                error('The --remote option must name a configured Git remote.');
+
+                return self::FAILURE;
+            }
+
+            if (! $git->hasCommits()) {
+                error('Outpost needs a Git repository with at least one commit to create instances from.');
 
                 return self::FAILURE;
             }
@@ -347,7 +353,7 @@ class OutpostCommand extends Command
             note("Inspect service URLs and credentials with:\n\n  php artisan outpost:info {$manifest->name}");
         }
 
-        outro("The instance is ready: {$manifest->url}");
+        outro("Created [{$manifest->name}]: {$manifest->url}");
 
         return self::SUCCESS;
     }
@@ -408,7 +414,7 @@ class OutpostCommand extends Command
     }
 
     /**
-     * Get the git remote used to fetch a pull request.
+     * Get the Git remote used to fetch a pull request.
      */
     protected function remote(): string
     {

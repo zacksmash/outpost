@@ -36,12 +36,12 @@ class VerifyCommand extends Command
      */
     protected $signature = 'outpost:verify
         {name? : The name of the instance}
-        {--json : Emit machine-readable JSON}';
+        {--json : Output the verification report as JSON}';
 
     /**
      * The command description.
      */
-    protected $description = 'Verify that an instance is ready for review or handoff';
+    protected $description = 'Verify an instance for review or handoff';
 
     /**
      * Execute the console command.
@@ -71,10 +71,7 @@ class VerifyCommand extends Command
             );
 
             if ($this->option('json')) {
-                $this->line(json_encode(
-                    $report,
-                    JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
-                ));
+                $this->writeJson($report);
             } else {
                 table(
                     ['Status', 'Check', 'Details'],
@@ -94,7 +91,7 @@ class VerifyCommand extends Command
 
             return $report['verified'] ? self::SUCCESS : self::FAILURE;
         } catch (JsonException|RuntimeException $e) {
-            error($e->getMessage());
+            $this->renderError($e->getMessage());
 
             return self::FAILURE;
         }
