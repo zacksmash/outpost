@@ -2,16 +2,6 @@
 
 ## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.1...HEAD)
 
-### Added
-
-- `php artisan outpost:reload` for explicitly reloading the Laravel Octane workers in a running instance.
-
-### Changed
-
-- Octane instances now use an Outpost-managed polling watcher for the application's configured `octane.watch` paths, making PHP changes visible to Swoole, RoadRunner, and FrankenPHP workers across host bind mounts.
-- The package now defaults to the exact `ghcr.io/zacksmash/outpost:0.1.1` image so the patch release and its runtime image stay coupled.
-- Release images now build on GitHub's native ARM64 runner instead of emulating ARM64 with QEMU while retaining the reusable BuildKit cache for faster subsequent builds.
-
 ## [v0.1.1](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.0...v0.1.1) - 2026-08-15
 
 ### Added
