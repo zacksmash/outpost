@@ -186,12 +186,13 @@ it('runs the container steps in order, pinned to the instance php version', func
     ]);
 
     Process::assertRanTimes(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', 'feature-x-app',
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app', 'feature-x-app',
         'php8.5', '/usr/local/bin/composer', 'install', '--no-interaction', '--prefer-dist',
     ], 1);
 
     Process::assertRanTimes(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', 'feature-x-app', 'php8.5', 'artisan', 'migrate', '--force',
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'php8.5', 'artisan', 'migrate', '--force',
     ], 1);
 
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('db:seed', $process->command, true));
@@ -217,11 +218,35 @@ it('installs npm dependencies and builds assets when the app has a build script'
         ->and($steps)->toContain('Building the front-end assets');
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', 'feature-x-app', 'npm', 'install', '--no-fund', '--no-audit',
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'npm', 'install', '--no-fund', '--no-audit',
     ]);
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', 'feature-x-app', 'npm', 'run', 'build',
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'npm', 'run', 'build',
+    ]);
+});
+
+it('uses npm ci when the application has a lock file', function () {
+    Process::fake();
+
+    File::put($this->root.'/feature-x/app/package.json', json_encode([
+        'scripts' => ['build' => 'vite build'],
+    ], JSON_THROW_ON_ERROR));
+    File::put($this->root.'/feature-x/app/package-lock.json', json_encode([
+        'lockfileVersion' => 3,
+    ], JSON_THROW_ON_ERROR));
+
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []));
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'npm', 'ci', '--no-fund', '--no-audit',
+    ]);
+    Process::assertDidntRun(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'npm', 'install', '--no-fund', '--no-audit',
     ]);
 });
 
@@ -252,10 +277,12 @@ it('installs frontend dependencies without building in vite mode', function () {
     ));
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', 'feature-x-app', 'npm', 'install', '--no-fund', '--no-audit',
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'npm', 'install', '--no-fund', '--no-audit',
     ]);
     Process::assertDidntRun(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', 'feature-x-app', 'npm', 'run', 'build',
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'npm', 'run', 'build',
     ]);
 });
 
@@ -282,13 +309,14 @@ it('seeds the database only when asked', function () {
     $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []), seed: true);
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', 'feature-x-app', 'php8.4', 'artisan', 'db:seed', '--force',
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'php8.4', 'artisan', 'db:seed', '--force',
     ]);
 });
 
 it('stops at the first failing step and names it', function () {
     Process::fake([
-        processPattern('container', 'exec', 'feature-x-app', 'php8.4', '/usr/local/bin/composer').' *' => Process::result('', 'could not resolve host', 1),
+        processPattern('container', 'exec').' *'.processPattern('feature-x-app', 'php8.4', '/usr/local/bin/composer').' *' => Process::result('', 'could not resolve host', 1),
     ]);
 
     try {
@@ -301,4 +329,24 @@ it('stops at the first failing step and names it', function () {
     }
 
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('migrate', $process->command, true));
+});
+
+it('reports stdout and stderr together when a provisioning command fails', function () {
+    Process::fake([
+        processPattern('container', 'exec').' *'.processPattern('feature-x-app', 'php8.4', '/usr/local/bin/composer').' *' => Process::result(
+            'Class "Zacksmash\\Outpost\\OutpostServiceProvider" not found',
+            'Composer plugins have been disabled',
+            1,
+        ),
+    ]);
+
+    try {
+        $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []));
+
+        $this->fail('A provisioning failure should have been thrown.');
+    } catch (RuntimeException $e) {
+        expect($e->getMessage())
+            ->toContain('Class "Zacksmash\\Outpost\\OutpostServiceProvider" not found')
+            ->toContain('Composer plugins have been disabled');
+    }
 });

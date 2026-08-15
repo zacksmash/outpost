@@ -21,7 +21,7 @@ class PathRepositories
      * so treat every result as untrusted input: the caller must show these
      * paths to a human and default to mounting nothing.
      */
-    public function scan(string $worktree): PathRepositoryScan
+    public function scan(string $worktree, ?string $project = null): PathRepositoryScan
     {
         if (! File::exists($worktree.'/composer.json')) {
             return new PathRepositoryScan([], []);
@@ -34,7 +34,10 @@ class PathRepositories
         }
 
         $paths = [];
+        $targets = [];
         $warnings = [];
+        $project = $this->normalize($project ?? $worktree);
+        $worktree = $this->normalize($worktree);
 
         foreach ($repositories as $repository) {
             if (data_get($repository, 'type') !== 'path' || ! is_string($url = data_get($repository, 'url'))) {
@@ -47,15 +50,20 @@ class PathRepositories
                 continue;
             }
 
-            $path = $this->normalize(
-                str_starts_with($url, '/') ? $url : $worktree.'/'.$url,
-            );
+            $path = $this->normalize(str_starts_with($url, '/') ? $url : $project.'/'.$url);
+            $target = $this->normalize(str_starts_with($url, '/') ? $url : '/app/'.$url);
 
-            if ($this->inside($path, $this->normalize($worktree))) {
+            if ($this->inside($target, '/app') || $this->inside($path, $worktree)) {
                 continue;
             }
 
-            if (str_contains($path, ':')) {
+            if ($this->inside($target, '/etc/outpost')) {
+                $warnings[] = "The path repository [{$url}] resolves to Outpost's internal configuration path and will not be mounted.";
+
+                continue;
+            }
+
+            if (str_contains($path, ':') || str_contains($target, ':')) {
                 $warnings[] = "The path repository [{$path}] contains a colon, which breaks volume specs, so it will not be mounted.";
 
                 continue;
@@ -75,10 +83,11 @@ class PathRepositories
 
             if (! in_array($path, $paths, true)) {
                 $paths[] = $path;
+                $targets[] = $target;
             }
         }
 
-        return new PathRepositoryScan($paths, $warnings);
+        return new PathRepositoryScan($paths, $warnings, $targets);
     }
 
     /**

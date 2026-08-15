@@ -27,6 +27,7 @@ function fakeManifest(
     bool $exposeServices = true,
     ?int $cpus = 4,
     ?string $memory = '2G',
+    string $status = 'ready',
 ): Manifest {
     return new Manifest(
         name: $name,
@@ -45,5 +46,6 @@ function fakeManifest(
         createdAt: CarbonImmutable::parse('2026-08-14T09:00:00+00:00'),
         cpus: $cpus,
         memory: $memory,
+        status: $status,
     );
 }

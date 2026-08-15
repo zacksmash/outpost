@@ -49,12 +49,20 @@ class ListCommand extends Command
 
         try {
             $states = $runtime->states();
+            $instanceStates = [];
+
+            foreach ($manifests as $manifest) {
+                $instanceStates[$manifest->name] = $runtime->instanceState(
+                    $manifest,
+                    $states[$manifest->container] ?? 'missing',
+                );
+            }
 
             if ($this->option('json')) {
                 $this->line(json_encode(array_map(
                     fn (Manifest $manifest): array => [
                         ...$manifest->toArray(),
-                        'state' => $states[$manifest->container] ?? 'missing',
+                        'state' => $instanceStates[$manifest->name],
                     ],
                     $manifests,
                 ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
@@ -79,7 +87,7 @@ class ListCommand extends Command
                 ])),
                 $manifest->services === [] ? '—' : implode(', ', $manifest->services),
                 $manifest->processes === [] ? '—' : implode(', ', $manifest->processes),
-                $states[$manifest->container] ?? 'missing',
+                $instanceStates[$manifest->name],
                 $manifest->url,
             ], $manifests),
         );

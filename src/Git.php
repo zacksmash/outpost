@@ -163,6 +163,39 @@ class Git
     }
 
     /**
+     * Get the repository's absolute common Git directory.
+     *
+     * Worktree .git files point into this directory using an absolute host
+     * path. Mounting it read-only at that same path keeps Git-aware tools
+     * functional without letting an instance rewrite repository metadata.
+     */
+    public function commonDirectory(): string
+    {
+        $result = $this->runOrFail(
+            ['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+            'Unable to locate the common Git directory',
+        );
+        $path = trim($result->output());
+
+        if ($path === '' || ! str_starts_with($path, '/') || str_contains($path, ':')) {
+            throw new RuntimeException('The common Git directory is not a mountable absolute path.');
+        }
+
+        return $path;
+    }
+
+    /**
+     * Get the concise status of a worktree.
+     */
+    public function worktreeStatus(string $path): string
+    {
+        return rtrim($this->runOrFail(
+            ['git', '-C', $path, 'status', '--short'],
+            "Unable to inspect the worktree at [{$path}]",
+        )->output());
+    }
+
+    /**
      * Add a worktree for a local, remote, or new branch reference.
      */
     public function addWorktree(string $path, string $reference): void

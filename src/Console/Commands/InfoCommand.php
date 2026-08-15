@@ -42,13 +42,14 @@ class InfoCommand extends Command
         }
 
         try {
-            $state = $runtime->state($manifest->container) ?? 'missing';
+            $state = $runtime->instanceState($manifest);
             $resolvedEndpoints = $endpoints->all($manifest);
             $details = [
                 'name' => $manifest->name,
                 'container' => $manifest->container,
                 'branch' => $manifest->branch,
                 'state' => $state,
+                'status' => $manifest->status,
                 'php' => $manifest->php,
                 'server' => $manifest->server,
                 'octane_server' => $manifest->octaneServer,

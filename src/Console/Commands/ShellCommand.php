@@ -20,7 +20,9 @@ class ShellCommand extends Command
     /**
      * The command signature.
      */
-    protected $signature = 'outpost:shell {name? : The name of the instance}';
+    protected $signature = 'outpost:shell
+        {name? : The name of the instance}
+        {--root : Open the shell as root instead of the application user}';
 
     /**
      * The command description.
@@ -47,6 +49,7 @@ class ShellCommand extends Command
             return $runtime->shell(
                 $manifest->container,
                 fn (string $type, string $buffer) => $this->output->write($buffer),
+                root: (bool) $this->option('root'),
             );
         } catch (RuntimeException $e) {
             error($e->getMessage());

@@ -38,6 +38,7 @@ class Manifest implements Arrayable
         public readonly ?int $cpus = null,
         public readonly ?string $memory = null,
         public readonly ?string $octaneServer = null,
+        public readonly string $status = 'ready',
     ) {}
 
     /**
@@ -95,6 +96,12 @@ class Manifest implements Arrayable
             throw new InvalidArgumentException('The manifest [memory] value must be a non-empty string or null.');
         }
 
+        if (array_key_exists('status', $data)
+            && (! is_string($data['status'])
+                || ! in_array($data['status'], ['provisioning', 'ready', 'failed'], true))) {
+            throw new InvalidArgumentException('The manifest [status] value must be provisioning, ready, or failed.');
+        }
+
         if (! isset($data['created_at']) || ! is_string($data['created_at'])) {
             throw new InvalidArgumentException('The manifest [created_at] value must be a string.');
         }
@@ -128,6 +135,37 @@ class Manifest implements Arrayable
             cpus: $data['cpus'] ?? null,
             memory: $data['memory'] ?? null,
             octaneServer: $server === 'octane' ? ($data['octane_server'] ?? 'swoole') : null,
+            status: $data['status'] ?? 'ready',
+        );
+    }
+
+    /**
+     * Return a copy with updated provisioning status.
+     */
+    public function withStatus(string $status): self
+    {
+        if (! in_array($status, ['provisioning', 'ready', 'failed'], true)) {
+            throw new InvalidArgumentException('The manifest status must be provisioning, ready, or failed.');
+        }
+
+        return new self(
+            name: $this->name,
+            container: $this->container,
+            url: $this->url,
+            branch: $this->branch,
+            php: $this->php,
+            server: $this->server,
+            frontend: $this->frontend,
+            exposeServices: $this->exposeServices,
+            services: $this->services,
+            deferred: $this->deferred,
+            processes: $this->processes,
+            database: $this->database,
+            createdAt: $this->createdAt,
+            cpus: $this->cpus,
+            memory: $this->memory,
+            octaneServer: $this->octaneServer,
+            status: $status,
         );
     }
 
@@ -171,6 +209,7 @@ class Manifest implements Arrayable
             'created_at' => $this->createdAt->toIso8601String(),
             'cpus' => $this->cpus,
             'memory' => $this->memory,
+            'status' => $this->status,
         ];
     }
 

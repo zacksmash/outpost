@@ -60,17 +60,19 @@ php artisan outpost:install
 
 The installer uses the same consolidated plan. `--force` skips its Laravel confirmation, while `--https` explicitly permits trust-store setup in a forced or non-interactive run. DNS registration must already exist in a non-interactive run; otherwise, perform setup once from an attached administrator terminal. Use `--local` to build a customized image instead of pulling the published one.
 
-The default image is `ghcr.io/zacksmash/outpost:0.1.0`, published for ARM64 from the same package stubs whenever a matching GitHub release is published. Exact tags keep an existing installation reproducible instead of silently changing underneath it.
+The initial shared image tag is `ghcr.io/zacksmash/outpost:0.1.0`. The release workflow publishes it for ARM64 from the same package stubs when the matching GitHub release is published; until that first release, use the local build path. Exact tags keep an installation reproducible instead of silently changing underneath it. The image records its `/etc/outpost` runtime-path contract as an OCI label, and doctor rejects an older, unlabeled, or mismatched local image before creation with an `outpost:build --force` repair.
 
 You do not need to publish configuration for normal use. For different PHP versions, sandbox credentials, resources, or workflows, publish it and build the configured image locally. The first local build takes several minutes:
 
 ```bash
 php artisan vendor:publish --tag="outpost-config"
-php artisan outpost:build
+php artisan outpost:build --force
 
 # Or perform the complete guided setup while choosing a local build:
 php artisan outpost:install --local
 ```
+
+`--local` belongs to `outpost:install`; `outpost:build` accepts `--force`. A first local build does not require `--force`, but use it after package image or runtime-contract changes so an existing tag is actually replaced.
 
 Run the doctor at any point to inspect the host, live runtime, DNS publication and resolver state, base image, and application prerequisites without changing anything:
 
@@ -112,6 +114,8 @@ php artisan outpost --pr=482 --name=pr-482 --open
 ```
 
 Local branches, known remote branches, and new branch names all work in the same `branch` argument. When you choose a remote branch such as `origin/review/invoices`, Outpost fetches only that branch and creates a local tracking branch for the editable worktree. If the local branch already exists, Outpost preserves and uses it instead of resetting it.
+
+Removing an instance keeps its branch unless you accept the interactive branch-deletion prompt. To recreate the same instance name from a different base commit, remove the instance, delete or rename the retained branch explicitly, then create it again from the new reference. Outpost never resets an existing branch behind your back.
 
 For a GitHub pull request, `--pr=482` fetches GitHub's pull-request ref through `origin` into an editable `outpost/pr-482` branch. Use `--remote=upstream` when the pull request belongs to a different configured remote. An existing PR branch is preserved, so work committed inside a previous instance is never silently discarded.
 
@@ -163,7 +167,7 @@ Set `expose_services` to `false` when an application should keep every backing s
 
 ### Front-end Workflow
 
-The default `frontend` mode is `build`: Outpost installs npm dependencies and runs the application's `build` script once during provisioning. Set it to `vite` for a supervised Vite development server with HMR, or `none` to skip npm completely:
+The default `frontend` mode is `build`: Outpost installs npm dependencies and runs the application's `build` script once during provisioning. Applications with `package-lock.json` use `npm ci` so a fresh worktree stays reproducible and the lock file remains untouched; applications without a lock file fall back to `npm install`. Set the mode to `vite` for a supervised Vite development server with HMR, or `none` to skip npm completely:
 
 ```php
 'frontend' => 'vite',
@@ -200,31 +204,34 @@ php artisan outpost:start billing    # start a stopped instance
 php artisan outpost:stop billing     # stop it; worktree and data survive
 php artisan outpost:shell billing    # open a shell inside the instance
 php artisan outpost:exec billing -- php artisan test --filter=Feature
+php artisan outpost:exec billing --root -- apt-get update # explicit elevation when genuinely needed
 php artisan outpost:logs billing     # show the service logs; --follow streams
 php artisan outpost:remove billing   # remove the container, worktree, and data
+php artisan outpost:remove billing --discard-changes # explicitly destroy uncommitted work
 php artisan outpost:remove billing --forget # discard local state when its VM is stuck
 ```
 
-If these checks pass but a Chromium-based browser reports `ERR_ADDRESS_UNREACHABLE`, allow that browser under **System Settings → Privacy & Security → Local Network**, quit it completely, and reopen it. macOS applies this permission per browser; another browser working does not imply every browser is allowed.
+If these checks pass but a browser or host CLI cannot reach the instance address, allow the calling application under **System Settings → Privacy & Security → Local Network**, quit it completely, and reopen it. macOS applies this permission per application. Agents can bypass host reachability for an application response check with `php artisan outpost:exec billing -- curl --fail --silent --head localhost`.
 
-Stopping an instance preserves its database — the data lives in the container's own writable layer and survives across `stop` and `start`. Removing an instance destroys all of it, which is rather the point. Removal asks first, offers to delete the instance's branch when it's safe to do so, and `--force` skips every question (leaving the branch alone). If Apple's per-container VM is stuck, lifecycle operations stop after `lifecycle_timeout` seconds instead of waiting indefinitely. `outpost:remove <name> --forget` is the explicit last resort: it removes the worktree and Outpost manifest without contacting the runtime, warns about the orphaned container, and prints the exact cleanup command to run after recovering Apple container.
+Stopping an instance preserves its database — the data lives in the container's own writable layer and survives across `stop` and `start`. Removing an instance destroys all of it, which is rather the point. Removal refuses a dirty worktree even with `--force`; commit or preserve the work first, or pass `--discard-changes` to state the destructive intent explicitly. It then asks for confirmation and offers to delete the branch when safe; `--force` skips those questions and retains the branch. If Apple's per-container VM is stuck, lifecycle operations stop after `lifecycle_timeout` seconds instead of waiting indefinitely. `outpost:remove <name> --forget` is the explicit last resort: it removes the worktree and Outpost manifest without contacting the runtime, warns about the orphaned container, and prints the exact cleanup command to run after recovering Apple container.
 
-`outpost:exec` is the non-interactive path for scripts and agents. Everything after `--` is passed as an argument list directly to `container exec` from the instance's `/app` working directory; no shell interprets it, output streams normally, and the inner command's exit code is returned unchanged. Use `outpost:shell` when you actually need an interactive terminal.
+`outpost:exec` is the non-interactive path for scripts and agents. Everything after `--` is passed as an argument list directly to `container exec` from the instance's `/app` working directory; no shell interprets it, output streams normally, and the inner command's exit code is returned unchanged. Commands and provisioning run as a non-root `outpost` user mapped to the host user's numeric ID, so Composer plugins remain enabled and files written through `/app` have the right host ownership. Pass `--root` only for a command that genuinely needs elevation. `outpost:shell` follows the same user default and also supports explicit `--root`.
 
 ## How Instances Work
 
 Instances live under `.outpost/` in your project root (Outpost adds it to your `.gitignore`). Each instance keeps three things there: the git worktree at `app/`, generated nginx and supervisord configuration at `runtime/`, and its manifest at `outpost.json`.
 
-The worktree is bind-mounted into the container, so the instance's code is editable right on your Mac — changes appear instantly, no sync step. The container gets its own IP address on Apple's container network and is reachable at `<scheme>://<name>-<app>.outpost`. No ports are published onto macOS; web and service endpoints use standard ports on that unique IP, so nothing collides with Herd, Sail, or another instance. Outpost allocates 4 CPUs and 2 GB of memory by default instead of inheriting Apple's smaller machine-wide memory default; tune `resources.cpus` and `resources.memory` for lighter or heavier applications.
+The worktree is bind-mounted into the container, so the instance's code is editable right on your Mac — changes appear instantly, no sync step. The repository's common Git directory is mounted read-only at its original absolute path, allowing tools such as `git diff` and `pint --dirty` to inspect worktree state without giving the instance write access to host refs. Git commits intentionally cannot update refs from inside the instance; when authorized, make them from the host with `git -C .outpost/<name>/app add ...` and `git -C .outpost/<name>/app commit ...`. The container gets its own IP address on Apple's container network and is reachable at `<scheme>://<name>-<app>.outpost`. No ports are published onto macOS; web and service endpoints use standard ports on that unique IP, so nothing collides with Herd, Sail, or another instance. Outpost allocates 4 CPUs and 2 GB of memory by default instead of inheriting Apple's smaller machine-wide memory default; tune `resources.cpus` and `resources.memory` for lighter or heavier applications.
 
 The instance's `.env` is seeded from your `.env.example` — never from your real `.env`, so real credentials stay out of sandboxes — and pointed at the instance's own services with the sandbox credentials from `config/outpost.php`. The published image contains the documented default credentials and PHP versions. Changing either requires a local `outpost:build` before creating more instances.
 
 ## Isolation and Its Limits
 
-An instance is a real virtual machine boundary: a destructive command inside it can't touch your Mac. Two things deliberately cross that boundary, and both are visible:
+An instance is a real virtual machine boundary: a destructive command inside it can't touch unrelated host files. Three things deliberately cross that boundary, and all are visible:
 
 - **The worktree** is mounted read-write at `/app`. That's the product — you're meant to edit the code.
-- **Composer path repositories** outside the worktree can't resolve inside the container, so Outpost offers to mount them **read-only**, lists every path first, and defaults to *no*. Non-interactive runs mount nothing unless you pass `--mount-path-repos` explicitly. Read-only bounds destruction, not disclosure — that's why a human confirms.
+- **Git metadata** is mounted read-only at its original absolute path so worktree-aware tools can inspect it without changing host refs.
+- **Composer path repositories** outside the worktree can't resolve inside the container, so Outpost offers to mount them **read-only**, lists every path first, and defaults to *no*. Relative repositories are resolved from the primary checkout and mounted where the same Composer URL resolves from `/app`; for example, `../outpost` is mounted at `/outpost`. Outpost keeps its own generated configuration under `/etc/outpost`, so these package paths cannot collide with runtime files. Non-interactive runs mount nothing unless you pass `--mount-path-repos` explicitly. Read-only bounds destruction, not disclosure — that's why a human confirms.
 
 Instances are development sandboxes, not production parity. The database accounts inside them are deliberately permissive, exactly like Sail's. Direct service access binds selected ports to the instance network and protects MySQL, PostgreSQL, and Redis with the documented sandbox credentials; disable `expose_services` when network-level separation from other local containers matters more than host database-tool access.
 

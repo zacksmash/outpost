@@ -147,6 +147,8 @@ class OutpostCommand extends Command
                 config('outpost.resources.cpus'),
                 config('outpost.resources.memory'),
             );
+            $uid = $host->userId();
+            $gid = $host->groupId();
 
             $reference = $pullRequest === null
                 ? $this->branch($git)
@@ -225,6 +227,7 @@ class OutpostCommand extends Command
                 cpus: $resources['cpus'],
                 memory: $resources['memory'],
                 octaneServer: $detection->octaneServer,
+                status: 'provisioning',
             );
 
             $outposts->save($manifest);
@@ -243,7 +246,12 @@ class OutpostCommand extends Command
                     : "Fetching GitHub pull request #{$pullRequest}",
             );
 
-            $mounts = $this->mounts($pathRepositories, $outposts->worktreePath($name));
+            $mounts = $this->mounts(
+                $pathRepositories,
+                $outposts->worktreePath($name),
+                $this->laravel->basePath(),
+            );
+            $gitDirectory = $git->commonDirectory();
 
             $outposts->writeRuntime($name, [
                 'nginx.conf' => $nginx->generate($manifest),
@@ -268,12 +276,14 @@ class OutpostCommand extends Command
                     config()->string('outpost.dns'),
                     [
                         $outposts->worktreePath($name).':/app',
-                        $outposts->runtimePath($name).':/outpost:ro',
-                        ...($secure ? [$tlsDirectory.':/outpost-tls:ro'] : []),
+                        $outposts->runtimePath($name).':/etc/outpost:ro',
+                        "{$gitDirectory}:{$gitDirectory}:ro",
                         ...$mounts,
                     ],
                     cpus: $resources['cpus'],
                     memory: $resources['memory'],
+                    uid: $uid,
+                    gid: $gid,
                 ),
                 'Booting the instance',
             );
@@ -296,11 +306,16 @@ class OutpostCommand extends Command
                 );
             }
 
+            $manifest = $manifest->withStatus('ready');
+            $outposts->save($manifest);
+
             $runtime->flushDnsCache();
         } catch (RuntimeException $e) {
             error($e->getMessage());
 
             if ($saved !== null) {
+                $saved = $saved->withStatus('failed');
+                $outposts->save($saved);
                 note("Everything created so far was left in place for debugging.\nRemove the instance with:\n\n  php artisan outpost:remove {$saved->name}");
             }
 
@@ -420,9 +435,9 @@ class OutpostCommand extends Command
      *
      * @return list<string>
      */
-    protected function mounts(PathRepositories $pathRepositories, string $worktree): array
+    protected function mounts(PathRepositories $pathRepositories, string $worktree, string $project): array
     {
-        $scan = $pathRepositories->scan($worktree);
+        $scan = $pathRepositories->scan($worktree, $project);
 
         foreach ($scan->warnings as $warning) {
             warning($warning);

@@ -54,6 +54,9 @@ function fakeCreation(array $overrides = []): void
         processPattern('git', 'worktree', 'list', '--porcelain') => Process::result("worktree /projects/app\nbranch refs/heads/main\n"),
         processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/feature-x') => Process::result('abc123'),
         processPattern('git', 'worktree', 'add').' *' => Process::result(''),
+        processPattern('git', 'rev-parse', '--path-format=absolute', '--git-common-dir') => Process::result("/projects/app/.git\n"),
+        processPattern('id', '-u') => Process::result("501\n"),
+        processPattern('id', '-g') => Process::result("20\n"),
         processPattern('container', 'run').' *' => Process::result(''),
         processPattern('container', 'exec').' *' => Process::result(''),
         processPattern('dscacheutil', '-flushcache') => Process::result(''),
@@ -138,7 +141,8 @@ it('creates a fully provisioned instance', function () {
         ->and($manifest['cpus'])->toBe(4)
         ->and($manifest['memory'])->toBe('2G')
         ->and($manifest['expose_services'])->toBeTrue()
-        ->and($manifest['database'])->toBe('sqlite');
+        ->and($manifest['database'])->toBe('sqlite')
+        ->and($manifest['status'])->toBe('ready');
 
     expect(File::exists($this->root.'/feature-x/runtime/nginx.conf'))->toBeTrue()
         ->and(File::exists($this->root.'/feature-x/runtime/supervisord.conf'))->toBeTrue()
@@ -147,8 +151,10 @@ it('creates a fully provisioned instance', function () {
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'run', '--detach', '--name', 'feature-x-laravel', '--dns', '1.1.1.1',
         '--cpus', '4', '--memory', '2G',
+        '--env', 'OUTPOST_UID=501', '--env', 'OUTPOST_GID=20',
         '--volume', $this->root.'/feature-x/app:/app',
-        '--volume', $this->root.'/feature-x/runtime:/outpost:ro',
+        '--volume', $this->root.'/feature-x/runtime:/etc/outpost:ro',
+        '--volume', '/projects/app/.git:/projects/app/.git:ro',
         'ghcr.io/zacksmash/outpost:0.1.0',
     ]);
 
@@ -191,7 +197,8 @@ it('configures and releases application processes after provisioning', function 
         ->and($supervisor)->toContain('"php8.5" "artisan" "queue:work" "--sleep=1"');
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', 'feature-x-laravel', 'touch', '/var/lib/outpost/ready',
+        'container', 'exec', '--env', 'HOME=/root', '--user', 'root', '--workdir', '/app',
+        'feature-x-laravel', 'touch', '/var/lib/outpost/ready',
     ]);
 });
 
@@ -275,9 +282,10 @@ it('boots a trusted https instance with its certificate mounted read only', func
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'run', '--detach', '--name', 'feature-x-laravel', '--dns', '1.1.1.1',
         '--cpus', '4', '--memory', '2G',
+        '--env', 'OUTPOST_UID=501', '--env', 'OUTPOST_GID=20',
         '--volume', $this->root.'/feature-x/app:/app',
-        '--volume', $this->root.'/feature-x/runtime:/outpost:ro',
-        '--volume', $this->root.'/feature-x/runtime/tls:/outpost-tls:ro',
+        '--volume', $this->root.'/feature-x/runtime:/etc/outpost:ro',
+        '--volume', '/projects/app/.git:/projects/app/.git:ro',
         'ghcr.io/zacksmash/outpost:0.1.0',
     ]);
 });
@@ -476,12 +484,12 @@ it('provisions the application before checking its final HTTP response', functio
     $composerInstalled = false;
 
     fakeCreation([
-        processPattern('container', 'exec', 'feature-x-laravel', 'php8.5', '/usr/local/bin/composer').' *' => function () use (&$composerInstalled) {
+        processPattern('container', 'exec').' *'.processPattern('feature-x-laravel', 'php8.5', '/usr/local/bin/composer').' *' => function () use (&$composerInstalled) {
             $composerInstalled = true;
 
             return Process::result();
         },
-        processPattern('container', 'exec', 'feature-x-laravel', 'curl').' *' => function () use (&$composerInstalled) {
+        processPattern('container', 'exec').' *'.processPattern('feature-x-laravel', 'curl').' *' => function () use (&$composerInstalled) {
             expect($composerInstalled)->toBeTrue();
 
             return Process::result();
@@ -615,7 +623,7 @@ it('leaves everything in place when the instance never answers', function () {
     Sleep::fake();
 
     fakeCreation([
-        processPattern('container', 'exec', 'feature-x-laravel', 'curl').' *' => Process::result('', 'refused', 7),
+        processPattern('container', 'exec').' *'.processPattern('feature-x-laravel', 'curl').' *' => Process::result('', 'refused', 7),
     ]);
 
     config(['outpost.timeout' => 3]);
@@ -626,12 +634,15 @@ it('leaves everything in place when the instance never answers', function () {
         ->assertFailed();
 
     expect(File::exists($this->root.'/feature-x/outpost.json'))->toBeTrue();
+
+    expect(json_decode(File::get($this->root.'/feature-x/outpost.json'), true)['status'])
+        ->toBe('failed');
 });
 
 it('reports the failing provisioning step and keeps the container', function () {
     fakeCreation([
-        processPattern('container', 'exec', 'feature-x-laravel', 'curl').' *' => Process::result(''),
-        processPattern('container', 'exec', 'feature-x-laravel', 'php8.5', '/usr/local/bin/composer').' *' => Process::result('', 'could not resolve host', 1),
+        processPattern('container', 'exec').' *'.processPattern('feature-x-laravel', 'curl').' *' => Process::result(''),
+        processPattern('container', 'exec').' *'.processPattern('feature-x-laravel', 'php8.5', '/usr/local/bin/composer').' *' => Process::result('', 'could not resolve host', 1),
     ]);
 
     $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
@@ -640,4 +651,7 @@ it('reports the failing provisioning step and keeps the container', function () 
         ->assertFailed();
 
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('migrate', $process->command, true));
+
+    expect(json_decode(File::get($this->root.'/feature-x/outpost.json'), true)['status'])
+        ->toBe('failed');
 });

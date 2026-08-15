@@ -45,7 +45,7 @@ it('starts a stopped instance before opening it', function () {
             ['id' => 'feature-x-app', 'status' => ['state' => 'stopped']],
         ], JSON_THROW_ON_ERROR)),
         processPattern('container', 'start', 'feature-x-app') => Process::result(''),
-        processPattern('container', 'exec', 'feature-x-app', 'curl').' *' => Process::result(''),
+        processPattern('container', 'exec').' *'.processPattern('feature-x-app', 'curl').' *' => Process::result(''),
         processPattern('dscacheutil', '-flushcache') => Process::result(''),
         processPattern('open', 'http://feature-x-app.outpost') => Process::result(''),
     ]);

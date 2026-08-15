@@ -58,7 +58,7 @@ class DoctorCommand extends Command
             }
         }
 
-        note('A browser can still require permission to reach container addresses. If the CLI checks pass but a browser reports ERR_ADDRESS_UNREACHABLE, enable it under System Settings > Privacy & Security > Local Network.');
+        note('Browsers and CLI tools can still require permission to reach container addresses. If direct host access fails, enable the calling app under System Settings > Privacy & Security > Local Network. Agents can verify from inside an instance with [php artisan outpost:exec <name> -- curl --fail --silent --head localhost].');
 
         if ($failures !== []) {
             error(sprintf('Outpost found %d blocking issue%s.', count($failures), count($failures) === 1 ? '' : 's'));

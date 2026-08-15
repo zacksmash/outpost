@@ -54,9 +54,27 @@ it('finds path repositories outside the worktree', function () {
     expect($scan->paths)->toBe([$this->root.'/lib', $this->root.'/other'])
         ->and($scan->warnings)->toBe([])
         ->and($scan->mounts())->toBe([
-            $this->root.'/lib:'.$this->root.'/lib:ro',
+            $this->root.'/lib:/lib:ro',
             $this->root.'/other:'.$this->root.'/other:ro',
         ]);
+});
+
+it('resolves relative repositories from the primary project while preserving their app-relative container target', function () {
+    $project = $this->root.'/project';
+    $worktree = $project.'/.outpost/feature/app';
+    $package = $this->root.'/outpost';
+
+    File::ensureDirectoryExists($worktree);
+    File::ensureDirectoryExists($package);
+
+    writeComposer($worktree, [
+        ['type' => 'path', 'url' => '../outpost'],
+    ]);
+
+    $scan = $this->scanner->scan($worktree, $project);
+
+    expect($scan->paths)->toBe([$package])
+        ->and($scan->mounts())->toBe([$package.':/outpost:ro']);
 });
 
 it('handles repositories keyed by name', function () {

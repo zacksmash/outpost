@@ -28,7 +28,7 @@ it('runs argument tokens without a shell and passes the exit code through', func
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
             ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
         ], JSON_THROW_ON_ERROR)),
-        processPattern('container', 'exec', 'feature-x-app').' *' => Process::result('', '', 3),
+        processPattern('container', 'exec').' *' => Process::result('', '', 3),
     ]);
 
     $exit = Artisan::call('outpost:exec feature-x -- php artisan test --filter=Feature');
@@ -36,7 +36,28 @@ it('runs argument tokens without a shell and passes the exit code through', func
     expect($exit)->toBe(3);
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', 'feature-x-app', 'php', 'artisan', 'test', '--filter=Feature',
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'php', 'artisan', 'test', '--filter=Feature',
+    ]);
+});
+
+it('runs as root only when explicitly requested', function () {
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+        processPattern('container', 'exec').' *' => Process::result(''),
+    ]);
+
+    $this->artisan('outpost:exec', [
+        'name' => 'feature-x',
+        'arguments' => ['apt-get', 'update'],
+        '--root' => true,
+    ])->assertSuccessful();
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', '--env', 'HOME=/root', '--user', 'root', '--workdir', '/app',
+        'feature-x-app', 'apt-get', 'update',
     ]);
 });
 

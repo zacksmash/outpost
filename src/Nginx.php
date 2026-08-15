@@ -229,8 +229,8 @@ class Nginx
 
         return [
             "    listen {$socket} ssl{$suffix};",
-            '    ssl_certificate /outpost-tls/certificate.pem;',
-            '    ssl_certificate_key /outpost-tls/key.pem;',
+            '    ssl_certificate /etc/outpost/tls/certificate.pem;',
+            '    ssl_certificate_key /etc/outpost/tls/key.pem;',
             '    ssl_protocols TLSv1.2 TLSv1.3;',
         ];
     }

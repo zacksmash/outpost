@@ -17,6 +17,7 @@ use Zacksmash\Outpost\Runtime;
 use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\error;
 use function Laravel\Prompts\info;
+use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 use function Laravel\Prompts\spin;
 use function Laravel\Prompts\warning;
@@ -31,6 +32,7 @@ class RemoveCommand extends Command
     protected $signature = 'outpost:remove
         {name? : The name of the instance}
         {--force : Remove without asking}
+        {--discard-changes : Explicitly remove a worktree with uncommitted changes}
         {--forget : Remove local state without contacting the container runtime}';
 
     /**
@@ -56,6 +58,10 @@ class RemoveCommand extends Command
         if ($manifest === null) {
             error("The [{$name}] instance does not exist. See [php artisan outpost:list].");
 
+            return self::FAILURE;
+        }
+
+        if ($this->refusesDirtyWorktree($outposts, $git, $manifest->name)) {
             return self::FAILURE;
         }
 
@@ -150,6 +156,10 @@ class RemoveCommand extends Command
             return self::FAILURE;
         }
 
+        if ($this->refusesDirtyWorktree($outposts, $git, $name)) {
+            return self::FAILURE;
+        }
+
         if (! $this->option('force')
             && ! confirm("The [{$name}] manifest is unreadable, so its container cannot be determined. Remove the instance directory anyway?", false)) {
             info('Nothing removed.');
@@ -172,6 +182,30 @@ class RemoveCommand extends Command
         outro("Removed [{$name}].");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Refuse to destroy uncommitted work without an explicit discard option.
+     */
+    protected function refusesDirtyWorktree(Outposts $outposts, Git $git, string $name): bool
+    {
+        $worktree = $outposts->worktreePath($name);
+
+        if ((bool) $this->option('discard-changes') || ! File::isDirectory($worktree)) {
+            return false;
+        }
+
+        $status = $git->worktreeStatus($worktree);
+
+        if ($status === '') {
+            return false;
+        }
+
+        error("The [{$name}] worktree has uncommitted changes, so it was not removed.");
+        note($status);
+        note("Commit or preserve the changes first, or explicitly discard them with:\n\n  php artisan outpost:remove {$name} --discard-changes");
+
+        return true;
     }
 
     /**

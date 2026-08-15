@@ -64,8 +64,8 @@ it('terminates https and redirects plain http requests', function () {
     expect($config)->toContain('listen 80 default_server;')
         ->and($config)->toContain('return 301 https://$host$request_uri;')
         ->and($config)->toContain('listen 443 ssl default_server;')
-        ->and($config)->toContain('ssl_certificate /outpost-tls/certificate.pem;')
-        ->and($config)->toContain('ssl_certificate_key /outpost-tls/key.pem;')
+        ->and($config)->toContain('ssl_certificate /etc/outpost/tls/certificate.pem;')
+        ->and($config)->toContain('ssl_certificate_key /etc/outpost/tls/key.pem;')
         ->and($config)->toContain('fastcgi_param HTTPS $https if_not_empty;');
 });
 
@@ -85,7 +85,7 @@ it('serves mailpit through nginx using the instance scheme', function () {
 
     expect($config)->toContain('listen 8025 ssl;')
         ->and($config)->toContain('proxy_pass http://127.0.0.1:8026;')
-        ->and($config)->toContain('ssl_certificate /outpost-tls/certificate.pem;');
+        ->and($config)->toContain('ssl_certificate /etc/outpost/tls/certificate.pem;');
 });
 
 it('keeps the mailpit web endpoint on loopback when service access is private', function () {

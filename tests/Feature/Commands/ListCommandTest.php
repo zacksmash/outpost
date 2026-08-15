@@ -93,6 +93,23 @@ it('emits machine-readable instance state', function () {
         ->and($instances[1]['state'])->toBe('missing');
 });
 
+it('reports a running instance that failed provisioning as degraded', function () {
+    app(Outposts::class)->save(fakeManifest('failed', status: 'failed'));
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'failed-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+    ]);
+
+    $exit = Artisan::call('outpost:list', ['--json' => true]);
+    $instances = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($exit)->toBe(0)
+        ->and($instances[0]['state'])->toBe('degraded')
+        ->and($instances[0]['status'])->toBe('failed');
+});
+
 it('fails with the real error when the container daemon is unreachable', function () {
     app(Outposts::class)->save(fakeManifest('feature-x'));
 

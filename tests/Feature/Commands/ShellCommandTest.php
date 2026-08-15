@@ -35,7 +35,28 @@ it('opens a shell inside a running instance', function () {
     $this->artisan('outpost:shell', ['name' => 'feature-x'])->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', '-i', ...($tty ? ['-t'] : []), 'feature-x-app', 'bash',
+        'container', 'exec', '-i', ...($tty ? ['-t'] : []),
+        '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'bash',
+    ]);
+});
+
+it('opens a root shell only when explicitly requested', function () {
+    $tty = Symfony\Component\Process\Process::isTtySupported();
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+        processPattern('container', 'exec', '-i').' *' => Process::result(''),
+    ]);
+
+    $this->artisan('outpost:shell', ['name' => 'feature-x', '--root' => true])->assertSuccessful();
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', '-i', ...($tty ? ['-t'] : []),
+        '--env', 'HOME=/root', '--user', 'root', '--workdir', '/app',
+        'feature-x-app', 'bash',
     ]);
 });
 

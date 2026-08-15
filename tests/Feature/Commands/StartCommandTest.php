@@ -29,7 +29,7 @@ it('starts a stopped instance and flushes the dns cache', function () {
             ['id' => 'feature-x-app', 'status' => ['state' => 'stopped']],
         ], JSON_THROW_ON_ERROR)),
         processPattern('container', 'start', 'feature-x-app') => Process::result(''),
-        processPattern('container', 'exec', 'feature-x-app', 'curl').' *' => Process::result(''),
+        processPattern('container', 'exec').' *'.processPattern('feature-x-app', 'curl').' *' => Process::result(''),
         processPattern('dscacheutil', '-flushcache') => Process::result(''),
     ]);
 
@@ -64,7 +64,7 @@ it('points at the logs when the instance starts but never answers', function () 
     Process::fake([
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
         processPattern('container', 'start', 'feature-x-app') => Process::result(''),
-        processPattern('container', 'exec', 'feature-x-app', 'curl').' *' => Process::result('', 'refused', 7),
+        processPattern('container', 'exec').' *'.processPattern('feature-x-app', 'curl').' *' => Process::result('', 'refused', 7),
     ]);
 
     $this->artisan('outpost:start', ['name' => 'feature-x'])

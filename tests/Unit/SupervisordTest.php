@@ -80,7 +80,7 @@ it('runs configured application processes after provisioning', function () {
     expect($config)->toContain('[program:outpost-queue]')
         ->and($config)->toContain('command=/usr/local/bin/outpost-wait "php8.4" "artisan" "queue:work" "--queue=high priority"')
         ->and($config)->toContain('directory=/app')
-        ->and($config)->toContain('user=www-data')
+        ->and($config)->toContain('user=outpost')
         ->and($config)->toContain('stopasgroup=true')
         ->and($config)->toContain('killasgroup=true');
 });

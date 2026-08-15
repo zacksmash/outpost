@@ -66,3 +66,20 @@ it('provides structured json for agents and scripts', function () {
         ->and($output['endpoints']['application']['url'])->toBe('http://billing-app.outpost')
         ->and($output['expose_services'])->toBeFalse();
 });
+
+it('reports a running instance that failed provisioning as degraded', function () {
+    app(Outposts::class)->save(fakeManifest(name: 'billing', status: 'failed'));
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'billing-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+    ]);
+
+    $exit = Artisan::call('outpost:info', ['name' => 'billing', '--json' => true]);
+    $output = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($exit)->toBe(0)
+        ->and($output['state'])->toBe('degraded')
+        ->and($output['status'])->toBe('failed');
+});

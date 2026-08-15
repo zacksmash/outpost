@@ -76,7 +76,7 @@ class Supervisord
                 "outpost-{$name}",
                 '/usr/local/bin/outpost-wait '.$this->command($command),
                 $priority++,
-                user: 'www-data',
+                user: 'outpost',
                 directory: '/app',
                 stopAsGroup: true,
             );

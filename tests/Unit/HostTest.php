@@ -27,3 +27,15 @@ it('surfaces the real error when a url cannot be opened', function () {
 
     (new Host)->open('http://billing-app.outpost');
 })->throws(RuntimeException::class, 'Unable to open [http://billing-app.outpost]: no handler');
+
+it('reads the host user identity for bind mount permissions and metadata', function () {
+    Process::fake([
+        processPattern('id', '-u') => Process::result("501\n"),
+        processPattern('id', '-g') => Process::result("20\n"),
+    ]);
+
+    $host = new Host;
+
+    expect($host->userId())->toBe(501)
+        ->and($host->groupId())->toBe(20);
+});

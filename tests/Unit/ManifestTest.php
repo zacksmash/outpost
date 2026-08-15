@@ -61,6 +61,7 @@ it('loads old manifests with the original web and frontend defaults', function (
         $data['expose_services'],
         $data['cpus'],
         $data['memory'],
+        $data['status'],
     );
 
     $manifest = Manifest::fromArray($data);
@@ -69,8 +70,22 @@ it('loads old manifests with the original web and frontend defaults', function (
         ->and($manifest->frontend)->toBe('build')
         ->and($manifest->exposeServices)->toBeFalse()
         ->and($manifest->cpus)->toBeNull()
-        ->and($manifest->memory)->toBeNull();
+        ->and($manifest->memory)->toBeNull()
+        ->and($manifest->status)->toBe('ready');
 });
+
+it('can transition provisioning state without changing instance metadata', function () {
+    $manifest = fakeManifest(status: 'provisioning');
+
+    expect($manifest->withStatus('failed')->status)->toBe('failed')
+        ->and($manifest->withStatus('failed')->name)->toBe($manifest->name);
+});
+
+it('rejects invalid lifecycle metadata', function (string $key, mixed $value) {
+    Manifest::fromArray([...fakeManifest()->toArray(), $key => $value]);
+})->with([
+    'status' => ['status', 'broken'],
+])->throws(InvalidArgumentException::class);
 
 it('rejects invalid resource metadata', function (string $key, mixed $value) {
     Manifest::fromArray([...fakeManifest()->toArray(), $key => $value]);

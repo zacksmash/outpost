@@ -14,6 +14,21 @@ use Symfony\Component\Process\Process as SymfonyProcess;
 class Runtime
 {
     /**
+     * The exact shared image shipped for this package contract.
+     */
+    public const string PUBLISHED_IMAGE = 'ghcr.io/zacksmash/outpost:0.1.0';
+
+    /**
+     * The OCI label used to advertise the image's runtime mount contract.
+     */
+    public const string IMAGE_RUNTIME_PATH_LABEL = 'io.github.zacksmash.outpost.runtime-path';
+
+    /**
+     * The runtime configuration path required by this package version.
+     */
+    public const string IMAGE_RUNTIME_PATH = '/etc/outpost';
+
+    /**
      * The timeout applied to long-running container operations.
      */
     protected const int TIMEOUT = 600;
@@ -148,6 +163,40 @@ class Runtime
     }
 
     /**
+     * Read the compatibility metadata exposed by Apple container for an image.
+     *
+     * @return array{labels: array<string, string>}|null
+     */
+    public function imageMetadata(string $image): ?array
+    {
+        $result = Process::run(['container', 'image', 'inspect', $image]);
+
+        if (! $result->successful()) {
+            return null;
+        }
+
+        $images = json_decode($result->output(), true);
+
+        if (! is_array($images) || ! is_array($images[0] ?? null)) {
+            throw new RuntimeException("Unable to parse metadata for the [{$image}] image.");
+        }
+
+        $labels = data_get($images, '0.variants.0.config.config.Labels', []);
+
+        if (! is_array($labels)) {
+            $labels = [];
+        }
+
+        return [
+            'labels' => array_filter(
+                $labels,
+                fn (mixed $value, mixed $key): bool => is_string($key) && is_string($value),
+                ARRAY_FILTER_USE_BOTH,
+            ),
+        ];
+    }
+
+    /**
      * Pull an image from an OCI registry, streaming its progress.
      */
     public function pull(string $image, ?callable $output = null): void
@@ -201,13 +250,28 @@ class Runtime
         array $volumes,
         int $cpus = 4,
         string $memory = '2G',
+        ?int $uid = null,
+        ?int $gid = null,
     ): void {
         $this->validatedResources($cpus, $memory);
+
+        if (($uid === null) !== ($gid === null)
+            || ($uid !== null && ($uid < 1 || $gid < 1))) {
+            throw new RuntimeException('The instance user and group IDs must both be positive integers.');
+        }
 
         $command = [
             'container', 'run', '--detach', '--name', $container, '--dns', $dns,
             '--cpus', (string) $cpus, '--memory', $memory,
         ];
+
+        if ($uid !== null) {
+            array_push(
+                $command,
+                '--env', "OUTPOST_UID={$uid}",
+                '--env', "OUTPOST_GID={$gid}",
+            );
+        }
 
         foreach ($volumes as $volume) {
             $command[] = '--volume';
@@ -256,10 +320,13 @@ class Runtime
      */
     public function releaseProcesses(string $container): void
     {
-        $this->runOrFail(
-            ['container', 'exec', $container, 'touch', '/var/lib/outpost/ready'],
-            "Unable to release the application processes in [{$container}]",
-        );
+        $result = $this->exec($container, ['touch', '/var/lib/outpost/ready'], root: true);
+
+        if (! $result->successful()) {
+            throw new RuntimeException(
+                "Unable to release the application processes in [{$container}]: ".$this->output($result),
+            );
+        }
     }
 
     /**
@@ -291,9 +358,9 @@ class Runtime
      *
      * @param  list<string>  $command
      */
-    public function exec(string $container, array $command): ProcessResult
+    public function exec(string $container, array $command, bool $root = false): ProcessResult
     {
-        return Process::timeout(self::TIMEOUT)->run(['container', 'exec', $container, ...$command]);
+        return Process::timeout(self::TIMEOUT)->run($this->execCommand($container, $command, $root));
     }
 
     /**
@@ -301,10 +368,10 @@ class Runtime
      *
      * @param  list<string>  $command
      */
-    public function run(string $container, array $command, ?callable $output = null): int
+    public function run(string $container, array $command, ?callable $output = null, bool $root = false): int
     {
         return Process::forever()
-            ->run(['container', 'exec', $container, ...$command], $output)
+            ->run($this->execCommand($container, $command, $root), $output)
             ->exitCode() ?? 1;
     }
 
@@ -365,6 +432,28 @@ class Runtime
     }
 
     /**
+     * Get the user-facing runtime and provisioning state of an instance.
+     */
+    public function instanceState(Manifest $manifest, ?string $runtimeState = null): string
+    {
+        $runtimeState ??= $this->state($manifest->container) ?? 'missing';
+
+        if ($runtimeState !== 'running') {
+            return $runtimeState;
+        }
+
+        if ($manifest->status === 'provisioning') {
+            return 'provisioning';
+        }
+
+        if ($manifest->status === 'failed') {
+            return 'degraded';
+        }
+
+        return 'running';
+    }
+
+    /**
      * Determine if the given container is answering HTTP.
      */
     public function ready(string $container, bool $secure = false): bool
@@ -401,13 +490,16 @@ class Runtime
      * Only request a remote TTY when a local one exists — the CLI's
      * TTY path needs a real terminal to enter raw mode.
      */
-    public function shell(string $container, ?callable $output = null): int
+    public function shell(string $container, ?callable $output = null, bool $root = false): int
     {
         $tty = SymfonyProcess::isTtySupported();
+        $command = $this->execCommand($container, ['bash'], $root);
+
+        array_splice($command, 2, 0, ['-i', ...($tty ? ['-t'] : [])]);
 
         return Process::forever()
             ->tty($tty)
-            ->run(['container', 'exec', '-i', ...($tty ? ['-t'] : []), $container, 'bash'], $output)
+            ->run($command, $output)
             ->exitCode() ?? 1;
     }
 
@@ -471,6 +563,38 @@ class Runtime
         }
 
         return $result;
+    }
+
+    /**
+     * Build a shell-free exec command as the application user by default.
+     *
+     * @param  list<string>  $command
+     * @return list<string>
+     */
+    protected function execCommand(string $container, array $command, bool $root): array
+    {
+        $user = $root ? 'root' : 'outpost';
+        $home = $root ? '/root' : '/home/outpost';
+
+        return [
+            'container', 'exec',
+            '--env', "HOME={$home}",
+            '--user', $user,
+            '--workdir', '/app',
+            $container,
+            ...$command,
+        ];
+    }
+
+    /**
+     * Combine both output streams so a warning never hides the real failure.
+     */
+    protected function output(ProcessResult $result): string
+    {
+        return trim(implode("\n", array_filter([
+            trim($result->output()),
+            trim($result->errorOutput()),
+        ], fn (string $output): bool => $output !== '')));
     }
 
     /**

@@ -34,6 +34,22 @@ class Host
     }
 
     /**
+     * Get the host user's numeric ID for bind-mounted file access.
+     */
+    public function userId(): int
+    {
+        return $this->identity(['id', '-u'], 'Unable to identify the host user ID');
+    }
+
+    /**
+     * Get the host user's primary group ID for bind-mounted file access.
+     */
+    public function groupId(): int
+    {
+        return $this->identity(['id', '-g'], 'Unable to identify the host group ID');
+    }
+
+    /**
      * Open a URL with the macOS default browser handler.
      */
     public function open(string $url): void
@@ -63,5 +79,21 @@ class Host
         }
 
         return trim($result->output());
+    }
+
+    /**
+     * Read a positive numeric host identity value.
+     *
+     * @param  list<string>  $command
+     */
+    protected function identity(array $command, string $message): int
+    {
+        $value = $this->value($command, $message);
+
+        if (! ctype_digit($value) || (int) $value < 1) {
+            throw new RuntimeException("{$message}: received [{$value}].");
+        }
+
+        return (int) $value;
     }
 }

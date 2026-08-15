@@ -188,7 +188,7 @@ class InstallCommand extends Command
         if ($this->failed($checks, Doctor::RUNTIME_CHECK)) {
             $actions[] = 'Start the Apple container system';
             $actions[] = "Finish [{$domain}] networking after it starts";
-            $actions[] = 'Download the shared Outpost image if it is missing';
+            $actions[] = 'Prepare a compatible shared Outpost image if needed';
         } else {
             if ($this->failed($checks, Doctor::PUBLICATION_DOMAIN_CHECK)) {
                 $actions[] = "Configure Apple container to publish [{$domain}] and restart it";

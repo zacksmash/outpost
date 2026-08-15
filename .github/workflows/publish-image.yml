@@ -106,5 +106,6 @@ jobs:
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=MIT
+            io.github.zacksmash.outpost.runtime-path=/etc/outpost
           cache-from: type=gha
           cache-to: type=gha,mode=max

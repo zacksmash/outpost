@@ -63,6 +63,7 @@ it('keeps an existing image when the rebuild is declined', function () {
 
     $this->artisan('outpost:build')
         ->expectsConfirmation('The [ghcr.io/zacksmash/outpost:0.1.0] image already exists. Rebuild it?', 'no')
+        ->expectsOutputToContain('outpost:build --force')
         ->assertSuccessful();
 
     Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'build');

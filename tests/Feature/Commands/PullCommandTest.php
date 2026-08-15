@@ -29,6 +29,7 @@ it('keeps an existing image when refresh is declined', function () {
 
     $this->artisan('outpost:pull')
         ->expectsConfirmation('The [ghcr.io/zacksmash/outpost:0.1.0] image already exists. Pull it again?', 'no')
+        ->expectsOutputToContain('outpost:pull --force')
         ->assertSuccessful();
 
     Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[2] ?? null) === 'pull');

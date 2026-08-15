@@ -42,7 +42,7 @@ class Provisioner
 
         if ($this->installsFrontend($manifest)) {
             $this->step($onStep, 'Installing npm dependencies',
-                fn () => $this->exec($manifest, ['npm', 'install', '--no-fund', '--no-audit']));
+                fn () => $this->exec($manifest, $this->npmInstallCommand($manifest)));
         }
 
         if ($this->buildsFrontend($manifest)) {
@@ -81,6 +81,20 @@ class Provisioner
             'vite' => $this->hasFrontendScript($manifest, 'dev'),
             default => false,
         };
+    }
+
+    /**
+     * Select a reproducible install when the application has an npm lock file.
+     *
+     * @return list<string>
+     */
+    protected function npmInstallCommand(Manifest $manifest): array
+    {
+        $command = File::exists($this->outposts->worktreePath($manifest->name).'/package-lock.json')
+            ? 'ci'
+            : 'install';
+
+        return ['npm', $command, '--no-fund', '--no-audit'];
     }
 
     /**
@@ -237,11 +251,16 @@ class Provisioner
         $result = $this->runtime->exec($manifest->container, $command);
 
         if (! $result->successful()) {
+            $output = trim(implode("\n", array_filter([
+                trim($result->output()),
+                trim($result->errorOutput()),
+            ], fn (string $output): bool => $output !== '')));
+
             throw new RuntimeException(sprintf(
                 'The command [%s] exited with code %d: %s',
                 implode(' ', $command),
                 $result->exitCode() ?? 1,
-                trim($result->errorOutput() ?: $result->output()),
+                $output,
             ));
         }
     }

@@ -255,15 +255,70 @@ class Doctor
             );
         }
 
-        $checks[] = $this->runtime->hasImage($image)
-            ? DoctorCheck::pass(self::BASE_IMAGE_CHECK, "The [{$image}] image is available.")
-            : DoctorCheck::failure(
-                self::BASE_IMAGE_CHECK,
-                "The [{$image}] image is missing.",
-                'Run: php artisan outpost:pull (or use outpost:build for a customized local image)',
-            );
+        $checks[] = $this->baseImage($image);
 
         return $checks;
+    }
+
+    /**
+     * Check that the configured image exists and matches this package's mount contract.
+     */
+    protected function baseImage(string $image): DoctorCheck
+    {
+        try {
+            $metadata = $this->runtime->imageMetadata($image);
+        } catch (RuntimeException $e) {
+            return DoctorCheck::failure(
+                self::BASE_IMAGE_CHECK,
+                $e->getMessage(),
+                $this->imageRemedy($image, force: true),
+            );
+        }
+
+        if ($metadata === null) {
+            return DoctorCheck::failure(
+                self::BASE_IMAGE_CHECK,
+                "The [{$image}] image is missing.",
+                $this->imageRemedy($image),
+            );
+        }
+
+        $runtimePath = $metadata['labels'][Runtime::IMAGE_RUNTIME_PATH_LABEL] ?? null;
+
+        if ($runtimePath !== Runtime::IMAGE_RUNTIME_PATH) {
+            $detail = $runtimePath === null
+                ? "The [{$image}] image has no runtime-path contract and may be stale."
+                : "The [{$image}] image declares runtime-path contract [{$runtimePath}], but this package requires [".Runtime::IMAGE_RUNTIME_PATH.'].';
+
+            return DoctorCheck::failure(
+                self::BASE_IMAGE_CHECK,
+                $detail,
+                $this->imageRemedy($image, force: true),
+            );
+        }
+
+        return DoctorCheck::pass(
+            self::BASE_IMAGE_CHECK,
+            "The [{$image}] image is available and matches runtime-path contract [".Runtime::IMAGE_RUNTIME_PATH.'].',
+        );
+    }
+
+    /**
+     * Describe how to acquire a compatible shared or customized image.
+     */
+    protected function imageRemedy(string $image, bool $force = false): string
+    {
+        $build = 'outpost:build'.($force ? ' --force' : '');
+
+        if ($image !== Runtime::PUBLISHED_IMAGE) {
+            return 'Set [outpost.image] to ['.Runtime::PUBLISHED_IMAGE."] and run: php artisan outpost:pull (or use {$build} to prepare the configured customized image)";
+        }
+
+        if ($force) {
+            return 'Run: php artisan outpost:build --force (or use php artisan outpost:pull --force to refresh the published shared image)';
+        }
+
+        return "Run: php artisan outpost:pull (or use {$build} for a customized local image)";
     }
 
     /**

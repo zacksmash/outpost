@@ -242,3 +242,19 @@ it('deletes a branch', function () {
         'git', 'branch', '-D', '--', 'feature-x',
     ]);
 });
+
+it('resolves the absolute common git directory for worktree-aware mounts', function () {
+    Process::fake([
+        processPattern('git', 'rev-parse', '--path-format=absolute', '--git-common-dir') => Process::result("/projects/app/.git\n"),
+    ]);
+
+    expect($this->git->commonDirectory())->toBe('/projects/app/.git');
+});
+
+it('reads a worktree porcelain status without a shell', function () {
+    Process::fake([
+        processPattern('git', '-C', '/tmp/wt', 'status', '--short') => Process::result(" M app/Test.php\n?? notes.txt\n"),
+    ]);
+
+    expect($this->git->worktreeStatus('/tmp/wt'))->toBe(" M app/Test.php\n?? notes.txt");
+});

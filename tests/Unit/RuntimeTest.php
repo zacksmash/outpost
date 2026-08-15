@@ -106,6 +106,33 @@ it('checks whether an image exists', function () {
         ->and($this->runtime->hasImage('other'))->toBeTrue();
 });
 
+it('reads labels from apple container image metadata', function () {
+    Process::fake([
+        processPattern('container', 'image', 'inspect', 'outpost-base') => Process::result(json_encode([
+            [
+                'variants' => [[
+                    'config' => [
+                        'config' => [
+                            'Labels' => [
+                                Runtime::IMAGE_RUNTIME_PATH_LABEL => '/etc/outpost',
+                                'org.opencontainers.image.version' => '0.1.0',
+                            ],
+                        ],
+                    ],
+                ]],
+            ],
+        ], JSON_THROW_ON_ERROR)),
+        processPattern('container', 'image', 'inspect', 'missing') => Process::result('', 'not found', 1),
+    ]);
+
+    expect($this->runtime->imageMetadata('outpost-base'))->toBe([
+        'labels' => [
+            Runtime::IMAGE_RUNTIME_PATH_LABEL => '/etc/outpost',
+            'org.opencontainers.image.version' => '0.1.0',
+        ],
+    ])->and($this->runtime->imageMetadata('missing'))->toBeNull();
+});
+
 it('pulls an image from an oci registry', function () {
     Process::fake();
 
@@ -149,14 +176,15 @@ it('boots a detached container with volumes and dns', function () {
 
     $this->runtime->boot('feature-x-app', 'outpost-base', '1.1.1.1', [
         '/host/app:/app',
-        '/host/runtime:/outpost:ro',
-    ]);
+        '/host/runtime:/etc/outpost:ro',
+    ], uid: 501, gid: 20);
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'run', '--detach', '--name', 'feature-x-app', '--dns', '1.1.1.1',
         '--cpus', '4', '--memory', '2G',
+        '--env', 'OUTPOST_UID=501', '--env', 'OUTPOST_GID=20',
         '--volume', '/host/app:/app',
-        '--volume', '/host/runtime:/outpost:ro',
+        '--volume', '/host/runtime:/etc/outpost:ro',
         'outpost-base',
     ] && $process->timeout === 600);
 });
@@ -217,7 +245,8 @@ it('releases application processes after provisioning', function () {
     $this->runtime->releaseProcesses('billing-app');
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', 'billing-app', 'touch', '/var/lib/outpost/ready',
+        'container', 'exec', '--env', 'HOME=/root', '--user', 'root', '--workdir', '/app',
+        'billing-app', 'touch', '/var/lib/outpost/ready',
     ]);
 });
 
@@ -269,7 +298,7 @@ it('turns a lifecycle timeout into actionable runtime guidance', function () {
 
 it('surfaces the real error when application processes cannot be released', function () {
     Process::fake([
-        processPattern('container', 'exec', 'billing-app', 'touch', '/var/lib/outpost/ready') => Process::result('', 'container stopped', 1),
+        processPattern('container', 'exec').' *'.processPattern('billing-app', 'touch', '/var/lib/outpost/ready') => Process::result('', 'container stopped', 1),
     ]);
 
     $this->runtime->releaseProcesses('billing-app');
@@ -286,7 +315,7 @@ it('surfaces the real error when a lifecycle command fails', function (string $m
 
 it('executes commands inside a container and returns the raw result', function () {
     Process::fake([
-        processPattern('container', 'exec', 'feature-x-app', 'php', 'artisan', 'migrate', '--force') => Process::result('migrated', 'warning', 2),
+        processPattern('container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app', 'feature-x-app', 'php', 'artisan', 'migrate', '--force') => Process::result('migrated', 'warning', 2),
     ]);
 
     $result = $this->runtime->exec('feature-x-app', ['php', 'artisan', 'migrate', '--force']);
@@ -296,9 +325,20 @@ it('executes commands inside a container and returns the raw result', function (
         ->and(trim($result->errorOutput()))->toBe('warning');
 });
 
+it('can execute explicitly as root', function () {
+    Process::fake();
+
+    $this->runtime->run('feature-x-app', ['apt-get', 'update'], root: true);
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', '--env', 'HOME=/root', '--user', 'root', '--workdir', '/app',
+        'feature-x-app', 'apt-get', 'update',
+    ]);
+});
+
 it('streams a non-interactive command and passes its exit code through', function () {
     Process::fake([
-        processPattern('container', 'exec', 'feature-x-app', 'php', 'artisan', 'test', '--filter=Feature') => Process::result('', '', 3),
+        processPattern('container', 'exec').' *'.processPattern('feature-x-app', 'php', 'artisan', 'test', '--filter=Feature') => Process::result('', '', 3),
     ]);
 
     expect($this->runtime->run('feature-x-app', [
@@ -306,7 +346,8 @@ it('streams a non-interactive command and passes its exit code through', functio
     ]))->toBe(3);
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', 'feature-x-app', 'php', 'artisan', 'test', '--filter=Feature',
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'php', 'artisan', 'test', '--filter=Feature',
     ]);
 });
 
@@ -352,7 +393,9 @@ it('opens a shell and passes the exit code through', function () {
     expect($this->runtime->shell('feature-x-app'))->toBe(3);
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', '-i', ...($tty ? ['-t'] : []), 'feature-x-app', 'bash',
+        'container', 'exec', '-i', ...($tty ? ['-t'] : []),
+        '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'bash',
     ]);
 });
 
@@ -396,7 +439,7 @@ it('waits for a container to answer http', function () {
     Sleep::fake();
 
     Process::fake([
-        processPattern('container', 'exec', 'feature-x-app', 'curl').' *' => Process::sequence()
+        processPattern('container', 'exec').' *'.processPattern('feature-x-app', 'curl').' *' => Process::sequence()
             ->push(Process::result('', 'refused', 7))
             ->push(Process::result('', 'refused', 7))
             ->push(Process::result('')),
@@ -413,7 +456,7 @@ it('checks an https instance through its tls listener', function () {
     expect($this->runtime->ready('feature-x-app', secure: true))->toBeTrue();
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', 'feature-x-app',
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app', 'feature-x-app',
         'curl', '--fail', '--insecure', '--silent', '--output', '/dev/null', 'https://127.0.0.1',
     ]);
 });
@@ -422,7 +465,7 @@ it('gives up when a container never becomes ready', function () {
     Sleep::fake();
 
     Process::fake([
-        processPattern('container', 'exec', 'feature-x-app', 'curl').' *' => Process::result('', 'refused', 7),
+        processPattern('container', 'exec').' *'.processPattern('feature-x-app', 'curl').' *' => Process::result('', 'refused', 7),
     ]);
 
     expect($this->runtime->awaitReady('feature-x-app', 5))->toBeFalse();

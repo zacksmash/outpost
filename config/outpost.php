@@ -28,8 +28,9 @@ return [
     |
     | All instances boot from a single versioned base image containing every
     | service Outpost knows how to run. The guided installer pulls the image
-    | from GitHub Container Registry. Use "outpost:build" when you need a
-    | customized local image instead. Instances differ only by config.
+    | from GitHub Container Registry. Doctor verifies the image's runtime-path
+    | contract before creation. Use "outpost:build" when you need a customized
+    | local image instead. Instances differ only by generated config.
     |
     */
 

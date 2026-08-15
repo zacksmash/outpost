@@ -1,7 +1,7 @@
 # The Outpost base image.
 #
 # Every instance boots from this image and differs only by the generated
-# configuration mounted at /outpost, so this image installs everything
+# configuration mounted at /etc/outpost, so this image installs everything
 # Outpost knows how to run and enables none of it. Build it with
 # `php artisan outpost:build` — never by hand — so the DNS and
 # database build arguments are supplied correctly.
@@ -21,6 +21,9 @@ ARG ROADRUNNER_SHA256=f384d14b8687520816fc7ec204bb78f2fa54aba4da5336adef91d298fd
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
+ENV COMPOSER_ALLOW_SUPERUSER=1
+
+LABEL io.github.zacksmash.outpost.runtime-path="/etc/outpost"
 
 # Base tooling, web server, databases, and cache.
 RUN apt-get update \

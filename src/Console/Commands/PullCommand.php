@@ -36,7 +36,7 @@ class PullCommand extends Command
 
         if (! $this->option('force') && $runtime->hasImage($image)
             && ! confirm("The [{$image}] image already exists. Pull it again?", false)) {
-            info('Keeping the existing image.');
+            info('Keeping the existing image. Run [php artisan outpost:pull --force] when doctor reports an incompatible image.');
 
             return self::SUCCESS;
         }

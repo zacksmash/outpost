@@ -11,10 +11,12 @@ class PathRepositoryScan
      *
      * @param  list<string>  $paths
      * @param  list<string>  $warnings
+     * @param  list<string>|null  $targets
      */
     public function __construct(
         public readonly array $paths,
         public readonly array $warnings,
+        protected readonly ?array $targets = null,
     ) {}
 
     /**
@@ -35,6 +37,12 @@ class PathRepositoryScan
      */
     public function mounts(): array
     {
-        return array_map(fn (string $path): string => "{$path}:{$path}:ro", $this->paths);
+        $mounts = [];
+
+        foreach ($this->paths as $index => $path) {
+            $mounts[] = $path.':'.($this->targets[$index] ?? $path).':ro';
+        }
+
+        return $mounts;
     }
 }

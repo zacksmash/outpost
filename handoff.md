@@ -46,7 +46,7 @@ php artisan outpost:exec agent-task-482 -- npm run build
 
 Everything after `--` is passed directly to `container exec`; no intermediate shell interprets pipes, substitutions, or redirects. Output streams back and the inner exit code is preserved.
 
-Before removal, the agent must inspect and commit its work:
+Before removal, the agent must inspect its work and, only when authorized, commit it from the host rather than through `outpost:exec` (the mounted common Git directory is intentionally read-only inside the instance):
 
 ```bash
 git -C .outpost/agent-task-482/app status
@@ -60,7 +60,7 @@ Then:
 php artisan outpost:remove agent-task-482 --force
 ```
 
-`--force` retains the Git branch, but it does not preserve uncommitted work.
+`--force` retains the Git branch and skips confirmation, but removal still refuses a dirty worktree. `--discard-changes` is the explicit destructive override. To recreate from another base commit, remove the instance and then explicitly delete or rename the retained branch before creating it again.
 
 ## Existing security boundaries
 
@@ -71,6 +71,9 @@ Outpost already provides several useful protections:
 - The real application `.env` is never copied. A fresh environment is generated from `.env.example` with disposable credentials in [Provisioner.php](/Users/Zack/Dev/outpost/src/Provisioner.php:100).
 - Home directories, `.ssh`, `.aws`, `.gnupg`, `~/Library`, and parent directories are prohibited as Composer path mounts.
 - External Composer path repositories require confirmation, default to no, and mount read-only.
+- Relative Composer path repositories are resolved from the primary checkout and mounted at the path Composer expects from `/app`; generated Outpost configuration lives separately at `/etc/outpost`.
+- The repository's common Git directory is mounted read-only at its original absolute host path, so Git-aware tooling works without writable access to host refs.
+- Commits are host-side operations: use `git -C .outpost/<name>/app ...`; `outpost:exec <name> -- git commit ...` cannot update refs.
 - `expose_services => false` keeps databases, Redis, and Mailpit on container loopback.
 - Manifest validation prevents a modified manifest from targeting an unrelated container.
 - Exact-host HTTPS certificates avoid wildcard trust.
@@ -89,18 +92,16 @@ and avoid `--mount-path-repos` unless the agent genuinely needs and is trusted t
 Outposts contain mistakes, but they are not yet a hostile-code sandbox:
 
 - `/app` is deliberately writable, so a destructive command can erase uncommitted work in that outpost’s host worktree.
-- `outpost:exec` currently runs with the container’s default user, which is root.
+- Provisioning, `outpost:exec`, and `outpost:shell` run as a host-ID-mapped non-root application user by default; explicit `--root` remains powerful.
 - Shell-free execution prevents shell injection; it does not make an inherently destructive command safe.
 - Dependency installation executes Composer and npm scripts from the checked-out branch.
 - Containers have outbound network access, so untrusted code could potentially transmit readable source.
-- `outpost:remove --force` removes dirty worktrees without a final Git cleanliness check.
+- `outpost:remove --discard-changes` deliberately bypasses the dirty-worktree refusal and destroys uncommitted work.
 - `--forget` removes local bookkeeping while leaving the container behind and should only be used for a stuck runtime.
 
-So the current model is good for trusted coding agents and accidental-damage containment. For a stronger package-level guarantee, the next hardening slice should add:
+So the current model is good for trusted coding agents and accidental-damage containment. Non-root execution and dirty-worktree refusal are now implemented. For a stronger package-level guarantee, future hardening could add:
 
-1. Non-root agent execution by default, with explicit `--root`.
-2. A dirty-worktree refusal on removal, requiring `--discard-changes`.
-3. An `agent` security profile that disables service exposure and path mounts.
-4. Command audit logs and optional command policies.
-5. Optional outbound-network restrictions.
-6. Agent ownership, task metadata, and expiration in the manifest.
+1. An `agent` security profile that disables service exposure and path mounts.
+2. Command audit logs and optional command policies.
+3. Optional outbound-network restrictions.
+4. Agent ownership, task metadata, and expiration in the manifest.

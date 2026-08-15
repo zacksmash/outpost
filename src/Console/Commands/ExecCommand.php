@@ -22,7 +22,8 @@ class ExecCommand extends Command
      */
     protected $signature = 'outpost:exec
         {name? : The name of the instance}
-        {arguments?* : The command and arguments to run}';
+        {arguments?* : The command and arguments to run}
+        {--root : Run the command as root instead of the application user}';
 
     /**
      * The command description.
@@ -67,6 +68,7 @@ class ExecCommand extends Command
                 $manifest->container,
                 $command,
                 fn (string $type, string $buffer) => $this->output->write($buffer),
+                root: (bool) $this->option('root'),
             );
         } catch (RuntimeException $e) {
             error($e->getMessage());

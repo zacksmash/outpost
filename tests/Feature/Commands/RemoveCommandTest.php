@@ -30,6 +30,7 @@ function fakeRemoval(array $overrides = []): void
         ], JSON_THROW_ON_ERROR)),
         processPattern('container', 'stop', 'feature-x-app') => Process::result(''),
         processPattern('container', 'delete', 'feature-x-app') => Process::result(''),
+        processPattern('git', '-C').' *'.processPattern('status', '--short') => Process::result(''),
         processPattern('git', 'worktree', 'remove', '--force').' *' => Process::result(''),
         processPattern('git', 'worktree', 'prune') => Process::result(''),
         processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/feature/billing') => Process::result('', '', 1),
@@ -77,6 +78,39 @@ it('skips every confirmation when forced', function () {
     expect(File::isDirectory($this->root.'/feature-x'))->toBeFalse();
 
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('-D', $process->command, true));
+});
+
+it('refuses to remove a dirty worktree even when forced', function () {
+    File::ensureDirectoryExists($this->root.'/feature-x/app');
+
+    fakeRemoval([
+        processPattern('git', '-C', $this->root.'/feature-x/app', 'status', '--short') => Process::result(" M app/Test.php\n"),
+    ]);
+
+    $this->artisan('outpost:remove', ['name' => 'feature-x', '--force' => true])
+        ->expectsOutputToContain('uncommitted changes')
+        ->expectsOutputToContain('--discard-changes')
+        ->assertFailed();
+
+    expect(File::exists($this->root.'/feature-x/outpost.json'))->toBeTrue();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'delete');
+});
+
+it('removes a dirty worktree only with the explicit discard option', function () {
+    File::ensureDirectoryExists($this->root.'/feature-x/app');
+
+    fakeRemoval([
+        processPattern('git', '-C', $this->root.'/feature-x/app', 'status', '--short') => Process::result(" M app/Test.php\n"),
+    ]);
+
+    $this->artisan('outpost:remove', [
+        'name' => 'feature-x',
+        '--force' => true,
+        '--discard-changes' => true,
+    ])->assertSuccessful();
+
+    expect(File::isDirectory($this->root.'/feature-x'))->toBeFalse();
 });
 
 it('can forget local instance state without contacting a stuck runtime', function () {
