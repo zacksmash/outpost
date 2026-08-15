@@ -1,6 +1,6 @@
 # Release Notes
 
-## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.1...HEAD)
+## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.2...HEAD)
 
 ### Added
 
@@ -10,6 +10,20 @@
 
 - `outpost:info --json` and `outpost:list --json` now expose `status: degraded` when the live container state is `missing`, instead of contradicting that state with the manifest's stale `ready` status.
 - The package now defaults to the exact `ghcr.io/zacksmash/outpost:0.1.2` image.
+
+## [v0.1.2](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.1...v0.1.2) - 2026-08-15
+
+### Added
+
+- Added `php artisan outpost:start <name> --recreate` to rebuild a missing container around its surviving worktree, manifest, runtime configuration, HTTPS files, and approved Composer path repositories.
+- Recovery preserves the existing environment and application key, reinstalls Composer dependencies, reruns migrations, and pulls the exact image when it is absent.
+
+### Changed
+
+- `outpost:info --json` and `outpost:list --json` now report `status: degraded` when the live container state is `missing`.
+- The package now defaults to `ghcr.io/zacksmash/outpost:0.1.2`.
+
+Container-local MySQL, PostgreSQL, Redis, and Mailpit data cannot be recovered after the container disappears; SQLite data stored in the worktree survives.
 
 ## [v0.1.1](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.0...v0.1.1) - 2026-08-15
 
