@@ -126,13 +126,24 @@ it('replaces existing keys instead of duplicating them', function () {
         ->and($env)->not->toContain('APP_URL=http://localhost');
 });
 
-it('creates the sqlite database file', function () {
+it('creates the sqlite database file and points the environment at it', function () {
     Process::fake();
 
     $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []));
 
     expect(File::exists($this->root.'/feature-x/app/database/database.sqlite'))->toBeTrue()
-        ->and(File::get($this->root.'/feature-x/app/.env'))->toContain('DB_CONNECTION=sqlite');
+        ->and(File::get($this->root.'/feature-x/app/.env'))->toContain('DB_CONNECTION=sqlite')
+        // The .env.example may carry another application's database name, so
+        // the sqlite path must be written explicitly.
+        ->and(File::get($this->root.'/feature-x/app/.env'))->toContain('DB_DATABASE=/app/database/database.sqlite');
+});
+
+it('leaves the database environment alone when the instance does not run the database service', function () {
+    Process::fake();
+
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'mysql', services: ['redis']));
+
+    expect(File::get($this->root.'/feature-x/app/.env'))->not->toContain('DB_HOST=127.0.0.1');
 });
 
 it('points the environment at redis and mailpit when used', function () {

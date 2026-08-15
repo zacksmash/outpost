@@ -90,6 +90,14 @@ it('lets the outpost config override detection entirely', function () {
         ->and($detection->database)->toBe('mysql');
 });
 
+it('refuses a services override naming an unsupported service', function (mixed $service) {
+    detectorWith(['outpost.services' => [$service]]);
+})->with([
+    'a typo' => 'postgres',
+    'an unknown service' => 'memcached',
+    'a non-string' => 42,
+])->throws(RuntimeException::class, 'outpost.services');
+
 it('supports build and disabled frontend modes', function (string $frontend) {
     expect(detectorWith(['outpost.frontend' => $frontend])->frontend)->toBe($frontend);
 })->with(['build', 'none']);
@@ -97,6 +105,14 @@ it('supports build and disabled frontend modes', function (string $frontend) {
 it('refuses unsupported frontend modes', function (string $frontend) {
     detectorWith(['outpost.frontend' => $frontend]);
 })->with(['vite', 'webpack'])->throws(RuntimeException::class, 'outpost.frontend');
+
+it('refuses configured php versions that are not major.minor', function (mixed $version) {
+    detectorWith(['outpost.php' => [$version]]);
+})->with([
+    'a patch release' => '8.4.3',
+    'a trailing newline' => "8.4\n",
+    'a non-string' => 8.4,
+])->throws(RuntimeException::class, 'outpost.php');
 
 it('does not provision unsupported database drivers', function () {
     $detection = detectorWith([

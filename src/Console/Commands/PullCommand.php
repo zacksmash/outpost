@@ -6,6 +6,7 @@ namespace Zacksmash\Outpost\Console\Commands;
 
 use Illuminate\Console\Command;
 use RuntimeException;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 
 use function Laravel\Prompts\confirm;
@@ -14,6 +15,7 @@ use function Laravel\Prompts\info;
 use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 
+#[AsCommand(name: 'outpost:pull')]
 class PullCommand extends Command
 {
     /**

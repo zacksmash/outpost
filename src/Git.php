@@ -368,11 +368,15 @@ class Git
     /**
      * Run the given command inside the repository.
      *
+     * There is no timeout: fetching a large pull request or materializing
+     * a monorepo worktree legitimately outlasts the framework's default
+     * 60-second cap, just like running git by hand.
+     *
      * @param  list<string>  $command
      */
     protected function run(array $command): ProcessResult
     {
-        return Process::path($this->basePath)->run($command);
+        return Process::path($this->basePath)->forever()->run($command);
     }
 
     /**

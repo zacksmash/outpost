@@ -98,6 +98,7 @@ it('recreates a missing container without replacing the surviving worktree', fun
             ->push(Process::result('', 'not found', 1))
             ->push(Process::result(fakeImageInspect())),
         processPattern('container', 'image', 'pull', Runtime::PUBLISHED_IMAGE) => Process::result('pulled'),
+        processPattern('git', '-C', $worktree, 'status', '--short') => Process::result(''),
         processPattern('git', 'rev-parse', '--path-format=absolute', '--git-common-dir') => Process::result($git."\n"),
         processPattern('id', '-u') => Process::result("501\n"),
         processPattern('id', '-g') => Process::result("20\n"),
@@ -137,6 +138,42 @@ it('recreates a missing container without replacing the surviving worktree', fun
         'feature-x-app', 'php8.4', 'artisan', 'migrate', '--force',
     ]);
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('key:generate', $process->command, true));
+});
+
+it('refuses to recreate a missing container over a dirty worktree', function () {
+    $worktree = $this->root.'/feature-x/app';
+
+    File::ensureDirectoryExists($worktree);
+    File::put($worktree.'/.env', "APP_KEY=base64:existing\n");
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
+        processPattern('git', '-C', $worktree, 'status', '--short') => Process::result(" M app/Models/User.php\n"),
+    ]);
+
+    $this->artisan('outpost:start', ['name' => 'feature-x'])
+        ->expectsOutputToContain('uncommitted changes')
+        ->expectsOutputToContain('app/Models/User.php')
+        ->assertFailed();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'run');
+});
+
+it('clears a stale failed status once the instance answers again', function () {
+    app(Outposts::class)->save(fakeManifest('feature-x', status: 'failed'));
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'stopped']],
+        ], JSON_THROW_ON_ERROR)),
+        processPattern('container', 'start', 'feature-x-app') => Process::result(''),
+        processPattern('container', 'exec').' *'.processPattern('feature-x-app', 'curl').' *' => Process::result(''),
+        processPattern('dscacheutil', '-flushcache') => Process::result(''),
+    ]);
+
+    $this->artisan('outpost:start', ['name' => 'feature-x'])->assertSuccessful();
+
+    expect(app(Outposts::class)->find('feature-x')?->status)->toBe('ready');
 });
 
 it('refuses an unknown instance', function () {

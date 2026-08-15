@@ -72,6 +72,31 @@ it('appends a dns section when other configuration already exists', function () 
         ->toBe("[builder]\ncpus = 4\n\n[dns]\ndomain = \"outpost\"\n");
 });
 
+it('recognizes a hand-edited dns header with interior whitespace', function () {
+    $path = $this->home.'/.config/container/config.toml';
+
+    File::ensureDirectoryExists(dirname($path));
+    File::put($path, "[ dns ]\nnameservers = [\"1.1.1.1\"]\n");
+
+    $this->configuration->setDomain('outpost');
+
+    expect(File::get($path))
+        ->toBe("[ dns ]\ndomain = \"outpost\"\nnameservers = [\"1.1.1.1\"]\n");
+});
+
+it('stops at an array-of-tables boundary instead of rewriting its keys', function () {
+    $path = $this->home.'/.config/container/config.toml';
+
+    File::ensureDirectoryExists(dirname($path));
+    File::put($path, "[dns]\nnameservers = [\"1.1.1.1\"]\n\n[[registry.mirrors]]\ndomain = \"mirror.example.com\"\n");
+
+    $this->configuration->setDomain('outpost');
+
+    expect(File::get($path))
+        ->toContain("[dns]\ndomain = \"outpost\"\nnameservers = [\"1.1.1.1\"]")
+        ->toContain("[[registry.mirrors]]\ndomain = \"mirror.example.com\"");
+});
+
 it('rejects unsafe publication domains', function () {
     $this->configuration->setDomain('../outpost');
 })->throws(RuntimeException::class, 'valid publication domain');

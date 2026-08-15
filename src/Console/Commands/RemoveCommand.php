@@ -8,6 +8,8 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
 use InvalidArgumentException;
 use RuntimeException;
+use Symfony\Component\Console\Attribute\AsCommand;
+use Zacksmash\Outpost\Console\Concerns\FlushesDnsCaches;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Git;
@@ -22,8 +24,10 @@ use function Laravel\Prompts\outro;
 use function Laravel\Prompts\spin;
 use function Laravel\Prompts\warning;
 
+#[AsCommand(name: 'outpost:remove')]
 class RemoveCommand extends Command
 {
+    use FlushesDnsCaches;
     use ResolvesInstances;
 
     /**
@@ -51,7 +55,13 @@ class RemoveCommand extends Command
 
         try {
             $manifest = $outposts->exists($name) ? $outposts->find($name) : null;
-        } catch (InvalidArgumentException|RuntimeException $e) {
+        } catch (InvalidArgumentException $e) {
+            // An invalid name can never own an instance directory, so there
+            // is nothing on disk the broken-manifest path could clean up.
+            error($e->getMessage());
+
+            return self::FAILURE;
+        } catch (RuntimeException $e) {
             return $this->removeBroken($outposts, $git, $name, $e);
         }
 
@@ -88,7 +98,7 @@ class RemoveCommand extends Command
 
             $outposts->delete($manifest->name);
 
-            $runtime->flushDnsCache();
+            $this->flushDnsCacheQuietly($runtime);
         } catch (RuntimeException $e) {
             error($e->getMessage());
 
@@ -146,7 +156,7 @@ class RemoveCommand extends Command
     /**
      * Remove an instance whose manifest can no longer be read.
      */
-    protected function removeBroken(Outposts $outposts, Git $git, string $name, RuntimeException|InvalidArgumentException $reason): int
+    protected function removeBroken(Outposts $outposts, Git $git, string $name, RuntimeException $reason): int
     {
         warning($reason->getMessage());
 
@@ -195,7 +205,14 @@ class RemoveCommand extends Command
             return false;
         }
 
-        $status = $git->worktreeStatus($worktree);
+        try {
+            $status = $git->worktreeStatus($worktree);
+        } catch (RuntimeException $e) {
+            error($e->getMessage());
+            note("Unable to check the [{$name}] worktree for uncommitted changes, so it was not removed.\nRemove it anyway, discarding anything uncommitted, with:\n\n  php artisan outpost:remove {$name} --discard-changes");
+
+            return true;
+        }
 
         if ($status === '') {
             return false;

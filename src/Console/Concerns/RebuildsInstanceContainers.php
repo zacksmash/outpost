@@ -15,9 +15,9 @@ use Zacksmash\Outpost\Nginx;
 use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\Processes;
 use Zacksmash\Outpost\Provisioner;
-use Zacksmash\Outpost\Runtime;
 use Zacksmash\Outpost\Supervisord;
 
+use function Laravel\Prompts\error;
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\note;
 use function Laravel\Prompts\spin;
@@ -25,6 +25,8 @@ use function Laravel\Prompts\warning;
 
 trait RebuildsInstanceContainers
 {
+    use FlushesDnsCaches;
+
     /**
      * Ensure the configured image is installed, compatible, and identifiable.
      *
@@ -56,24 +58,47 @@ trait RebuildsInstanceContainers
             );
         }
 
-        $runtimePath = $metadata['labels'][Runtime::IMAGE_RUNTIME_PATH_LABEL] ?? null;
-
-        if ($runtimePath !== Runtime::IMAGE_RUNTIME_PATH) {
-            $detail = $runtimePath === null
-                ? "The [{$image}] image has no runtime-path contract and may be stale."
-                : "The [{$image}] image declares runtime-path contract [{$runtimePath}], but this package requires [".Runtime::IMAGE_RUNTIME_PATH.'].';
-
-            throw new RuntimeException($detail.' '.$doctor->imageRemedy($image, force: true));
+        if (($problem = $doctor->imageProblem($image, $metadata)) !== null) {
+            throw new RuntimeException($problem.' '.$doctor->imageRemedy($image, force: true));
         }
 
-        if ($metadata['digest'] === null) {
-            throw new RuntimeException(
-                "The [{$image}] image has no immutable digest, so Outpost cannot track upgrades. ".
-                $doctor->imageRemedy($image, force: true),
-            );
+        /** @var string $digest */
+        $digest = $metadata['digest'];
+
+        return ['image' => $image, 'digest' => $digest];
+    }
+
+    /**
+     * Refuse to rebuild over uncommitted work before deleting anything.
+     *
+     * Rebuilding rewrites the worktree's .env and reruns dependency and
+     * asset builds in place, so dirty worktrees are always refused.
+     *
+     * @param  list<Manifest>  $manifests
+     */
+    protected function hasUnsafeWorktree(array $manifests, Outposts $outposts, Git $git): bool
+    {
+        $dirty = false;
+
+        foreach ($manifests as $manifest) {
+            $this->assertRebuildable($manifest, $outposts);
+            $status = $git->worktreeStatus($outposts->worktreePath($manifest->name));
+
+            if ($status === '') {
+                continue;
+            }
+
+            error("The [{$manifest->name}] worktree has uncommitted changes, so its container was not rebuilt.");
+
+            foreach (explode("\n", $status) as $file) {
+                $this->line($file);
+            }
+
+            note('Commit or preserve these files first. Outpost will not discard them.');
+            $dirty = true;
         }
 
-        return ['image' => $image, 'digest' => $metadata['digest']];
+        return $dirty;
     }
 
     /**
@@ -207,7 +232,7 @@ trait RebuildsInstanceContainers
 
             $manifest = $manifest->withStatus('ready');
             $outposts->save($manifest);
-            $runtime->flushDnsCache();
+            $this->flushDnsCacheQuietly($runtime);
         } catch (RuntimeException $e) {
             $outposts->save($manifest->withStatus('failed'));
 

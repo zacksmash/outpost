@@ -30,7 +30,7 @@ php artisan outpost:install        # optional explicit host setup
 
 The first interactive `php artisan outpost` offers required setup before creating an instance. Setup can start Apple container, configure its publication domain, register DNS, and pull the exact image. Use `outpost:install --local` to build a missing image locally; use `outpost:build --force` to intentionally replace an existing local image.
 
-HTTP is the default. For trusted HTTPS, set `OUTPOST_HTTPS=true`, install `mkcert`, and run `php artisan outpost:certify`. This installs the local authority and gives each new instance an exact-host certificate. Forced or non-interactive setup requires the explicit `--https` option before changing the trust store.
+HTTP is the default. For trusted HTTPS, set `OUTPOST_HTTPS=true`, install `mkcert`, and run `php artisan outpost:certify`. This installs the local authority and gives each new instance an exact-host certificate. Non-interactive setup requires the explicit `--force` option, and changing the trust store additionally requires the explicit `--https` option.
 
 Doctor is read-only. Apply its `FAIL` remedies before creation. Browsers and host CLI tools may separately need macOS Local Network permission. When host access fails, probe inside the instance:
 
@@ -67,6 +67,7 @@ php artisan outpost:remove billing
 
 ```bash
 composer update zacksmash/outpost --with-all-dependencies
+php artisan outpost:pull            # refresh the shared base image when needed
 php artisan outpost:upgrade --all
 ```
 
@@ -74,7 +75,7 @@ Manifests record the runtime driver, container image reference, and digest. List
 
 `outpost:upgrade <name>` and `--all` pull a missing configured image, verify its contract, preflight every selected worktree, and replace only outdated or missing containers. Dirty worktrees are refused. Source and branches survive; container-local databases and service data reset; Composer, front-end builds, and migrations run again. Use `--mount-path-repos` in non-interactive runs that require reviewed external repositories.
 
-When runtime state is `missing` but the manifest and worktree survive, `outpost:start <name>` recreates the container automatically through the same path. It preserves `.env` and `APP_KEY`. Lost container-local MySQL, PostgreSQL, Redis, and Mailpit data cannot be recovered; SQLite inside the worktree survives.
+When runtime state is `missing` but the manifest and worktree survive, `outpost:start <name>` recreates the container automatically through the same path, refusing dirty worktrees exactly like `outpost:upgrade`. It preserves `.env` and `APP_KEY`. Lost container-local MySQL, PostgreSQL, Redis, and Mailpit data cannot be recovered; SQLite inside the worktree survives.
 
 ### 4. Work safely as an agent
 

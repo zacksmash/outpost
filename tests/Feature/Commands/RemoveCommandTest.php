@@ -191,6 +191,32 @@ it('never acts on a manifest naming an unexpected container', function () {
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('someone-elses-box', $process->command, true));
 });
 
+it('rejects a name that is not a slug with a clean error', function () {
+    Process::fake();
+
+    $this->artisan('outpost:remove', ['name' => 'My Instance', '--force' => true])
+        ->expectsOutputToContain('must be a URL-friendly slug')
+        ->assertFailed();
+
+    Process::assertNothingRan();
+});
+
+it('refuses removal with a remedy when the worktree cannot be inspected', function () {
+    File::ensureDirectoryExists($this->root.'/feature-x/app');
+
+    fakeRemoval([
+        processPattern('git', '-C').' *'.processPattern('status', '--short') => Process::result('', 'fatal: not a git repository', 128),
+    ]);
+
+    $this->artisan('outpost:remove', ['name' => 'feature-x', '--force' => true])
+        ->expectsOutputToContain('--discard-changes')
+        ->assertFailed();
+
+    expect(File::exists($this->root.'/feature-x/outpost.json'))->toBeTrue();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'delete');
+});
+
 it('offers to delete the branch when it is safe', function () {
     fakeRemoval([
         processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/feature/billing') => Process::result('abc123'),

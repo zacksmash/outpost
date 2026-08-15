@@ -6,6 +6,7 @@ namespace Zacksmash\Outpost\Console\Commands;
 
 use Illuminate\Console\Command;
 use RuntimeException;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Certificates;
 
 use function Laravel\Prompts\error;
@@ -13,6 +14,7 @@ use function Laravel\Prompts\info;
 use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 
+#[AsCommand(name: 'outpost:certify')]
 class CertifyCommand extends Command
 {
     /**

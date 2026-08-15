@@ -21,6 +21,11 @@ ENV COMPOSER_ALLOW_SUPERUSER=1
 
 LABEL io.github.zacksmash.outpost.runtime-path="/etc/outpost"
 
+# Ubuntu 24.04 ships a stock "ubuntu" user occupying UID/GID 1000, which
+# collides with the IDs the entrypoint maps onto the "outpost" user for
+# bind-mount ownership. Remove it so any host UID can be mapped.
+RUN userdel --remove ubuntu 2>/dev/null || true
+
 # Base tooling, web server, databases, and cache.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

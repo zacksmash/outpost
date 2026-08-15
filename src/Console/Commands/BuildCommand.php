@@ -6,6 +6,7 @@ namespace Zacksmash\Outpost\Console\Commands;
 
 use Illuminate\Console\Command;
 use RuntimeException;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 
 use function Laravel\Prompts\confirm;
@@ -14,6 +15,7 @@ use function Laravel\Prompts\info;
 use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 
+#[AsCommand(name: 'outpost:build')]
 class BuildCommand extends Command
 {
     /**
@@ -33,18 +35,24 @@ class BuildCommand extends Command
     {
         $image = config()->string('outpost.image');
 
+        $credentials = [];
+
         foreach (['database', 'username', 'password'] as $key) {
-            if (preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]*$/D', config()->string("outpost.database.{$key}")) !== 1) {
+            $value = config("outpost.database.{$key}");
+
+            if (! is_string($value) || preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]*$/D', $value) !== 1) {
                 error("The [outpost.database.{$key}] value must start with a letter or number and may only contain letters, numbers, dots, dashes, and underscores.");
 
                 return self::FAILURE;
             }
+
+            $credentials[$key] = $value;
         }
 
         $versions = [];
 
         foreach ((array) config('outpost.php') as $version) {
-            if (! is_string($version) || preg_match('/^\d+\.\d+$/', $version) !== 1) {
+            if (! is_string($version) || preg_match('/^\d+\.\d+$/D', $version) !== 1) {
                 error('The [outpost.php] versions must look like "8.4".');
 
                 return self::FAILURE;
@@ -74,9 +82,9 @@ class BuildCommand extends Command
                 config()->string('outpost.dns'),
                 dirname(__DIR__, 3).'/stubs',
                 [
-                    'DB_DATABASE' => config()->string('outpost.database.database'),
-                    'DB_USERNAME' => config()->string('outpost.database.username'),
-                    'DB_PASSWORD' => config()->string('outpost.database.password'),
+                    'DB_DATABASE' => $credentials['database'],
+                    'DB_USERNAME' => $credentials['username'],
+                    'DB_PASSWORD' => $credentials['password'],
                     'PHP_VERSIONS' => implode(' ', $versions),
                 ],
                 fn (string $type, string $buffer) => $this->output->write($buffer),

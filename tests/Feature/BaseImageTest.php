@@ -21,12 +21,17 @@ it('prepares a host-mapped non-root application user and collision-free runtime 
 
     expect($dockerfile)
         ->toContain('COMPOSER_ALLOW_SUPERUSER=1')
+        // Ubuntu's stock UID-1000 user would make the default host mapping
+        // fail, so the image must remove it.
+        ->toContain('userdel --remove ubuntu')
         ->and($entrypoint)
         ->toContain('OUTPOST_UID')
         ->toContain('OUTPOST_GID')
         ->toContain('useradd')
-        ->toContain('/etc/outpost/nginx.conf')
-        ->not->toContain('"/outpost/${file}"');
+        // The entrypoint must read its generated configuration from the
+        // exact runtime path the image contract advertises.
+        ->toContain(Runtime::IMAGE_RUNTIME_PATH.'/nginx.conf')
+        ->toContain(Runtime::IMAGE_RUNTIME_PATH.'/supervisord.conf');
 });
 
 it('records the runtime path contract in the image', function () {

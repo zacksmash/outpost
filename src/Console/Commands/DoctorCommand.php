@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zacksmash\Outpost\Console\Commands;
 
 use Illuminate\Console\Command;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\DoctorCheck;
 
@@ -14,6 +15,7 @@ use function Laravel\Prompts\outro;
 use function Laravel\Prompts\table;
 use function Laravel\Prompts\warning;
 
+#[AsCommand(name: 'outpost:doctor')]
 class DoctorCommand extends Command
 {
     /**

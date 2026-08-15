@@ -6,6 +6,7 @@ namespace Zacksmash\Outpost\Console\Commands;
 
 use Illuminate\Console\Command;
 use RuntimeException;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Outposts;
@@ -13,6 +14,7 @@ use Zacksmash\Outpost\Outposts;
 use function Laravel\Prompts\error;
 use function Laravel\Prompts\note;
 
+#[AsCommand(name: 'outpost:shell')]
 class ShellCommand extends Command
 {
     use ResolvesInstances;

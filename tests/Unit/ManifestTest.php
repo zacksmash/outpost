@@ -196,6 +196,23 @@ it('rejects a non-string php version', function () {
     Manifest::fromArray([...fakeManifest()->toArray(), 'php' => 8.4]);
 })->throws(InvalidArgumentException::class, 'The manifest [php] value must be a string.');
 
+it('rejects a php version that could reshape generated configuration', function (string $php) {
+    Manifest::fromArray([...fakeManifest()->toArray(), 'php' => $php]);
+})->with([
+    'a patch release' => '8.4.3',
+    'an empty version' => '',
+    'an injection attempt' => "8.4\nlocation / {}",
+])->throws(InvalidArgumentException::class, 'manifest [php]');
+
+it('rejects a url that is not a plain http hostname', function (string $url) {
+    Manifest::fromArray([...fakeManifest()->toArray(), 'url' => $url]);
+})->with([
+    'a bare name' => 'feature-x',
+    'another scheme' => 'ftp://feature-x-app.outpost',
+    'a path suffix' => 'http://feature-x-app.outpost/admin',
+    'an injection attempt' => "http://feature-x-app.outpost\nDB_PASSWORD=stolen",
+])->throws(InvalidArgumentException::class, 'manifest [url]');
+
 it('rejects services that are not a list', function () {
     Manifest::fromArray([...fakeManifest()->toArray(), 'services' => ['db' => 'mysql']]);
 })->throws(InvalidArgumentException::class, 'The manifest [services] value must be a list.');

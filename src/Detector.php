@@ -37,6 +37,11 @@ class Detector
     }
 
     /**
+     * The services Outpost knows how to run inside an instance.
+     */
+    protected const array SUPPORTED_SERVICES = ['mysql', 'pgsql', 'redis', 'mailpit'];
+
+    /**
      * Determine which services an instance of the application should run.
      *
      * @return list<string>
@@ -47,9 +52,14 @@ class Detector
             $services = [];
 
             foreach ($override as $service) {
-                if (is_string($service)) {
-                    $services[] = $service;
+                if (! is_string($service) || ! in_array($service, self::SUPPORTED_SERVICES, true)) {
+                    throw new RuntimeException(sprintf(
+                        'The [outpost.services] values may only contain: %s.',
+                        implode(', ', self::SUPPORTED_SERVICES),
+                    ));
                 }
+
+                $services[] = $service;
             }
 
             return $services;
@@ -117,9 +127,11 @@ class Detector
         $versions = [];
 
         foreach ((array) $this->config->get('outpost.php', []) as $version) {
-            if (is_string($version)) {
-                $versions[] = $version;
+            if (! is_string($version) || preg_match('/^\d+\.\d+$/D', $version) !== 1) {
+                throw new RuntimeException('The [outpost.php] versions must look like "8.4".');
             }
+
+            $versions[] = $version;
         }
 
         if ($versions === []) {

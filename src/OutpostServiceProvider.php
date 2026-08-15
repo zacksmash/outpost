@@ -92,7 +92,7 @@ class OutpostServiceProvider extends ServiceProvider
 
         $this->publishes([
             __DIR__.'/../config/outpost.php' => config_path('outpost.php'),
-        ], ['outpost', 'outpost-config']);
+        ], 'outpost-config');
 
         $this->commands([
             Console\Commands\BuildCommand::class,

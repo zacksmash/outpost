@@ -6,6 +6,7 @@ namespace Zacksmash\Outpost\Console\Commands;
 
 use Illuminate\Console\Command;
 use RuntimeException;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Console\Concerns\RebuildsInstanceContainers;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Console\Concerns\ResolvesPathRepositoryMounts;
@@ -26,6 +27,7 @@ use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 use function Laravel\Prompts\spin;
 
+#[AsCommand(name: 'outpost:start')]
 class StartCommand extends Command
 {
     use RebuildsInstanceContainers;
@@ -37,7 +39,6 @@ class StartCommand extends Command
      */
     protected $signature = 'outpost:start
         {name? : The name of the instance}
-        {--recreate : Deprecated; missing containers are recreated automatically}
         {--mount-path-repos : Remount discovered composer path repositories without asking}';
 
     /**
@@ -76,6 +77,10 @@ class StartCommand extends Command
             }
 
             if ($state === null) {
+                if ($this->hasUnsafeWorktree([$manifest], $outposts, $git)) {
+                    return self::FAILURE;
+                }
+
                 $recreating = true;
                 ['image' => $image, 'digest' => $digest] = $this->configuredImage($runtime, $doctor);
                 $mounts = $this->pathRepositoryMounts(
@@ -103,9 +108,9 @@ class StartCommand extends Command
                 outro("Recreated: {$manifest->url}");
 
                 return self::SUCCESS;
-            } else {
-                spin(fn () => $runtime->start($manifest->container), "Starting [{$manifest->name}]");
             }
+
+            spin(fn () => $runtime->start($manifest->container), "Starting [{$manifest->name}]");
 
             $seconds = config()->integer('outpost.timeout');
 
@@ -116,7 +121,13 @@ class StartCommand extends Command
                 return self::FAILURE;
             }
 
-            $runtime->flushDnsCache();
+            // The instance is answering HTTP again, so a failure recorded by
+            // an earlier run no longer describes it.
+            if ($manifest->status !== 'ready') {
+                $outposts->save($manifest = $manifest->withStatus('ready'));
+            }
+
+            $this->flushDnsCacheQuietly($runtime);
         } catch (RuntimeException $e) {
             error($e->getMessage());
 

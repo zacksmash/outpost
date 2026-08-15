@@ -6,12 +6,14 @@ namespace Zacksmash\Outpost\Console\Commands;
 
 use Illuminate\Console\Command;
 use RuntimeException;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Outposts;
 
 use function Laravel\Prompts\error;
 
+#[AsCommand(name: 'outpost:logs')]
 class LogsCommand extends Command
 {
     use ResolvesInstances;
@@ -38,6 +40,14 @@ class LogsCommand extends Command
         }
 
         try {
+            // A follow stream ends quietly whenever the container stops, so
+            // a missing container must be refused before streaming starts.
+            if (! $runtime->exists($manifest->container)) {
+                error("The [{$manifest->name}] instance has no container. Recreate it with [php artisan outpost:start {$manifest->name}].");
+
+                return self::FAILURE;
+            }
+
             $runtime->logs(
                 $manifest->container,
                 follow: (bool) $this->option('follow'),

@@ -147,6 +147,7 @@ php artisan outpost:open billing mailpit         # endpoints: app or mailpit
 php artisan outpost:start billing
 php artisan outpost:upgrade billing               # replace only the container; preserves a clean worktree
 php artisan outpost:upgrade --all                 # upgrade every outdated or missing instance
+php artisan outpost:pull                         # pull or refresh the shared base image
 php artisan outpost:stop billing                 # preserves worktree and data
 php artisan outpost:exec billing -- php artisan test
 php artisan outpost:shell billing
@@ -179,7 +180,7 @@ git -C .outpost/billing/app commit -am "Finish billing"
 
 Removal refuses a dirty worktree, even with `--force`. Preserve the work or use `--discard-changes` to explicitly destroy it. `--force` skips prompts and retains the branch. To recreate an instance from another base, remove it and then delete or rename the retained branch yourself.
 
-If the manifest and worktree survive but Apple container no longer has the container, run `outpost:start <name>` or `outpost:upgrade <name>`. Both recreate the container automatically, preserve the worktree and application key, remount approved path repositories, and refresh Composer, front-end builds, and migrations. The missing container's writable service data is already gone and cannot be recovered; SQLite data inside the worktree survives.
+If the manifest and worktree survive but Apple container no longer has the container, run `outpost:start <name>` or `outpost:upgrade <name>`. Both recreate the container automatically, refuse dirty worktrees, preserve the worktree and application key, remount approved path repositories, and refresh Composer, front-end builds, and migrations. The missing container's writable service data is already gone and cannot be recovered; SQLite data inside the worktree survives.
 
 If an Apple container VM is stuck, `outpost:remove <name> --forget` removes only Outpost's local worktree and manifest, reports the orphaned container, and prints its later cleanup command.
 
@@ -202,6 +203,7 @@ Publish configuration with `php artisan vendor:publish --tag="outpost-config"`.
 | `php` | `['8.4', '8.5']` | PHP versions installed in the image. |
 | `frontend` | `build` | Build assets once, or `none` to skip Node. |
 | `https` | `false` | Set `true` to require prepared trusted HTTPS. |
+| `tls.path` | `.outpost/tls` | Project-relative trusted HTTPS state directory. |
 | `services` | `null` | Explicit service list; `null` enables detection. |
 | `expose_services` | `true` | Expose detected services on the instance IP. |
 | `processes` | `[]` | Named supervised argument lists. |

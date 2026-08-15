@@ -96,10 +96,8 @@ class Endpoints
      */
     public function browser(Manifest $manifest, string $name): string
     {
-        $name = $name === 'application' ? 'app' : $name;
-        $endpoint = $name === 'app'
-            ? $this->all($manifest)['application']
-            : ($this->all($manifest)[$name] ?? null);
+        $key = in_array($name, ['app', 'application'], true) ? 'application' : $name;
+        $endpoint = $this->all($manifest)[$key] ?? null;
         $url = is_array($endpoint) ? ($endpoint['url'] ?? null) : null;
 
         if (! is_string($url)) {

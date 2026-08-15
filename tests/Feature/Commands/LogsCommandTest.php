@@ -24,6 +24,9 @@ afterEach(function () {
 
 it('shows the instance logs', function () {
     Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ])),
         processPattern('container', 'logs', 'feature-x-app') => Process::result("nginx started\n"),
     ]);
 
@@ -36,6 +39,9 @@ it('shows the instance logs', function () {
 
 it('streams the logs when following', function () {
     Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ])),
         processPattern('container', 'logs', '--follow', 'feature-x-app') => Process::result(''),
     ]);
 
@@ -48,10 +54,25 @@ it('streams the logs when following', function () {
 
 it('surfaces the real error when the logs cannot be fetched', function () {
     Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'stopped']],
+        ])),
         processPattern('container', 'logs', 'feature-x-app') => Process::result('', 'no such container', 1),
     ]);
 
     $this->artisan('outpost:logs', ['name' => 'feature-x'])
         ->expectsOutputToContain('no such container')
         ->assertFailed();
+});
+
+it('fails cleanly when the container is missing, even in follow mode', function () {
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
+    ]);
+
+    $this->artisan('outpost:logs', ['name' => 'feature-x', '--follow' => true])
+        ->expectsOutputToContain('has no container')
+        ->assertFailed();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'logs');
 });

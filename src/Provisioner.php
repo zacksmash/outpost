@@ -41,12 +41,10 @@ class Provisioner
         $this->step($onStep, 'Linking the storage directory',
             fn () => $this->artisan($manifest, ['storage:link', '--force']));
 
-        if ($this->installsFrontend($manifest)) {
+        if ($this->buildsFrontend($manifest)) {
             $this->step($onStep, 'Installing npm dependencies',
                 fn () => $this->exec($manifest, $this->npmInstallCommand($manifest)));
-        }
 
-        if ($this->buildsFrontend($manifest)) {
             $this->step($onStep, 'Building the front-end assets',
                 fn () => $this->buildFrontend($manifest));
         }
@@ -75,12 +73,10 @@ class Provisioner
         $this->step($onStep, 'Installing composer dependencies',
             fn () => $this->php($manifest, ['/usr/local/bin/composer', 'install', '--no-interaction', '--prefer-dist']));
 
-        if ($this->installsFrontend($manifest)) {
+        if ($this->buildsFrontend($manifest)) {
             $this->step($onStep, 'Installing npm dependencies',
                 fn () => $this->exec($manifest, $this->npmInstallCommand($manifest)));
-        }
 
-        if ($this->buildsFrontend($manifest)) {
             $this->step($onStep, 'Building the front-end assets',
                 fn () => $this->buildFrontend($manifest));
         }
@@ -90,20 +86,11 @@ class Provisioner
     }
 
     /**
-     * Determine if the application builds front-end assets.
+     * Determine if the application installs and builds front-end assets.
      *
      * An app with a build script serves errors until it runs.
      */
     protected function buildsFrontend(Manifest $manifest): bool
-    {
-        return $manifest->frontend === 'build'
-            && $this->hasFrontendScript($manifest, 'build');
-    }
-
-    /**
-     * Determine if frontend dependencies should be installed.
-     */
-    protected function installsFrontend(Manifest $manifest): bool
     {
         return $manifest->frontend === 'build'
             && $this->hasFrontendScript($manifest, 'build');
@@ -183,7 +170,16 @@ class Provisioner
     {
         $values = ['APP_URL' => $manifest->url];
 
-        if (in_array($manifest->database, ['mysql', 'mariadb', 'pgsql'], true)) {
+        $databaseService = match ($manifest->database) {
+            'mysql', 'mariadb' => 'mysql',
+            'pgsql' => 'pgsql',
+            default => null,
+        };
+
+        // Point the application at the container-local database only when the
+        // instance actually runs it — a services override may deliberately
+        // leave the database to the application's own configuration.
+        if ($databaseService !== null && $manifest->uses($databaseService)) {
             $values += [
                 'DB_CONNECTION' => $manifest->database,
                 'DB_HOST' => '127.0.0.1',
@@ -195,7 +191,10 @@ class Provisioner
         }
 
         if ($manifest->database === 'sqlite') {
-            $values['DB_CONNECTION'] = 'sqlite';
+            $values += [
+                'DB_CONNECTION' => 'sqlite',
+                'DB_DATABASE' => '/app/database/database.sqlite',
+            ];
         }
 
         if ($manifest->uses('redis')) {

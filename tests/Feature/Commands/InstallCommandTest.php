@@ -324,6 +324,49 @@ it('offers to prepare trusted https when setup is missing', function () {
     Process::assertRan(fn (PendingProcess $process) => $process->command === ['mkcert', '-install']);
 });
 
+it('refuses non-interactive setup without the explicit force option', function () {
+    config(['outpost.https' => true]);
+
+    $doctor = Mockery::mock(Doctor::class);
+    $doctor->shouldReceive('inspect')->once()->andReturn([
+        DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS falls back to HTTP.', 'Run outpost:certify'),
+    ]);
+
+    app()->instance(Doctor::class, $doctor);
+
+    Process::fake();
+
+    $this->artisan('outpost:install', ['--no-interaction' => true])
+        ->expectsOutputToContain('Non-interactive setup needs the explicit --force option.')
+        ->assertFailed();
+
+    Process::assertNothingRan();
+});
+
+it('restarts the runtime even when writing the publication domain fails', function () {
+    $doctor = Mockery::mock(Doctor::class);
+    $doctor->shouldReceive('inspect')->once()->andReturn([
+        DoctorCheck::failure(Doctor::PUBLICATION_DOMAIN_CHECK, 'The running system publishes [test].', 'Configure outpost.'),
+    ]);
+
+    $runtime = Mockery::mock(Runtime::class);
+    $runtime->shouldReceive('stopSystem')->once();
+    $runtime->shouldReceive('startSystem')->once();
+
+    $configuration = Mockery::mock(RuntimeConfiguration::class);
+    $configuration->shouldReceive('setDomain')->once()
+        ->andThrow(new RuntimeException('Unable to update the Apple container configuration at [config.toml].'));
+
+    app()->instance(Doctor::class, $doctor);
+    app()->instance(Runtime::class, $runtime);
+    app()->instance(RuntimeConfiguration::class, $configuration);
+
+    $this->artisan('outpost:install')
+        ->expectsConfirmation('Prepare Outpost now?', 'yes')
+        ->expectsOutputToContain('Unable to update the Apple container configuration')
+        ->assertFailed();
+});
+
 it('does not modify the trust store during forced setup unless https is explicit', function () {
     $doctor = Mockery::mock(Doctor::class);
     $doctor->shouldReceive('inspect')->once()->andReturn([

@@ -23,7 +23,12 @@ afterEach(function () {
 it('stops an instance', function () {
     app(Outposts::class)->save(fakeManifest('feature-x'));
 
-    Process::fake();
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ])),
+        processPattern('container', 'stop', 'feature-x-app') => Process::result(''),
+    ]);
 
     $this->artisan('outpost:stop', ['name' => 'feature-x'])
         ->expectsOutputToContain('Stopped [feature-x]')
@@ -37,7 +42,12 @@ it('stops an instance', function () {
 it('asks which instance when none is given', function () {
     app(Outposts::class)->save(fakeManifest('feature-x'));
 
-    Process::fake();
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ])),
+        processPattern('container', 'stop', 'feature-x-app') => Process::result(''),
+    ]);
 
     $this->artisan('outpost:stop')
         ->expectsChoice('Which instance?', 'feature-x', ['feature-x'])
@@ -46,6 +56,36 @@ it('asks which instance when none is given', function () {
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'stop', 'feature-x-app',
     ]);
+});
+
+it('treats an already stopped instance as a no-op', function () {
+    app(Outposts::class)->save(fakeManifest('feature-x'));
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'stopped']],
+        ])),
+    ]);
+
+    $this->artisan('outpost:stop', ['name' => 'feature-x'])
+        ->expectsOutputToContain('already stopped')
+        ->assertSuccessful();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'stop');
+});
+
+it('explains when the instance has no container to stop', function () {
+    app(Outposts::class)->save(fakeManifest('feature-x'));
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
+    ]);
+
+    $this->artisan('outpost:stop', ['name' => 'feature-x'])
+        ->expectsOutputToContain('has no container to stop')
+        ->assertSuccessful();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'stop');
 });
 
 it('explains when there is nothing to stop', function () {
@@ -62,6 +102,9 @@ it('surfaces the real error when stopping fails', function () {
     app(Outposts::class)->save(fakeManifest('feature-x'));
 
     Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ])),
         processPattern('container', 'stop', 'feature-x-app') => Process::result('', 'daemon unavailable', 1),
     ]);
 

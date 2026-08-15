@@ -56,6 +56,17 @@ class Manifest implements Arrayable
             }
         }
 
+        // The PHP version and URL are interpolated into generated nginx,
+        // supervisord, and .env files on every rebuild, so a hand-edited
+        // manifest must not be able to smuggle arbitrary content there.
+        if (preg_match('/^\d+\.\d+$/D', $data['php']) !== 1) {
+            throw new InvalidArgumentException('The manifest [php] value must be a version like "8.4".');
+        }
+
+        if (preg_match('#^https?://[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$#Di', $data['url']) !== 1) {
+            throw new InvalidArgumentException('The manifest [url] value must be an http or https URL with only a hostname.');
+        }
+
         if (isset($data['database']) && ! is_string($data['database'])) {
             throw new InvalidArgumentException('The manifest [database] value must be a string or null.');
         }

@@ -43,13 +43,17 @@ class RuntimeConfiguration
         $sectionEnd = count($lines);
 
         foreach ($lines as $index => $line) {
-            if ($section === null && preg_match('/^\s*\[dns]\s*(?:#.*)?$/i', $line) === 1) {
+            // TOML allows whitespace inside a table header, so "[ dns ]"
+            // must be recognized as the same section as "[dns]".
+            if ($section === null && preg_match('/^\s*\[\s*dns\s*]\s*(?:#.*)?$/i', $line) === 1) {
                 $section = $index;
 
                 continue;
             }
 
-            if ($section !== null && preg_match('/^\s*\[[^]]+]\s*(?:#.*)?$/', $line) === 1) {
+            // The section ends at any following table or array-of-tables
+            // header, including "[[mirrors]]"-style double brackets.
+            if ($section !== null && preg_match('/^\s*\[.+]\s*(?:#.*)?$/', $line) === 1) {
                 $sectionEnd = $index;
 
                 break;

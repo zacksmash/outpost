@@ -6,6 +6,7 @@ namespace Zacksmash\Outpost\Console\Commands;
 
 use Illuminate\Console\Command;
 use RuntimeException;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Console\Concerns\RebuildsInstanceContainers;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Console\Concerns\ResolvesPathRepositoryMounts;
@@ -26,6 +27,7 @@ use function Laravel\Prompts\info;
 use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 
+#[AsCommand(name: 'outpost:upgrade')]
 class UpgradeCommand extends Command
 {
     use RebuildsInstanceContainers;
@@ -171,35 +173,5 @@ class UpgradeCommand extends Command
         }
 
         return $manifests;
-    }
-
-    /**
-     * Refuse the entire upgrade set before deleting anything when work is dirty.
-     *
-     * @param  list<Manifest>  $manifests
-     */
-    protected function hasUnsafeWorktree(array $manifests, Outposts $outposts, Git $git): bool
-    {
-        $dirty = false;
-
-        foreach ($manifests as $manifest) {
-            $this->assertRebuildable($manifest, $outposts);
-            $status = $git->worktreeStatus($outposts->worktreePath($manifest->name));
-
-            if ($status === '') {
-                continue;
-            }
-
-            error("The [{$manifest->name}] worktree has uncommitted changes, so its container was not replaced.");
-
-            foreach (explode("\n", $status) as $file) {
-                $this->line($file);
-            }
-
-            note('Commit or preserve these files before upgrading. Outpost will not discard them.');
-            $dirty = true;
-        }
-
-        return $dirty;
     }
 }

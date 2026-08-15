@@ -274,24 +274,10 @@ class Doctor
             );
         }
 
-        $runtimePath = $metadata['labels'][Runtime::IMAGE_RUNTIME_PATH_LABEL] ?? null;
-
-        if ($runtimePath !== Runtime::IMAGE_RUNTIME_PATH) {
-            $detail = $runtimePath === null
-                ? "The [{$image}] image has no runtime-path contract and may be stale."
-                : "The [{$image}] image declares runtime-path contract [{$runtimePath}], but this package requires [".Runtime::IMAGE_RUNTIME_PATH.'].';
-
+        if (($problem = $this->imageProblem($image, $metadata)) !== null) {
             return DoctorCheck::failure(
                 self::BASE_IMAGE_CHECK,
-                $detail,
-                $this->imageRemedy($image, force: true),
-            );
-        }
-
-        if ($metadata['digest'] === null) {
-            return DoctorCheck::failure(
-                self::BASE_IMAGE_CHECK,
-                "The [{$image}] image has no immutable digest, so instance upgrades cannot be tracked.",
+                $problem,
                 $this->imageRemedy($image, force: true),
             );
         }
@@ -300,6 +286,32 @@ class Doctor
             self::BASE_IMAGE_CHECK,
             "The [{$image}] image is available and matches runtime-path contract [".Runtime::IMAGE_RUNTIME_PATH.'].',
         );
+    }
+
+    /**
+     * Describe why the given image metadata violates the image contract.
+     *
+     * This is the single definition of the contract every path shares:
+     * doctor's report, instance creation, and container rebuilds must
+     * always agree on whether an image is usable.
+     *
+     * @param  array{digest: string|null, labels: array<string, string>}  $metadata
+     */
+    public function imageProblem(string $image, array $metadata): ?string
+    {
+        $runtimePath = $metadata['labels'][Runtime::IMAGE_RUNTIME_PATH_LABEL] ?? null;
+
+        if ($runtimePath !== Runtime::IMAGE_RUNTIME_PATH) {
+            return $runtimePath === null
+                ? "The [{$image}] image has no runtime-path contract and may be stale."
+                : "The [{$image}] image declares runtime-path contract [{$runtimePath}], but this package requires [".Runtime::IMAGE_RUNTIME_PATH.'].';
+        }
+
+        if ($metadata['digest'] === null) {
+            return "The [{$image}] image has no immutable digest, so Outpost cannot track instance upgrades.";
+        }
+
+        return null;
     }
 
     /**

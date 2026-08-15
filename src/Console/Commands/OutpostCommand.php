@@ -9,7 +9,9 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Certificates;
+use Zacksmash\Outpost\Console\Concerns\FlushesDnsCaches;
 use Zacksmash\Outpost\Console\Concerns\ResolvesPathRepositoryMounts;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Detector;
@@ -33,8 +35,10 @@ use function Laravel\Prompts\suggest;
 use function Laravel\Prompts\text;
 use function Laravel\Prompts\warning;
 
+#[AsCommand(name: 'outpost')]
 class OutpostCommand extends Command
 {
+    use FlushesDnsCaches;
     use ResolvesPathRepositoryMounts;
 
     /**
@@ -147,8 +151,8 @@ class OutpostCommand extends Command
                 return self::FAILURE;
             }
 
-            if ($imageMetadata['digest'] === null) {
-                error("The [{$image}] base image has no immutable digest, so Outpost cannot track instance upgrades.");
+            if (($problem = $doctor->imageProblem($image, $imageMetadata)) !== null) {
+                error($problem);
                 note('Run [php artisan outpost:doctor] for the exact repair.');
 
                 return self::FAILURE;
@@ -186,6 +190,12 @@ class OutpostCommand extends Command
             }
 
             $container = $name.'-'.Str::slug(basename($this->laravel->basePath()));
+
+            if (($invalid = $this->invalidContainer($container)) !== null) {
+                error($invalid);
+
+                return self::FAILURE;
+            }
 
             if ($runtime->exists($container)) {
                 error("A container named [{$container}] already exists. Remove it before reusing the name.");
@@ -308,7 +318,7 @@ class OutpostCommand extends Command
             $manifest = $manifest->withStatus('ready');
             $outposts->save($manifest);
 
-            $runtime->flushDnsCache();
+            $this->flushDnsCacheQuietly($runtime);
         } catch (RuntimeException $e) {
             error($e->getMessage());
             $this->preserveFailedInstance($outposts, $saved);
@@ -431,36 +441,89 @@ class OutpostCommand extends Command
             return "The [{$name}] instance already exists. Remove it with [php artisan outpost:remove {$name}].";
         }
 
+        $instances = rtrim(config()->string('outpost.path'), '/');
+        $tls = rtrim(config()->string('outpost.tls.path'), '/');
+
+        if ($tls === "{$instances}/{$name}" || str_starts_with($tls, "{$instances}/{$name}/")) {
+            return "The [{$name}] name would collide with the [{$tls}] certificate directory. Choose another name.";
+        }
+
         return null;
     }
 
     /**
-     * Keep the instances directory out of version control.
+     * Determine why the derived container name is unusable, if it is.
+     *
+     * The container name becomes the instance's DNS hostname label, so it
+     * must survive the slug round-trip that reading the manifest enforces
+     * and stay within the 63-character DNS label limit.
+     */
+    protected function invalidContainer(string $container): ?string
+    {
+        if (Str::slug($container) !== $container) {
+            return 'Unable to derive a container name from the project directory ['.basename($this->laravel->basePath()).'] because it has no URL-friendly characters. Rename the directory or move the project.';
+        }
+
+        if (strlen($container) > 63) {
+            return "The [{$container}] container name exceeds the 63-character DNS label limit, so its URL would never resolve. Choose a shorter name with --name.";
+        }
+
+        return null;
+    }
+
+    /**
+     * Keep the instances and certificate directories out of version control.
      *
      * Runs after the worktree exists, so a failed checkout never leaves
      * a stray .gitignore edit behind.
      */
     protected function ensureInstancesIgnored(): void
     {
-        $path = config()->string('outpost.path');
-
-        if (str_starts_with($path, '/')) {
-            return;
-        }
-
         $gitignore = $this->laravel->basePath('.gitignore');
-        $line = '/'.trim($path, '/');
-
         $contents = File::exists($gitignore) ? File::get($gitignore) : '';
+        $existing = array_map('trim', explode("\n", $contents));
+        $missing = array_values(array_filter(
+            $this->ignoredPaths(),
+            fn (string $line): bool => ! in_array($line, $existing, true),
+        ));
 
-        if (in_array($line, array_map('trim', explode("\n", $contents)), true)) {
+        if ($missing === []) {
             return;
         }
 
-        $contents = $contents === '' ? "{$line}\n" : rtrim($contents)."\n{$line}\n";
+        $append = implode("\n", $missing)."\n";
+        $contents = $contents === '' ? $append : rtrim($contents)."\n".$append;
 
         if (File::put($gitignore, $contents) === false) {
             throw new RuntimeException('Unable to add the instances directory to .gitignore.');
         }
+    }
+
+    /**
+     * Get the .gitignore lines the configured directories require.
+     *
+     * Absolute paths live outside the repository, and the default
+     * certificate directory nests inside the instances directory,
+     * so neither needs a line of its own.
+     *
+     * @return list<string>
+     */
+    protected function ignoredPaths(): array
+    {
+        $instances = config()->string('outpost.path');
+        $tls = config()->string('outpost.tls.path');
+
+        $lines = [];
+
+        if (! str_starts_with($instances, '/')) {
+            $lines[] = '/'.trim($instances, '/');
+        }
+
+        if (! str_starts_with($tls, '/')
+            && ! str_starts_with(trim($tls, '/').'/', trim($instances, '/').'/')) {
+            $lines[] = '/'.trim($tls, '/');
+        }
+
+        return array_values(array_unique($lines));
     }
 }

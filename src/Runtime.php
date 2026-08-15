@@ -38,9 +38,14 @@ class Runtime implements RuntimeDriver
     public const string IMAGE_RUNTIME_PATH = '/etc/outpost';
 
     /**
-     * The timeout applied to long-running container operations.
+     * The timeout applied to long-running container lifecycle operations.
      */
     protected const int TIMEOUT = 600;
+
+    /**
+     * The per-probe timeout for a single readiness check, in seconds.
+     */
+    protected const int READY_TIMEOUT = 5;
 
     /**
      * Get the stable identifier recorded for this runtime driver.
@@ -165,8 +170,12 @@ class Runtime implements RuntimeDriver
             ->run(['sudo', 'container', 'system', 'dns', 'create', $domain]);
 
         if (! $result->successful()) {
+            // A TTY run writes straight to the terminal, so there may be no
+            // captured output to relay.
+            $output = trim($result->errorOutput() ?: $result->output());
+
             throw new RuntimeException(
-                "Unable to register the [{$domain}] DNS resolver: ".trim($result->errorOutput() ?: $result->output()),
+                "Unable to register the [{$domain}] DNS resolver".($output === '' ? '.' : ": {$output}"),
             );
         }
     }
@@ -381,13 +390,15 @@ class Runtime implements RuntimeDriver
     /**
      * Run a command inside the given container.
      *
-     * Callers are responsible for inspecting the returned result.
+     * Callers are responsible for inspecting the returned result. There is
+     * no timeout: provisioning steps like a cold composer or npm install
+     * legitimately outlast any cap Outpost could pick for them.
      *
      * @param  list<string>  $command
      */
     public function exec(string $container, array $command, bool $root = false): ProcessResult
     {
-        return Process::timeout(self::TIMEOUT)->run($this->execCommand($container, $command, $root));
+        return Process::forever()->run($this->execCommand($container, $command, $root));
     }
 
     /**
@@ -501,6 +512,7 @@ class Runtime implements RuntimeDriver
     {
         return $this->exec($container, [
             'curl', '--fail', ...($secure ? ['--insecure'] : []), '--silent', '--output', '/dev/null',
+            '--max-time', (string) self::READY_TIMEOUT,
             ($secure ? 'https' : 'http').'://127.0.0.1',
         ])->successful();
     }

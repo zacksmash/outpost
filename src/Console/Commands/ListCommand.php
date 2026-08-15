@@ -7,6 +7,7 @@ namespace Zacksmash\Outpost\Console\Commands;
 use Illuminate\Console\Command;
 use JsonException;
 use RuntimeException;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Outposts;
@@ -15,6 +16,7 @@ use function Laravel\Prompts\error;
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\table;
 
+#[AsCommand(name: 'outpost:list')]
 class ListCommand extends Command
 {
     /**

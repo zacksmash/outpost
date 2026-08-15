@@ -6,6 +6,7 @@ namespace Zacksmash\Outpost\Console\Commands;
 
 use Illuminate\Console\Command;
 use RuntimeException;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Certificates;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Doctor;
@@ -18,6 +19,7 @@ use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 use function Laravel\Prompts\spin;
 
+#[AsCommand(name: 'outpost:install')]
 class InstallCommand extends Command
 {
     /**
@@ -53,19 +55,28 @@ class InstallCommand extends Command
             note('Replace it with: php artisan outpost:build --force');
         }
 
-        $actions = $this->actions($checks, $certificates);
-
-        if ($actions === []) {
-            return $this->finish($checks);
-        }
-
-        note("Outpost will prepare this Mac:\n\n  • ".implode("\n  • ", $actions));
-
-        if (! $this->approveSetup()) {
-            return $this->finish($checks, declined: true);
-        }
-
         try {
+            $actions = $this->actions($checks, $certificates);
+
+            if ($actions === []) {
+                return $this->finish($checks);
+            }
+
+            // Without a terminal there is nobody to approve the plan, so the
+            // approval must arrive as an explicit option instead of falling
+            // back to the confirmation prompt's default.
+            if (! $this->input->isInteractive() && ! $this->option('force')) {
+                throw new RuntimeException(
+                    'Non-interactive setup needs the explicit --force option. Add --https when it may modify the system trust store.',
+                );
+            }
+
+            note("Outpost will prepare this Mac:\n\n  • ".implode("\n  • ", $actions));
+
+            if (! $this->approveSetup()) {
+                return $this->finish($checks, declined: true);
+            }
+
             if ($this->failed($checks, Doctor::RUNTIME_CHECK)) {
                 spin(fn () => $runtime->startSystem(), 'Starting the Apple container system');
 
@@ -76,8 +87,14 @@ class InstallCommand extends Command
                 && $this->failed($checks, Doctor::PUBLICATION_DOMAIN_CHECK)) {
                 spin(function () use ($runtime, $runtimeConfiguration): void {
                     $runtime->stopSystem();
-                    $runtimeConfiguration->setDomain(config()->string('outpost.domain'));
-                    $runtime->startSystem();
+
+                    // The stop takes down every container on this machine,
+                    // so the runtime must restart even when the write fails.
+                    try {
+                        $runtimeConfiguration->setDomain(config()->string('outpost.domain'));
+                    } finally {
+                        $runtime->startSystem();
+                    }
                 }, 'Configuring the Outpost publication domain');
 
                 $checks = $doctor->inspect();
@@ -222,13 +239,7 @@ class InstallCommand extends Command
      */
     protected function failed(array $checks, string $name): bool
     {
-        foreach ($checks as $check) {
-            if ($check->name === $name && $check->status === DoctorCheck::FAIL) {
-                return true;
-            }
-        }
-
-        return false;
+        return $this->hasStatus($checks, $name, DoctorCheck::FAIL);
     }
 
     /**
@@ -238,8 +249,18 @@ class InstallCommand extends Command
      */
     protected function passed(array $checks, string $name): bool
     {
+        return $this->hasStatus($checks, $name, DoctorCheck::PASS);
+    }
+
+    /**
+     * Determine whether a named check reported the given status.
+     *
+     * @param  list<DoctorCheck>  $checks
+     */
+    protected function hasStatus(array $checks, string $name, string $status): bool
+    {
         foreach ($checks as $check) {
-            if ($check->name === $name && $check->status === DoctorCheck::PASS) {
+            if ($check->name === $name && $check->status === $status) {
                 return true;
             }
         }
@@ -316,15 +337,9 @@ class InstallCommand extends Command
      */
     protected function shouldPrepareHttps(): bool
     {
-        if ($this->option('https')) {
-            return true;
-        }
-
-        if ($this->option('force')) {
-            return false;
-        }
-
-        return true;
+        // Only a --force run without --https skips it: unattended setup
+        // must not touch the trust store unless explicitly asked to.
+        return (bool) $this->option('https') || ! $this->option('force');
     }
 
     /**

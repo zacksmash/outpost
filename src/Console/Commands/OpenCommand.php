@@ -6,6 +6,7 @@ namespace Zacksmash\Outpost\Console\Commands;
 
 use Illuminate\Console\Command;
 use RuntimeException;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Endpoints;
@@ -15,6 +16,7 @@ use Zacksmash\Outpost\Outposts;
 use function Laravel\Prompts\error;
 use function Laravel\Prompts\outro;
 
+#[AsCommand(name: 'outpost:open')]
 class OpenCommand extends Command
 {
     use ResolvesInstances;

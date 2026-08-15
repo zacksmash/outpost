@@ -27,6 +27,7 @@ beforeEach(function () {
         DoctorCheck::pass(Doctor::BASE_IMAGE_CHECK, 'The base image is available.'),
     ]);
     $this->doctor->shouldReceive('requiresSetup')->byDefault()->andReturnFalse();
+    $this->doctor->shouldReceive('imageProblem')->byDefault()->andReturnNull();
     app()->instance(Doctor::class, $this->doctor);
 
     File::ensureDirectoryExists($this->root.'/feature-x/app');
@@ -68,6 +69,7 @@ it('prepares missing prerequisites and continues creating the instance', functio
         [DoctorCheck::pass(Doctor::BASE_IMAGE_CHECK, 'The base image is available.')],
     );
     $doctor->shouldReceive('requiresSetup')->once()->andReturnTrue();
+    $doctor->shouldReceive('imageProblem')->byDefault()->andReturnNull();
     app()->instance(Doctor::class, $doctor);
 
     fakeCreation([
@@ -466,6 +468,28 @@ it('refuses a name that is already an instance', function () {
     $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
         ->expectsOutputToContain('already exists')
         ->assertFailed();
+});
+
+it('refuses a container name that exceeds the DNS label limit', function () {
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => str_repeat('a', 60)])
+        ->expectsOutputToContain('63-character DNS label limit')
+        ->assertFailed();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[2] ?? null) === 'add');
+});
+
+it('reserves instance names that collide with the certificate directory', function () {
+    config(['outpost.tls.path' => $this->root.'/tls']);
+
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'tls'])
+        ->expectsOutputToContain('certificate directory')
+        ->assertFailed();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[2] ?? null) === 'add');
 });
 
 it('prompts for the branch and name when not provided', function () {

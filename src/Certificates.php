@@ -152,8 +152,12 @@ class Certificates
             ->run(['mkcert', '-install'], $output);
 
         if (! $install->successful()) {
+            // A TTY run writes straight to the terminal, so there may be no
+            // captured output to relay.
+            $output = trim($install->errorOutput() ?: $install->output());
+
             throw new RuntimeException(
-                'Unable to install the local mkcert authority: '.trim($install->errorOutput() ?: $install->output()),
+                'Unable to install the local mkcert authority'.($output === '' ? '.' : ": {$output}"),
             );
         }
 

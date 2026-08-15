@@ -7,6 +7,7 @@ namespace Zacksmash\Outpost;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use JsonException;
 use RuntimeException;
 
 class Outposts
@@ -60,17 +61,32 @@ class Outposts
 
     /**
      * Write the given manifest to disk.
+     *
+     * The write goes through a temporary file and an atomic rename so a
+     * concurrent command can never read a torn manifest.
      */
     public function save(Manifest $manifest): void
     {
         File::ensureDirectoryExists($this->path($manifest->name));
 
-        $json = json_encode(
-            $manifest->toArray(),
-            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
-        );
+        try {
+            $json = json_encode(
+                $manifest->toArray(),
+                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+            );
+        } catch (JsonException $e) {
+            throw new RuntimeException(
+                "Unable to encode the manifest for instance [{$manifest->name}].",
+                previous: $e,
+            );
+        }
 
-        if (File::put($this->manifestPath($manifest->name), $json.PHP_EOL) === false) {
+        $path = $this->manifestPath($manifest->name);
+        $temporary = $path.'.tmp';
+
+        if (File::put($temporary, $json.PHP_EOL) === false || ! File::move($temporary, $path)) {
+            File::delete($temporary);
+
             throw new RuntimeException("Unable to write the manifest for instance [{$manifest->name}].");
         }
     }

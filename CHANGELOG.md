@@ -2,6 +2,33 @@
 
 ## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.2.1...HEAD)
 
+### Fixed
+
+- Boolean `.env` values such as `OUTPOST_HTTPS=1` or `OUTPOST_EXPOSE_SERVICES=0` are now coerced instead of crashing commands with a raw stack trace.
+- A DNS-cache flush failure no longer marks a fully provisioned instance as failed; it warns and prints the manual flush command instead.
+- Instance creation now refuses container names that exceed the 63-character DNS label limit or cannot round-trip as a slug, instead of minting an instance whose URL never resolves or that later commands refuse to load.
+- `outpost:remove` reports a clean error for non-slug names and for worktrees whose git linkage is broken, instead of crashing inside its own recovery path.
+- `outpost:install` restarts the container system even when writing the publication domain fails, requires the explicit `--force` option in non-interactive runs instead of auto-approving the setup plan, and reports configuration errors from its planning phase as friendly failures.
+- Git operations and in-container provisioning commands no longer inherit process timeouts (60s and 600s respectively), so large fetches and cold composer/npm installs are not killed mid-flight, matching the documented timeout behavior.
+- The readiness probe passes `--max-time` to curl, so a hung application respects `outpost.timeout` instead of blocking for minutes.
+- `outpost:start` refuses to rebuild over a dirty worktree — matching `outpost:upgrade` — and clears a stale `failed` status once the instance answers HTTP again.
+- `outpost:logs` fails cleanly when the container is missing instead of exiting successfully in `--follow` mode.
+- `outpost:stop` treats an already-stopped or missing container as a no-op instead of surfacing a raw runtime error.
+- The `outpost.services` override and configured `outpost.php` versions are validated up front, so a typo is named immediately instead of failing provisioning with a connection error.
+- Manifest `php` and `url` values are validated when read, so a hand-edited manifest can no longer inject content into generated nginx, supervisord, or `.env` files.
+- The publication-domain writer recognizes `[ dns ]` headers and `[[table]]` boundaries in `config.toml`, so hand-edited files are no longer corrupted.
+- SQLite instances write `DB_DATABASE` alongside `DB_CONNECTION`, so an `.env.example` carrying a MySQL database name no longer breaks migrations.
+- Instance names that would collide with the trusted HTTPS state directory are reserved, and a custom `OUTPOST_PATH` no longer leaves `.outpost/tls` out of `.gitignore`.
+- Manifests are written atomically, so concurrent commands can never read a torn manifest.
+- The base image removes Ubuntu's stock UID-1000 user, so hosts whose account maps to UID 1000 can boot instances.
+
+### Changed
+
+- Console commands are registered lazily via `#[AsCommand]`, so applications no longer construct all sixteen Outpost commands on every artisan invocation.
+- The image compatibility contract is now enforced by one shared check across doctor, instance creation, and container rebuilds.
+- Removed the deprecated, inert `--recreate` option from `outpost:start`.
+- Removed the undocumented `outpost` publish tag; configuration publishes via `outpost-config`.
+
 ## [v0.2.1](https://github.com/zacksmash/outpost/commits/main/compare/v0.2.0...v0.2.1) - 2026-08-15
 
 ### Added
