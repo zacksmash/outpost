@@ -7,8 +7,8 @@ namespace Zacksmash\Outpost\Console\Commands;
 use Illuminate\Console\Command;
 use RuntimeException;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
+use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Outposts;
-use Zacksmash\Outpost\Runtime;
 
 use function Laravel\Prompts\error;
 use function Laravel\Prompts\note;
@@ -32,7 +32,7 @@ class ShellCommand extends Command
     /**
      * Execute the console command.
      */
-    public function handle(Outposts $outposts, Runtime $runtime): int
+    public function handle(Outposts $outposts, RuntimeDriver $runtime): int
     {
         if (($manifest = $this->instance($outposts)) === null) {
             return self::FAILURE;

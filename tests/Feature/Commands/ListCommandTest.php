@@ -89,6 +89,7 @@ it('emits machine-readable instance state', function () {
         ->and($instances[0])->toMatchArray([
             'name' => 'feature-x',
             'container' => 'feature-x-app',
+            'runtime' => 'apple-container',
             'url' => 'http://feature-x-app.outpost',
             'php' => '8.4',
             'frontend' => 'build',

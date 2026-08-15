@@ -43,7 +43,7 @@ function fakeCreation(array $overrides = []): void
         processPattern('git', 'rev-parse', 'HEAD') => Process::result('abc123'),
         processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\noutpost\n"),
         processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result('{"dns":{"domain":"outpost"}}'),
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.0') => Process::result(fakeImageInspect()),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.1') => Process::result(fakeImageInspect()),
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
         processPattern('git', 'branch', '--show-current') => Process::result("main\n"),
         processPattern('git', 'branch', '--format=%(refname:short)') => Process::result("main\nfeature-x\n"),
@@ -71,7 +71,7 @@ it('prepares missing prerequisites and continues creating the instance', functio
     app()->instance(Doctor::class, $doctor);
 
     fakeCreation([
-        processPattern('container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.2.0') => Process::result('pulled'),
+        processPattern('container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.2.1') => Process::result('pulled'),
     ]);
 
     $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
@@ -80,7 +80,7 @@ it('prepares missing prerequisites and continues creating the instance', functio
         ->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.2.0',
+        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.2.1',
     ]);
 });
 
@@ -140,7 +140,8 @@ it('creates a fully provisioned instance', function () {
         ->and($manifest['expose_services'])->toBeTrue()
         ->and($manifest['database'])->toBe('sqlite')
         ->and($manifest['status'])->toBe('ready')
-        ->and($manifest['image'])->toBe('ghcr.io/zacksmash/outpost:0.2.0')
+        ->and($manifest['runtime'])->toBe('apple-container')
+        ->and($manifest['image'])->toBe('ghcr.io/zacksmash/outpost:0.2.1')
         ->and($manifest['image_digest'])->toBe('sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
 
     expect(File::exists($this->root.'/feature-x/runtime/nginx.conf'))->toBeTrue()
@@ -154,7 +155,7 @@ it('creates a fully provisioned instance', function () {
         '--volume', $this->root.'/feature-x/app:/app',
         '--volume', $this->root.'/feature-x/runtime:/etc/outpost:ro',
         '--volume', '/projects/app/.git:/projects/app/.git:ro',
-        'ghcr.io/zacksmash/outpost:0.2.0',
+        'ghcr.io/zacksmash/outpost:0.2.1',
     ]);
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === ['dscacheutil', '-flushcache']);
@@ -242,7 +243,7 @@ it('boots a trusted https instance with its certificate mounted read only', func
         '--volume', $this->root.'/feature-x/app:/app',
         '--volume', $this->root.'/feature-x/runtime:/etc/outpost:ro',
         '--volume', '/projects/app/.git:/projects/app/.git:ro',
-        'ghcr.io/zacksmash/outpost:0.2.0',
+        'ghcr.io/zacksmash/outpost:0.2.1',
     ]);
 });
 
@@ -431,7 +432,7 @@ it('provisions the application before checking its final HTTP response', functio
 
 it('requires the base image to be built first', function () {
     fakeCreation([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.0') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.1') => Process::result('', 'not found', 1),
     ]);
 
     $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])

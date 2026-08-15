@@ -9,10 +9,10 @@ use Illuminate\Support\Facades\File;
 use InvalidArgumentException;
 use RuntimeException;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
+use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Outposts;
-use Zacksmash\Outpost\Runtime;
 
 use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\error;
@@ -43,7 +43,7 @@ class RemoveCommand extends Command
     /**
      * Execute the console command.
      */
-    public function handle(Outposts $outposts, Runtime $runtime, Git $git): int
+    public function handle(Outposts $outposts, RuntimeDriver $runtime, Git $git): int
     {
         if (($name = $this->instanceName($outposts)) === null) {
             return self::FAILURE;
@@ -108,7 +108,7 @@ class RemoveCommand extends Command
      * A failed stop is tolerated — the intent of remove is "make this go
      * away" — but the container is then deleted by force.
      */
-    protected function removeContainer(Runtime $runtime, Manifest $manifest): void
+    protected function removeContainer(RuntimeDriver $runtime, Manifest $manifest): void
     {
         if (! $runtime->exists($manifest->container)) {
             return;

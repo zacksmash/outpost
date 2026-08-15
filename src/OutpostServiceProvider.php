@@ -6,6 +6,7 @@ namespace Zacksmash\Outpost;
 
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
+use Zacksmash\Outpost\Contracts\RuntimeDriver;
 
 class OutpostServiceProvider extends ServiceProvider
 {
@@ -33,7 +34,7 @@ class OutpostServiceProvider extends ServiceProvider
         $this->app->singleton(Doctor::class, function (Application $app) {
             return new Doctor(
                 $app->make(Host::class),
-                $app->make(Runtime::class),
+                $app->make(RuntimeDriver::class),
                 $app->make(Git::class),
                 $app->make('files'),
                 $app->basePath(),
@@ -57,6 +58,10 @@ class OutpostServiceProvider extends ServiceProvider
         $this->app->singleton(Processes::class);
 
         $this->app->singleton(Runtime::class);
+
+        $this->app->singleton(RuntimeDriver::class, function (Application $app) {
+            return $app->make(Runtime::class);
+        });
 
         $this->app->singleton(RuntimeConfiguration::class, function (Application $app) {
             $home = $_SERVER['HOME'] ?? null;

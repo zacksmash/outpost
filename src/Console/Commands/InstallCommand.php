@@ -7,9 +7,9 @@ namespace Zacksmash\Outpost\Console\Commands;
 use Illuminate\Console\Command;
 use RuntimeException;
 use Zacksmash\Outpost\Certificates;
+use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\DoctorCheck;
-use Zacksmash\Outpost\Runtime;
 use Zacksmash\Outpost\RuntimeConfiguration;
 
 use function Laravel\Prompts\confirm;
@@ -39,7 +39,7 @@ class InstallCommand extends Command
     public function handle(
         Certificates $certificates,
         Doctor $doctor,
-        Runtime $runtime,
+        RuntimeDriver $runtime,
         RuntimeConfiguration $runtimeConfiguration,
     ): int {
         $checks = $doctor->inspect();

@@ -8,10 +8,10 @@ use Illuminate\Console\Command;
 use JsonException;
 use RuntimeException;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
+use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Endpoints;
 use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Outposts;
-use Zacksmash\Outpost\Runtime;
 
 use function Laravel\Prompts\error;
 use function Laravel\Prompts\table;
@@ -35,7 +35,7 @@ class InfoCommand extends Command
     /**
      * Execute the console command.
      */
-    public function handle(Outposts $outposts, Runtime $runtime, Endpoints $endpoints): int
+    public function handle(Outposts $outposts, RuntimeDriver $runtime, Endpoints $endpoints): int
     {
         if (($manifest = $this->instance($outposts)) === null) {
             return self::FAILURE;
@@ -50,6 +50,7 @@ class InfoCommand extends Command
             $details = [
                 'name' => $manifest->name,
                 'container' => $manifest->container,
+                'runtime' => $manifest->runtime,
                 'branch' => $manifest->branch,
                 'state' => $state,
                 'status' => $runtime->instanceStatus($manifest, $state),
@@ -111,6 +112,7 @@ class InfoCommand extends Command
         $rows = [
             ['Name', $manifest->name],
             ['Branch', $manifest->branch],
+            ['Container runtime', $manifest->runtime],
             ['State', $state],
             ['Image', $manifest->image ?? 'unknown (legacy manifest)'],
             ['Image status', match ($outdated) {

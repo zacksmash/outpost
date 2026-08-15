@@ -10,13 +10,22 @@ use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Sleep;
 use RuntimeException;
 use Symfony\Component\Process\Process as SymfonyProcess;
+use Zacksmash\Outpost\Contracts\RuntimeDriver;
 
-class Runtime
+/**
+ * Apple container implementation of Outpost's runtime driver contract.
+ */
+class Runtime implements RuntimeDriver
 {
+    /**
+     * The stable identifier stored in instance manifests.
+     */
+    public const string DRIVER = 'apple-container';
+
     /**
      * The exact shared image shipped for this package contract.
      */
-    public const string PUBLISHED_IMAGE = 'ghcr.io/zacksmash/outpost:0.2.0';
+    public const string PUBLISHED_IMAGE = 'ghcr.io/zacksmash/outpost:0.2.1';
 
     /**
      * The OCI label used to advertise the image's runtime mount contract.
@@ -32,6 +41,14 @@ class Runtime
      * The timeout applied to long-running container operations.
      */
     protected const int TIMEOUT = 600;
+
+    /**
+     * Get the stable identifier recorded for this runtime driver.
+     */
+    public function id(): string
+    {
+        return self::DRIVER;
+    }
 
     /**
      * Get the installed Apple container CLI version.

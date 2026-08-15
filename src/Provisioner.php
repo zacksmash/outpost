@@ -8,6 +8,7 @@ use Closure;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
+use Zacksmash\Outpost\Contracts\RuntimeDriver;
 
 class Provisioner
 {
@@ -15,7 +16,7 @@ class Provisioner
      * Create a new provisioner instance.
      */
     public function __construct(
-        protected readonly Runtime $runtime,
+        protected readonly RuntimeDriver $runtime,
         protected readonly Outposts $outposts,
         protected readonly Repository $config,
     ) {}

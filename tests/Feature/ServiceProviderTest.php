@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\ServiceProvider;
 use Zacksmash\Outpost\Certificates;
+use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Detector;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Endpoints;
@@ -12,6 +13,7 @@ use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\OutpostServiceProvider;
 use Zacksmash\Outpost\Processes;
+use Zacksmash\Outpost\Runtime;
 
 it('merges the package config', function () {
     expect(config('outpost'))->toBeArray();
@@ -44,6 +46,24 @@ it('binds the git manager as a singleton', function () {
 
 it('binds the process configuration as a singleton', function () {
     expect(app(Processes::class))->toBe(app(Processes::class));
+});
+
+it('binds the runtime contract to the apple container driver', function () {
+    expect(app(RuntimeDriver::class))
+        ->toBe(app(RuntimeDriver::class))
+        ->toBeInstanceOf(Runtime::class)
+        ->and(app(RuntimeDriver::class)->id())->toBe('apple-container');
+});
+
+it('allows an application to replace the runtime contract binding', function () {
+    $driver = Mockery::mock(RuntimeDriver::class);
+    $driver->shouldReceive('pull')
+        ->once()
+        ->with(Runtime::PUBLISHED_IMAGE, Mockery::type('callable'));
+
+    app()->instance(RuntimeDriver::class, $driver);
+
+    $this->artisan('outpost:pull', ['--force' => true])->assertSuccessful();
 });
 
 it('publishes the package config', function () {

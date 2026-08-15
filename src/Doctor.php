@@ -7,6 +7,7 @@ namespace Zacksmash\Outpost;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Filesystem\Filesystem;
 use RuntimeException;
+use Zacksmash\Outpost\Contracts\RuntimeDriver;
 
 class Doctor
 {
@@ -39,7 +40,7 @@ class Doctor
      */
     public function __construct(
         protected readonly Host $host,
-        protected readonly Runtime $runtime,
+        protected readonly RuntimeDriver $runtime,
         protected readonly Git $git,
         protected readonly Filesystem $files,
         protected readonly string $basePath,

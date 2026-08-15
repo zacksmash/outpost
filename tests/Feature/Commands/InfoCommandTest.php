@@ -40,6 +40,7 @@ it('shows runtime details and service connection information', function () {
 
     expect($exit)->toBe(0)
         ->and($output)->toContain('billing')
+        ->and($output)->toContain('apple-container')
         ->and($output)->toContain('running')
         ->and($output)->toContain('PHP 8.4 / PHP-FPM')
         ->and($output)->toContain('4 CPU / 2G')
@@ -63,6 +64,7 @@ it('provides structured json for agents and scripts', function () {
         ->and($output['name'])->toBe('billing')
         ->and($output['state'])->toBe('missing')
         ->and($output['status'])->toBe('degraded')
+        ->and($output['runtime'])->toBe('apple-container')
         ->and($output['image'])->toBe(Runtime::PUBLISHED_IMAGE)
         ->and($output['image_digest'])->toBe('sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
         ->and($output['configured_image'])->toBe(Runtime::PUBLISHED_IMAGE)

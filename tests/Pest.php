@@ -38,6 +38,7 @@ function fakeManifest(
     string $status = 'ready',
     ?string $image = Runtime::PUBLISHED_IMAGE,
     ?string $imageDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    string $runtime = Runtime::DRIVER,
 ): Manifest {
     return new Manifest(
         name: $name,
@@ -56,5 +57,6 @@ function fakeManifest(
         status: $status,
         image: $image,
         imageDigest: $imageDigest,
+        runtime: $runtime,
     );
 }

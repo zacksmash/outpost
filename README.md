@@ -27,6 +27,8 @@ Each instance has an editable Git worktree, its own VM, URL, database, and detec
 - A Laravel application in a Git repository with at least one commit
 - Optional trusted HTTPS: [`mkcert`](https://github.com/FiloSottile/mkcert)
 
+Apple container is the only supported runtime driver today. Outpost's lifecycle depends on a [`RuntimeDriver`](src/Contracts/RuntimeDriver.php) contract and records `apple-container` in every instance manifest so another driver can be introduced later without changing the command surface or guessing which engine owns an instance. This extension seam does not imply Docker or Podman support yet.
+
 ## Install
 
 ```bash
@@ -192,7 +194,7 @@ Publish configuration with `php artisan vendor:publish --tag="outpost-config"`.
 | Key | Default | Description |
 | --- | --- | --- |
 | `domain` | `outpost` | Local publication domain. |
-| `image` | `ghcr.io/zacksmash/outpost:0.2.0` | Exact OCI image used by instances. |
+| `image` | `ghcr.io/zacksmash/outpost:0.2.1` | Exact OCI image used by instances. |
 | `dns` | `1.1.1.1` | Nameserver injected into builds and instances. |
 | `path` | `.outpost` | Project-relative instance directory. |
 | `resources.cpus` | `4` | Virtual CPUs per instance. |

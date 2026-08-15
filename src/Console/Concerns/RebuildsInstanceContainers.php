@@ -6,6 +6,7 @@ namespace Zacksmash\Outpost\Console\Concerns;
 
 use Illuminate\Support\Facades\File;
 use RuntimeException;
+use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Host;
@@ -29,7 +30,7 @@ trait RebuildsInstanceContainers
      *
      * @return array{image: string, digest: string}
      */
-    protected function configuredImage(Runtime $runtime, Doctor $doctor): array
+    protected function configuredImage(RuntimeDriver $runtime, Doctor $doctor): array
     {
         $image = config()->string('outpost.image');
         $metadata = $runtime->imageMetadata($image);
@@ -106,7 +107,7 @@ trait RebuildsInstanceContainers
     protected function rebuildInstanceContainer(
         Manifest $manifest,
         Outposts $outposts,
-        Runtime $runtime,
+        RuntimeDriver $runtime,
         Git $git,
         Host $host,
         Provisioner $provisioner,

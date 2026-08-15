@@ -11,6 +11,7 @@ use Illuminate\Support\Str;
 use RuntimeException;
 use Zacksmash\Outpost\Certificates;
 use Zacksmash\Outpost\Console\Concerns\ResolvesPathRepositoryMounts;
+use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Detector;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Git;
@@ -21,7 +22,6 @@ use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\PathRepositories;
 use Zacksmash\Outpost\Processes;
 use Zacksmash\Outpost\Provisioner;
-use Zacksmash\Outpost\Runtime;
 use Zacksmash\Outpost\Supervisord;
 
 use function Laravel\Prompts\error;
@@ -61,7 +61,7 @@ class OutpostCommand extends Command
         Git $git,
         Host $host,
         Doctor $doctor,
-        Runtime $runtime,
+        RuntimeDriver $runtime,
         Certificates $certificates,
         Detector $detector,
         Outposts $outposts,
@@ -225,6 +225,7 @@ class OutpostCommand extends Command
                 status: 'provisioning',
                 image: $image,
                 imageDigest: $imageMetadata['digest'],
+                runtime: $runtime->id(),
             );
 
             $outposts->save($manifest);

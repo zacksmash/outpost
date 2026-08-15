@@ -9,6 +9,7 @@ use RuntimeException;
 use Zacksmash\Outpost\Console\Concerns\RebuildsInstanceContainers;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Console\Concerns\ResolvesPathRepositoryMounts;
+use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Host;
@@ -17,7 +18,6 @@ use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\PathRepositories;
 use Zacksmash\Outpost\Processes;
 use Zacksmash\Outpost\Provisioner;
-use Zacksmash\Outpost\Runtime;
 use Zacksmash\Outpost\Supervisord;
 
 use function Laravel\Prompts\error;
@@ -50,7 +50,7 @@ class StartCommand extends Command
      */
     public function handle(
         Outposts $outposts,
-        Runtime $runtime,
+        RuntimeDriver $runtime,
         Doctor $doctor,
         Git $git,
         Host $host,

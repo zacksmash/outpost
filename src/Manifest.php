@@ -37,6 +37,7 @@ class Manifest implements Arrayable
         public readonly string $status = 'ready',
         public readonly ?string $image = null,
         public readonly ?string $imageDigest = null,
+        public readonly string $runtime = Runtime::DRIVER,
     ) {}
 
     /**
@@ -93,6 +94,12 @@ class Manifest implements Arrayable
 
         $image = $data['image'] ?? null;
         $imageDigest = $data['image_digest'] ?? null;
+        $runtime = $data['runtime'] ?? Runtime::DRIVER;
+
+        if (! is_string($runtime)
+            || preg_match('/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/D', $runtime) !== 1) {
+            throw new InvalidArgumentException('The manifest [runtime] value must be a lowercase driver identifier.');
+        }
 
         if (($image === null) !== ($imageDigest === null)) {
             throw new InvalidArgumentException('The manifest [image] and [image_digest] values must either both be present or both be null.');
@@ -141,6 +148,7 @@ class Manifest implements Arrayable
             status: $data['status'] ?? 'ready',
             image: $image,
             imageDigest: $imageDigest,
+            runtime: $runtime,
         );
     }
 
@@ -231,6 +239,7 @@ class Manifest implements Arrayable
         return [
             'name' => $this->name,
             'container' => $this->container,
+            'runtime' => $this->runtime,
             'url' => $this->url,
             'branch' => $this->branch,
             'php' => $this->php,
@@ -276,6 +285,7 @@ class Manifest implements Arrayable
             status: $status,
             image: $image,
             imageDigest: $imageDigest,
+            runtime: $this->runtime,
         );
     }
 

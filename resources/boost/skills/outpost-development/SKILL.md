@@ -70,7 +70,7 @@ composer update zacksmash/outpost --with-all-dependencies
 php artisan outpost:upgrade --all
 ```
 
-Manifests record the container image reference and digest. List and info JSON expose `image`, `image_digest`, `configured_image`, `configured_image_digest`, and tri-state `outdated`.
+Manifests record the runtime driver, container image reference, and digest. List and info JSON expose `runtime`, `image`, `image_digest`, `configured_image`, `configured_image_digest`, and tri-state `outdated`. The only supported runtime value is `apple-container`.
 
 `outpost:upgrade <name>` and `--all` pull a missing configured image, verify its contract, preflight every selected worktree, and replace only outdated or missing containers. Dirty worktrees are refused. Source and branches survive; container-local databases and service data reset; Composer, front-end builds, and migrations run again. Use `--mount-path-repos` in non-interactive runs that require reviewed external repositories.
 
@@ -136,6 +136,7 @@ Composer path repositories outside the worktree are offered as default-no read-o
 
 - do not treat Outpost as a replacement for the primary development environment or as production parity; it intentionally standardizes on PHP-FPM and compiled assets
 - do not hand off front-end changes without a successful production build and browser preview
+- do not configure or claim Docker, Podman, or another runtime; `apple-container` is the only supported driver
 - do not edit the primary checkout when assigned an Outpost worktree
 - do not use `outpost:shell` when `outpost:exec` expresses the command
 - do not put shell command strings or operators in `processes`; provide one argument per array item

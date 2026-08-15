@@ -16,6 +16,25 @@ it('serializes created_at as an ISO-8601 string', function () {
     expect(fakeManifest()->toArray()['created_at'])->toBe('2026-08-14T09:00:00+00:00');
 });
 
+it('records the runtime driver and defaults legacy manifests to apple container', function () {
+    $data = fakeManifest()->toArray();
+
+    expect($data['runtime'])->toBe('apple-container');
+
+    unset($data['runtime']);
+
+    expect(Manifest::fromArray($data)->runtime)->toBe('apple-container');
+});
+
+it('round trips a future runtime driver identifier without changing it', function () {
+    $manifest = fakeManifest(runtime: 'future-runtime');
+
+    expect(Manifest::fromArray($manifest->toArray())->runtime)->toBe('future-runtime')
+        ->and($manifest->withStatus('failed')->runtime)->toBe('future-runtime')
+        ->and($manifest->withImage('outpost:next', 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')->runtime)
+        ->toBe('future-runtime');
+});
+
 it('reports the services it uses', function () {
     $manifest = fakeManifest();
 
@@ -86,12 +105,12 @@ it('detects image reference and digest upgrades while keeping legacy state unkno
     $current = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     $new = 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
-    expect(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.2.0', $current))->toBeFalse()
-        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.2.1', $current))->toBeTrue()
-        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.2.0', $new))->toBeTrue()
-        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.2.0', null))->toBeNull()
+    expect(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.2.1', $current))->toBeFalse()
+        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.2.2', $current))->toBeTrue()
+        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.2.1', $new))->toBeTrue()
+        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.2.1', null))->toBeNull()
         ->and(fakeManifest(image: null, imageDigest: null)
-            ->imageOutdated('ghcr.io/zacksmash/outpost:0.2.0', $current))->toBeNull();
+            ->imageOutdated('ghcr.io/zacksmash/outpost:0.2.1', $current))->toBeNull();
 });
 
 it('updates image identity without changing instance metadata', function () {
@@ -123,6 +142,14 @@ it('rejects invalid lifecycle metadata', function (string $key, mixed $value) {
 })->with([
     'status' => ['status', 'broken'],
 ])->throws(InvalidArgumentException::class);
+
+it('rejects an invalid runtime driver identifier', function (mixed $value) {
+    Manifest::fromArray([...fakeManifest()->toArray(), 'runtime' => $value]);
+})->with([
+    'empty runtime' => [''],
+    'uppercase runtime' => ['Apple'],
+    'non-string runtime' => [1],
+])->throws(InvalidArgumentException::class, 'manifest [runtime]');
 
 it('rejects invalid resource metadata', function (string $key, mixed $value) {
     Manifest::fromArray([...fakeManifest()->toArray(), $key => $value]);

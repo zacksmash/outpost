@@ -6,7 +6,7 @@ namespace Zacksmash\Outpost\Console\Commands;
 
 use Illuminate\Console\Command;
 use RuntimeException;
-use Zacksmash\Outpost\Runtime;
+use Zacksmash\Outpost\Contracts\RuntimeDriver;
 
 use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\error;
@@ -30,7 +30,7 @@ class PullCommand extends Command
     /**
      * Execute the console command.
      */
-    public function handle(Runtime $runtime): int
+    public function handle(RuntimeDriver $runtime): int
     {
         $image = config()->string('outpost.image');
 

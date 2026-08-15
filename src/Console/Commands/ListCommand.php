@@ -7,9 +7,9 @@ namespace Zacksmash\Outpost\Console\Commands;
 use Illuminate\Console\Command;
 use JsonException;
 use RuntimeException;
+use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Outposts;
-use Zacksmash\Outpost\Runtime;
 
 use function Laravel\Prompts\error;
 use function Laravel\Prompts\info;
@@ -31,7 +31,7 @@ class ListCommand extends Command
     /**
      * Execute the console command.
      */
-    public function handle(Outposts $outposts, Runtime $runtime): int
+    public function handle(Outposts $outposts, RuntimeDriver $runtime): int
     {
         $manifests = $outposts->all();
 

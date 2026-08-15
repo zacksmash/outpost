@@ -32,7 +32,7 @@ it('finishes immediately when outpost is already ready', function () {
     $doctor->shouldReceive('inspect')->once()->andReturn([
         DoctorCheck::pass('Platform', 'macOS 27.0 on arm64'),
         DoctorCheck::pass('Runtime', 'The Apple container system is running.'),
-        DoctorCheck::pass('Base image', 'The [ghcr.io/zacksmash/outpost:0.2.0] image is available.'),
+        DoctorCheck::pass('Base image', 'The [ghcr.io/zacksmash/outpost:0.2.1] image is available.'),
     ]);
 
     app()->instance(Doctor::class, $doctor);
@@ -111,8 +111,8 @@ it('offers to pull a missing base image and verifies the result', function () {
     app()->instance(Doctor::class, $doctor);
 
     Process::fake([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.0') => Process::result('', 'not found', 1),
-        processPattern('container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.2.0') => Process::result('pulled'),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.1') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.2.1') => Process::result('pulled'),
     ]);
 
     $this->artisan('outpost:install')
@@ -133,7 +133,7 @@ it('builds the base image locally when requested', function () {
     app()->instance(Doctor::class, $doctor);
 
     Process::fake([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.0') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.1') => Process::result('', 'not found', 1),
         processPattern('container', 'build').' *' => Process::result('built'),
     ]);
 
@@ -250,7 +250,7 @@ it('uses one confirmation for networking https and the shared image', function (
     $runtime->shouldReceive('stopSystem')->once();
     $runtime->shouldReceive('startSystem')->once();
     $runtime->shouldReceive('registerDomain')->once()->with('outpost');
-    $runtime->shouldReceive('pull')->once()->with('ghcr.io/zacksmash/outpost:0.2.0', Mockery::type('callable'));
+    $runtime->shouldReceive('pull')->once()->with('ghcr.io/zacksmash/outpost:0.2.1', Mockery::type('callable'));
 
     $configuration = Mockery::mock(RuntimeConfiguration::class);
     $configuration->shouldReceive('setDomain')->once()->with('outpost');

@@ -41,3 +41,9 @@ Run all tests:
 ```bash
 composer test
 ```
+
+## Runtime Drivers
+
+All lifecycle code depends on `Zacksmash\Outpost\Contracts\RuntimeDriver`. The service provider binds that contract to the existing `Runtime` Apple container implementation; Apple container remains the only supported driver.
+
+Driver identifiers are stable lowercase values recorded in every manifest. Legacy manifests default to `apple-container`. A future driver must preserve the existing command behavior, preview URLs, image metadata contract, shell-free execution, worktree safety, upgrade recovery, and test coverage before it becomes selectable. Do not add runtime configuration, capability flags, or partial driver support before a second complete implementation exists.
