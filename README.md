@@ -22,6 +22,8 @@ php artisan outpost feature/billing
 
 Each instance receives its own editable Git worktree, VM, URL, database, and detected services. Outpost doesn't replace your primary development environment — it gives your branches and agents somewhere to build in parallel, so you can preview their actual, compiled output before it ships.
 
+Of course, if you only need to glance at a trusted branch, a Git worktree linked to [Laravel Herd](https://herd.laravel.com) may be all you need. Outpost is for when isolation is the point: every branch — including the ones your agents write — builds and runs inside its own VM instead of natively on your Mac, with a private database and queue workers no other branch can touch, provisioned from a pinned image so a passing `outpost:verify` report means the work is truly ready.
+
 ## Requirements
 
 - macOS 26 or newer on Apple silicon
