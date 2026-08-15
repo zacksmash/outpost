@@ -1,6 +1,6 @@
 # Release Notes
 
-## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.0...HEAD)
+## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.1...HEAD)
 
 ### Added
 
@@ -11,6 +11,20 @@
 - Octane instances now use an Outpost-managed polling watcher for the application's configured `octane.watch` paths, making PHP changes visible to Swoole, RoadRunner, and FrankenPHP workers across host bind mounts.
 - The package now defaults to the exact `ghcr.io/zacksmash/outpost:0.1.1` image so the patch release and its runtime image stay coupled.
 - Release images now build on GitHub's native ARM64 runner instead of emulating ARM64 with QEMU while retaining the reusable BuildKit cache for faster subsequent builds.
+
+## [v0.1.1](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.0...v0.1.1) - 2026-08-15
+
+### Added
+
+- Added `php artisan outpost:reload <name>` for explicitly reloading Octane workers in a running instance.
+
+### Changed
+
+- Octane instances now use an Outpost-managed polling watcher, so PHP edits reload Swoole, RoadRunner, and FrankenPHP workers reliably across host bind mounts.
+- Internal application probes now document the correct HTTP and HTTPS localhost commands.
+- The README is 58% shorter while retaining installation, runtime, command, safety, and configuration guidance.
+- ARM64 release images now build on native GitHub ARM hardware instead of QEMU and retain the BuildKit cache.
+- The package now defaults to the exact `ghcr.io/zacksmash/outpost:0.1.1` image.
 
 ## [v0.1.0](https://github.com/zacksmash/outpost/commits/main/compare/main...v0.1.0) - 2026-08-15
 
