@@ -2,11 +2,6 @@
 
 ## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.2.1...HEAD)
 
-### Added
-
-- Added a `RuntimeDriver` contract, bound to the existing Apple container implementation, so lifecycle consumers can remain engine-neutral without exposing unsupported runtime selection.
-- Instance manifests and agent-readable info now record the stable `apple-container` driver identifier. Legacy manifests default to that identifier because earlier Outpost releases supported only Apple container.
-
 ## [v0.2.1](https://github.com/zacksmash/outpost/commits/main/compare/v0.2.0...v0.2.1) - 2026-08-15
 
 ### Added
@@ -43,8 +38,8 @@ Outpost is now deliberately an isolated Laravel branch sandbox for parallel agen
 ```bash
 composer update zacksmash/outpost --with-all-dependencies
 php artisan outpost:upgrade --all
-
 ```
+
 Upgrade refuses dirty worktrees and keeps source and branches. Replacing a container resets its container-local database and service data.
 
 ## [v0.1.2](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.1...v0.1.2) - 2026-08-15
