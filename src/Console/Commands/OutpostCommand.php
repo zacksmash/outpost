@@ -452,6 +452,8 @@ class OutpostCommand extends Command
 
         if ($this->option('mount-path-repos')
             || confirm('Mount these path repositories read-only into the instance?', false)) {
+            $scan->createHostBridges(dirname($worktree));
+
             return $scan->mounts();
         }
 

@@ -608,6 +608,11 @@ it('mounts path repositories read-only with the explicit flag', function () {
         ->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => in_array(sys_get_temp_dir().':'.sys_get_temp_dir().':ro', $process->command, true));
+
+    $bridge = $this->root.'/feature-x'.sys_get_temp_dir();
+
+    expect(is_link($bridge))->toBeTrue()
+        ->and(readlink($bridge))->toBe(sys_get_temp_dir());
 });
 
 it('seeds the database only when asked', function () {

@@ -63,6 +63,12 @@ class PathRepositories
                 continue;
             }
 
+            if ($this->inside($target, '/runtime') || $this->inside($target, '/outpost.json')) {
+                $warnings[] = "The path repository [{$url}] resolves to Outpost's host-side instance metadata and will not be mounted.";
+
+                continue;
+            }
+
             if (str_contains($path, ':') || str_contains($target, ':')) {
                 $warnings[] = "The path repository [{$path}] contains a colon, which breaks volume specs, so it will not be mounted.";
 

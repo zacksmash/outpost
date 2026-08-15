@@ -134,6 +134,23 @@ it('deletes an instance directory', function () {
     expect(File::isDirectory($this->root.'/feature-billing'))->toBeFalse();
 });
 
+it('deletes host path repository bridges without following them', function () {
+    $external = $this->root.'-external';
+    File::ensureDirectoryExists($external);
+    File::put($external.'/keep.txt', 'keep');
+
+    try {
+        $this->outposts->save(fakeManifest());
+        symlink($external, $this->outposts->path('feature-billing').'/outpost');
+
+        $this->outposts->delete('feature-billing');
+
+        expect(File::get($external.'/keep.txt'))->toBe('keep');
+    } finally {
+        File::deleteDirectory($external);
+    }
+});
+
 it('quietly ignores deleting an unknown instance', function () {
     $this->outposts->delete('missing');
 

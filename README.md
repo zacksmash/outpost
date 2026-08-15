@@ -72,7 +72,7 @@ php artisan outpost:build --force
 php artisan outpost:install --local
 ```
 
-`--local` belongs to `outpost:install`; `outpost:build` accepts `--force`. A first local build does not require `--force`, but use it after package image or runtime-contract changes so an existing tag is actually replaced.
+`--local` belongs to `outpost:install`; `outpost:build` accepts `--force`. Local setup builds only when doctor finds the image missing or incompatible—it does not rebuild an already compatible image. A first local build does not require `--force`, but use it after package image or runtime-contract changes so an existing tag is actually replaced.
 
 Run the doctor at any point to inspect the host, live runtime, DNS publication and resolver state, base image, and application prerequisites without changing anything:
 
@@ -231,7 +231,7 @@ An instance is a real virtual machine boundary: a destructive command inside it 
 
 - **The worktree** is mounted read-write at `/app`. That's the product — you're meant to edit the code.
 - **Git metadata** is mounted read-only at its original absolute path so worktree-aware tools can inspect it without changing host refs.
-- **Composer path repositories** outside the worktree can't resolve inside the container, so Outpost offers to mount them **read-only**, lists every path first, and defaults to *no*. Relative repositories are resolved from the primary checkout and mounted where the same Composer URL resolves from `/app`; for example, `../outpost` is mounted at `/outpost`. Outpost keeps its own generated configuration under `/etc/outpost`, so these package paths cannot collide with runtime files. Non-interactive runs mount nothing unless you pass `--mount-path-repos` explicitly. Read-only bounds destruction, not disclosure — that's why a human confirms.
+- **Composer path repositories** outside the worktree can't resolve inside the container, so Outpost offers to mount them **read-only**, lists every path first, and defaults to *no*. Relative repositories are resolved from the primary checkout and mounted where the same Composer URL resolves from `/app`; for example, `../outpost` is mounted at `/outpost`. An approved mount also creates an ignored host-side bridge under the instance directory, allowing Composer's relative vendor symlink to resolve both inside the container and from host tools such as Artisan, IDEs, Herd, and Boost. The container mount remains read-only, but a host symlink cannot enforce read-only access—do not edit an external package through `vendor/` or the bridge unless that source was explicitly assigned. Outpost keeps its own generated configuration under `/etc/outpost`, so these package paths cannot collide with runtime files. Non-interactive runs mount nothing unless you pass `--mount-path-repos` explicitly. Read-only bounds destruction inside the instance, not disclosure — that's why a human confirms.
 
 Instances are development sandboxes, not production parity. The database accounts inside them are deliberately permissive, exactly like Sail's. Direct service access binds selected ports to the instance network and protects MySQL, PostgreSQL, and Redis with the documented sandbox credentials; disable `expose_services` when network-level separation from other local containers matters more than host database-tool access.
 

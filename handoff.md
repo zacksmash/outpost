@@ -71,7 +71,8 @@ Outpost already provides several useful protections:
 - The real application `.env` is never copied. A fresh environment is generated from `.env.example` with disposable credentials in [Provisioner.php](/Users/Zack/Dev/outpost/src/Provisioner.php:100).
 - Home directories, `.ssh`, `.aws`, `.gnupg`, `~/Library`, and parent directories are prohibited as Composer path mounts.
 - External Composer path repositories require confirmation, default to no, and mount read-only.
-- Relative Composer path repositories are resolved from the primary checkout and mounted at the path Composer expects from `/app`; generated Outpost configuration lives separately at `/etc/outpost`.
+- Relative Composer path repositories are resolved from the primary checkout and mounted at the path Composer expects from `/app`; an ignored host bridge makes Composer's vendor symlink resolve for host tools, while generated Outpost configuration lives separately at `/etc/outpost`.
+- Path repositories are read-only inside the container, but their host bridges point at the real source and cannot enforce read-only host access. Agents must not edit through `vendor/` or a bridge unless the external source is explicitly in scope.
 - The repository's common Git directory is mounted read-only at its original absolute host path, so Git-aware tooling works without writable access to host refs.
 - Commits are host-side operations: use `git -C .outpost/<name>/app ...`; `outpost:exec <name> -- git commit ...` cannot update refs.
 - `expose_services => false` keeps databases, Redis, and Mailpit on container loopback.

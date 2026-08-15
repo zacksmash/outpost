@@ -77,6 +77,63 @@ it('resolves relative repositories from the primary project while preserving the
         ->and($scan->mounts())->toBe([$package.':/outpost:ro']);
 });
 
+it('bridges container path repository targets so host tools can follow composer symlinks', function () {
+    $project = $this->root.'/project';
+    $instance = $project.'/.outpost/feature';
+    $worktree = $instance.'/app';
+    $package = $this->root.'/outpost';
+    $vendor = $worktree.'/vendor/zacksmash';
+
+    File::ensureDirectoryExists($vendor);
+    File::ensureDirectoryExists($package);
+    writeComposer($worktree, [
+        ['type' => 'path', 'url' => '../outpost'],
+    ]);
+    symlink('../../../outpost', $vendor.'/outpost');
+
+    expect(realpath($vendor.'/outpost'))->toBeFalse();
+
+    $scan = $this->scanner->scan($worktree, $project);
+    $scan->createHostBridges($instance);
+
+    expect(realpath($vendor.'/outpost'))->toBe(realpath($package))
+        ->and(readlink($instance.'/outpost'))->toBe($package);
+});
+
+it('mirrors nested absolute container targets without flattening their path', function () {
+    $instance = $this->root.'/instance';
+
+    File::ensureDirectoryExists($instance);
+    writeComposer($this->worktree, [
+        ['type' => 'path', 'url' => $this->root.'/other'],
+    ]);
+
+    $scan = $this->scanner->scan($this->worktree);
+    $scan->createHostBridges($instance);
+
+    expect(readlink($instance.$this->root.'/other'))->toBe($this->root.'/other');
+});
+
+it('rejects path repository targets that collide with host-side instance metadata', function (string $url) {
+    $project = $this->root.'/project';
+
+    File::ensureDirectoryExists($project);
+    File::ensureDirectoryExists($this->root.'/runtime');
+    File::ensureDirectoryExists($this->root.'/outpost.json');
+    writeComposer($this->worktree, [
+        ['type' => 'path', 'url' => $url],
+    ]);
+
+    $scan = $this->scanner->scan($this->worktree, $project);
+
+    expect($scan->any())->toBeFalse()
+        ->and($scan->warnings)->toHaveCount(1)
+        ->and($scan->warnings[0])->toContain('instance metadata');
+})->with([
+    'runtime directory' => '../runtime',
+    'manifest path' => '../outpost.json',
+]);
+
 it('handles repositories keyed by name', function () {
     writeComposer($this->worktree, [
         'shared' => ['type' => 'path', 'url' => '../lib'],

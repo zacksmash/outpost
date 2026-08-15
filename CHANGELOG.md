@@ -27,6 +27,8 @@
 
 - The initial `0.1.0` base image records its `/etc/outpost` runtime-path contract as an OCI label. Doctor rejects missing or mismatched contracts before creation and prints forced pull/build repairs, while image publishing stamps the same contract explicitly.
 - Front-end provisioning now uses `npm ci` whenever `package-lock.json` exists, keeping new worktrees reproducible and avoiding lock-file noise before development begins.
+- Approved Composer path repositories now receive ignored host-side bridge links, allowing Composer's container-relative vendor symlinks to resolve for host Artisan, IDE, Herd, and Boost usage while remaining read-only inside the instance.
+- `outpost:install --local` now states when a compatible existing image is being retained and directs intentional rebuilds to `outpost:build --force`.
 - Instance provisioning, `outpost:exec`, and `outpost:shell` now run as a host-ID-mapped non-root application user by default, keeping Composer plugins enabled and bind-mounted file ownership correct; `--root` is the explicit elevation path. The image also permits intentional root Composer use without silently disabling plugins.
 - Generated runtime configuration moved from `/outpost` to `/etc/outpost`, and relative Composer path repositories now resolve from the primary checkout to their Composer-visible container path. This allows a sibling `../outpost` package to mount read-only at `/outpost` without colliding with Outpost itself.
 - The host repository's common Git directory is mounted read-only at its original absolute path so Git-aware tools such as `pint --dirty` work inside an instance without writable access to host refs; documentation now makes host-side commits explicit.

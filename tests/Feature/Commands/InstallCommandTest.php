@@ -51,6 +51,24 @@ it('finishes immediately when outpost is already ready', function () {
     Process::assertNothingRan();
 });
 
+it('explains that local setup does not rebuild an already compatible image', function () {
+    $doctor = Mockery::mock(Doctor::class);
+    $doctor->shouldReceive('inspect')->once()->andReturn([
+        DoctorCheck::pass(Doctor::BASE_IMAGE_CHECK, 'The configured image is compatible.'),
+    ]);
+
+    app()->instance(Doctor::class, $doctor);
+
+    Process::fake();
+
+    $this->artisan('outpost:install', ['--local' => true])
+        ->expectsOutputToContain('--local is not rebuilding it')
+        ->expectsOutputToContain('outpost:build --force')
+        ->assertSuccessful();
+
+    Process::assertNothingRan();
+});
+
 it('offers to start a stopped runtime and verifies the result', function () {
     $doctor = Mockery::mock(Doctor::class);
     $doctor->shouldReceive('inspect')->twice()->andReturn(

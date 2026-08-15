@@ -26,7 +26,7 @@ class InstallCommand extends Command
     protected $signature = 'outpost:install
         {--force : Apply setup without the consolidated confirmation}
         {--https : Prepare trusted local HTTPS}
-        {--local : Build the base image locally instead of pulling it}';
+        {--local : Build a missing or incompatible base image locally instead of pulling it}';
 
     /**
      * The command description.
@@ -46,6 +46,11 @@ class InstallCommand extends Command
 
         if ($this->hasHardBlocker($checks)) {
             return $this->finish($checks);
+        }
+
+        if ($this->option('local') && $this->passed($checks, Doctor::BASE_IMAGE_CHECK)) {
+            note('The configured image is already compatible, so --local is not rebuilding it.');
+            note('Replace it with: php artisan outpost:build --force');
         }
 
         $actions = $this->actions($checks, $certificates);
@@ -219,6 +224,22 @@ class InstallCommand extends Command
     {
         foreach ($checks as $check) {
             if ($check->name === $name && $check->status === DoctorCheck::FAIL) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Determine whether a named check passed.
+     *
+     * @param  list<DoctorCheck>  $checks
+     */
+    protected function passed(array $checks, string $name): bool
+    {
+        foreach ($checks as $check) {
+            if ($check->name === $name && $check->status === DoctorCheck::PASS) {
                 return true;
             }
         }
