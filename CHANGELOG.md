@@ -1,6 +1,17 @@
 # Release Notes
 
-## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.0...HEAD)
+## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.1...HEAD)
+
+## [v0.5.1](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.0...v0.5.1) - 2026-08-15
+
+### Fixed
+
+- An explicit `services` override containing one database now makes that service the application's sandbox connection and reconciles the complete `DB_*` environment block instead of provisioning an unused database beside SQLite.
+- Doctor and the bundled agent skill now clarify that service web endpoints such as Mailpit use the application's HTTP or HTTPS scheme and point to the exact URLs from `outpost:info`.
+
+### Changed
+
+- Pinned the package and release image together at `ghcr.io/zacksmash/outpost:0.5.1`.
 
 ## [v0.5.0](https://github.com/zacksmash/outpost/commits/main/compare/v0.4.0...v0.5.0) - 2026-08-15
 

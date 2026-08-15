@@ -78,6 +78,7 @@ class DoctorCommand extends Command
 
         note('Host access: If browsers or CLI tools cannot reach container addresses, enable the calling application under System Settings > Privacy & Security > Local Network.');
         note("Container probes (the published hostname does not resolve inside its own container):\n\n  HTTP:  php artisan outpost:exec <name> -- curl --fail --silent --show-error http://localhost\n  HTTPS: php artisan outpost:exec <name> -- curl --fail --silent --show-error --insecure https://localhost");
+        note("Service web endpoints use the same scheme as the application. Mailpit container probes:\n\n  HTTP:  php artisan outpost:exec <name> -- curl --fail --silent --show-error http://localhost:8025\n  HTTPS: php artisan outpost:exec <name> -- curl --fail --silent --show-error --insecure https://localhost:8025\n\nCopy host URLs from: php artisan outpost:info <name>");
 
         if ($failures !== []) {
             error(sprintf('Outpost found %d blocking issue%s.', count($failures), count($failures) === 1 ? '' : 's'));

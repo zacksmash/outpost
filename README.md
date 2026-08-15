@@ -123,7 +123,7 @@ Remote and pull request refs are checked out as local, editable branches, while 
 
 ## Services
 
-Every instance runs PHP-FPM. Outpost inspects your application's configuration to select its PHP version, MySQL or PostgreSQL, Redis, Mailpit, and front-end workflow. You may override service detection using the `services` configuration option.
+Every instance runs PHP-FPM. Outpost inspects your application's configuration to select its PHP version, MySQL or PostgreSQL, Redis, Mailpit, and front-end workflow. You may override service detection using the `services` configuration option. When that list contains exactly one database service, Outpost also makes it the application's sandbox connection and writes its `DB_*` values; listing both keeps the application's configured default.
 
 Detected services listen on their standard ports on the instance's private IP address, so instances never compete for host ports:
 
@@ -134,7 +134,7 @@ Detected services listen on their standard ports on the instance's private IP ad
 | Redis | `6379` |
 | Mailpit SMTP / UI | `1025` / `8025` |
 
-You may retrieve an instance's URLs and credentials at any time using the `outpost:info` command. To keep backing services on the container's loopback interface, set the `expose_services` configuration option to `false`.
+You may retrieve an instance's URLs and credentials at any time using the `outpost:info` command. Mailpit's web endpoint uses the same HTTP or HTTPS scheme as the application, so copy the reported host URL rather than assuming HTTP on port `8025`. From inside the instance, use that scheme with `localhost:8025` and add curl's `--insecure` option for HTTPS. To keep backing services on the container's loopback interface, set the `expose_services` configuration option to `false`.
 
 ### Frontend Assets
 
@@ -300,7 +300,7 @@ php artisan vendor:publish --tag="outpost-config"
 | Key | Default | Description |
 | --- | --- | --- |
 | `domain` | `outpost` | Local publication domain. |
-| `image` | `ghcr.io/zacksmash/outpost:0.5.0` | Exact OCI image used by instances. |
+| `image` | `ghcr.io/zacksmash/outpost:0.5.1` | Exact OCI image used by instances. |
 | `dns` | `1.1.1.1` | Nameserver injected into builds and instances. |
 | `path` | `.outpost` | Project-relative instance directory. |
 | `resources.cpus` | `4` | Virtual CPUs per instance. |
@@ -309,7 +309,7 @@ php artisan vendor:publish --tag="outpost-config"
 | `frontend` | `build` | Build assets once, or `none` to skip Node. |
 | `https` | `false` | Set `true` to require prepared trusted HTTPS. |
 | `tls.path` | `.outpost/tls` | Project-relative trusted HTTPS state directory. |
-| `services` | `null` | Explicit service list; `null` enables detection. |
+| `services` | `null` | Explicit service list; one listed database becomes the sandbox connection. `null` enables detection. |
 | `expose_services` | `true` | Expose detected services on the instance IP. |
 | `previews` | `[]` | Named same-origin review paths with optional notes. |
 | `processes` | `[]` | Named supervised argument lists. |

@@ -34,7 +34,7 @@ return [
     |
     */
 
-    'image' => env('OUTPOST_IMAGE', 'ghcr.io/zacksmash/outpost:0.5.0'),
+    'image' => env('OUTPOST_IMAGE', 'ghcr.io/zacksmash/outpost:0.5.1'),
 
     /*
     |--------------------------------------------------------------------------
@@ -131,8 +131,9 @@ return [
     |
     | When null, Outpost inspects your application's configuration to
     | determine which services each instance needs: your database
-    | connection, Redis usage, and mail transport. Set an array
-    | such as ["mysql", "redis"] to skip detection entirely.
+    | connection, Redis usage, and mail transport. Set an array such as
+    | ["mysql", "redis"] to override detection. When exactly one database
+    | service is listed, it becomes the application's sandbox connection.
     |
     */
 

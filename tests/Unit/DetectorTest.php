@@ -90,6 +90,25 @@ it('lets the outpost config override detection entirely', function () {
         ->and($detection->database)->toBe('mysql');
 });
 
+it('uses a single configured database service as the application database', function (string $service) {
+    $detection = detectorWith([
+        'outpost.services' => [$service, 'redis'],
+        'database.default' => 'sqlite',
+    ]);
+
+    expect($detection->services)->toBe([$service, 'redis'])
+        ->and($detection->database)->toBe($service);
+})->with(['mysql', 'pgsql']);
+
+it('keeps the application database when multiple database services are configured', function () {
+    $detection = detectorWith([
+        'outpost.services' => ['mysql', 'pgsql'],
+        'database.default' => 'sqlite',
+    ]);
+
+    expect($detection->database)->toBe('sqlite');
+});
+
 it('refuses a services override naming an unsupported service', function (mixed $service) {
     detectorWith(['outpost.services' => [$service]]);
 })->with([

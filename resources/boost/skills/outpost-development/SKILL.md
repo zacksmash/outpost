@@ -114,7 +114,7 @@ The Git common directory is mounted read-only at its host path, so Git-aware rea
 
 ### 5. Configure only when needed
 
-Every instance uses PHP-FPM. Outpost selects a compatible configured PHP version and detects MySQL or PostgreSQL, Redis, and Mailpit from Laravel configuration. Set `services` explicitly when detection is wrong.
+Every instance uses PHP-FPM. Outpost selects a compatible configured PHP version and detects MySQL or PostgreSQL, Redis, and Mailpit from Laravel configuration. Set `services` explicitly when detection is wrong. If the list contains exactly one database service, Outpost makes it the application's sandbox connection and reconciles its `DB_*` values. Listing both databases keeps the application's configured default.
 
 `frontend` defaults to `build`: Outpost uses `npm ci` with a lock file, otherwise `npm install`, then runs the production build. Laravel serves the compiled `public/build` output. Outpost deliberately does not manage Vite's development server, HMR, or `npm run preview`; it is a parallel execution and review sandbox, not a replacement for the primary development environment. Set `frontend` to `none` to skip Node.
 
@@ -160,7 +160,7 @@ Composer path repositories outside the worktree are offered as default-no read-o
 ## Examples
 
 - Review a pull request: `php artisan outpost --pr=482 --name=pr-482 --open`.
-- Discover database coordinates: read `endpoints.mysql.url`, `endpoints.pgsql.url`, or `endpoints.redis.url` from `outpost:info <name> --json`.
+- Discover service coordinates: read `endpoints.mysql.url`, `endpoints.pgsql.url`, `endpoints.redis.url`, or `endpoints.mailpit.url` from `outpost:info <name> --json`. Mailpit uses the application's HTTP or HTTPS scheme. Use the exact reported URL from the host; inside the instance, use that scheme with `localhost:8025` and curl `--insecure` for HTTPS.
 - Open the repository's named review screen: `php artisan outpost:open <name> posts`.
 - Restart a stale queue worker: `php artisan outpost:process <name> queue --restart`, then confirm its reported state is `running`.
 - Recover a missing container: inspect worktree status, then run `php artisan outpost:start <name>`.

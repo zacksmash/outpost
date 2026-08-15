@@ -321,6 +321,38 @@ it('force rebuilds a current image from the latest Outpost configuration', funct
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('npm', $process->command, true));
 });
 
+it('adopts an explicitly configured database service during a forced rebuild', function () {
+    app(Outposts::class)->save(fakeManifest(
+        name: 'feature-x',
+        database: 'sqlite',
+        services: [],
+        image: Runtime::PUBLISHED_IMAGE,
+        imageDigest: $this->currentDigest,
+    ));
+
+    File::put($this->worktree.'/.env', "APP_KEY=base64:existing\nDB_CONNECTION=sqlite\nDB_DATABASE=/app/database/database.sqlite\n");
+
+    config([
+        'database.default' => 'sqlite',
+        'outpost.services' => ['mysql'],
+    ]);
+
+    fakeUpgradeProcesses($this->root, $this->currentDigest);
+
+    $this->artisan('outpost:upgrade', ['name' => 'feature-x', '--force' => true])
+        ->assertSuccessful();
+
+    $manifest = app(Outposts::class)->find('feature-x');
+    $environment = File::get($this->worktree.'/.env');
+
+    expect($manifest?->database)->toBe('mysql')
+        ->and($manifest?->services)->toBe(['mysql'])
+        ->and($environment)->toContain('DB_CONNECTION=mysql')
+        ->and($environment)->toContain('DB_HOST=127.0.0.1')
+        ->and($environment)->toContain('DB_DATABASE=outpost')
+        ->and($environment)->not->toContain('/app/database/database.sqlite');
+});
+
 it('preflights trusted https before a forced rebuild deletes the container', function () {
     app(Outposts::class)->save(fakeManifest(
         name: 'feature-x',

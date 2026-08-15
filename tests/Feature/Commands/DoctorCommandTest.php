@@ -26,7 +26,10 @@ it('reports successful checks and non-blocking warnings', function () {
         ->and($output)->toContain('System Settings > Privacy & Security > Local Network')
         ->and($output)->toContain('CLI tools')
         ->and($output)->toContain('outpost:exec <name> -- curl --fail --silent --show-error http://localhost')
-        ->and($output)->toContain('--insecure https://localhost');
+        ->and($output)->toContain('--insecure https://localhost')
+        ->and($output)->toContain('Service web endpoints use the same scheme as the application')
+        ->and($output)->toContain('--insecure https://localhost:8025')
+        ->and($output)->toContain('outpost:info <name>');
 });
 
 it('fails when required checks fail and prints their remedies', function () {
