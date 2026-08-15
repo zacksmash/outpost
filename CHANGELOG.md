@@ -1,6 +1,6 @@
 # Release Notes
 
-## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.3.0...HEAD)
+## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.4.0...HEAD)
 
 ### Added
 
@@ -11,6 +11,18 @@
 - Refined every command's description, option help, status messages, and detail output for a consistent Laravel-first console experience.
 - JSON commands now avoid interactive prompts, require explicit instance names, and return a top-level `error` document for failures that prevent a report.
 - The package and release image are pinned together at `ghcr.io/zacksmash/outpost:0.4.0`.
+
+## [v0.4.0](https://github.com/zacksmash/outpost/commits/main/compare/v0.3.0...v0.4.0) - 2026-08-15
+
+### Added
+
+- Added `outpost:doctor --json` for a stable, machine-readable readiness report.
+
+### Changed
+
+- Refined every command description, option help, status message, and detail view for a consistent Laravel-first console experience.
+- JSON commands now avoid interactive prompts, require explicit instance names, and return a top-level `error` document when a report cannot be produced.
+- Pinned the package and release image together at `ghcr.io/zacksmash/outpost:0.4.0`.
 
 ## [v0.3.0](https://github.com/zacksmash/outpost/commits/main/compare/v0.2.1...v0.3.0) - 2026-08-15
 
@@ -94,6 +106,7 @@ Outpost is now deliberately an isolated Laravel branch sandbox for parallel agen
 ```bash
 composer update zacksmash/outpost --with-all-dependencies
 php artisan outpost:upgrade --all
+
 
 ```
 Upgrade refuses dirty worktrees and keeps source and branches. Replacing a container resets its container-local database and service data.
