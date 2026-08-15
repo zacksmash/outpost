@@ -90,7 +90,8 @@ it('emits machine-readable instance state', function () {
             'processes' => ['queue'],
             'state' => 'running',
         ])
-        ->and($instances[1]['state'])->toBe('missing');
+        ->and($instances[1]['state'])->toBe('missing')
+        ->and($instances[1]['status'])->toBe('degraded');
 });
 
 it('reports a running instance that failed provisioning as degraded', function () {

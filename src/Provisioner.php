@@ -60,6 +60,24 @@ class Provisioner
     }
 
     /**
+     * Prepare a fresh container around an existing worktree.
+     *
+     * The application key, installed front-end assets, and other worktree
+     * state survive with the checkout and must not be regenerated here.
+     */
+    public function recover(Manifest $manifest, ?Closure $onStep = null): void
+    {
+        $this->step($onStep, 'Refreshing the environment configuration',
+            fn () => $this->prepareEnvironment($manifest));
+
+        $this->step($onStep, 'Installing composer dependencies',
+            fn () => $this->php($manifest, ['/usr/local/bin/composer', 'install', '--no-interaction', '--prefer-dist']));
+
+        $this->step($onStep, 'Running the database migrations',
+            fn () => $this->artisan($manifest, ['migrate', '--force']));
+    }
+
+    /**
      * Determine if the application builds front-end assets.
      *
      * Vite manifests are gitignored, so a fresh worktree never has one;

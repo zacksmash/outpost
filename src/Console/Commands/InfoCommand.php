@@ -49,7 +49,7 @@ class InfoCommand extends Command
                 'container' => $manifest->container,
                 'branch' => $manifest->branch,
                 'state' => $state,
-                'status' => $manifest->status,
+                'status' => $runtime->instanceStatus($manifest, $state),
                 'php' => $manifest->php,
                 'server' => $manifest->server,
                 'octane_server' => $manifest->octaneServer,

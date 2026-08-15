@@ -16,7 +16,7 @@ class Runtime
     /**
      * The exact shared image shipped for this package contract.
      */
-    public const string PUBLISHED_IMAGE = 'ghcr.io/zacksmash/outpost:0.1.1';
+    public const string PUBLISHED_IMAGE = 'ghcr.io/zacksmash/outpost:0.1.2';
 
     /**
      * The OCI label used to advertise the image's runtime mount contract.
@@ -451,6 +451,20 @@ class Runtime
         }
 
         return 'running';
+    }
+
+    /**
+     * Get the effective lifecycle status after considering live runtime state.
+     */
+    public function instanceStatus(Manifest $manifest, ?string $runtimeState = null): string
+    {
+        $runtimeState ??= $this->state($manifest->container) ?? 'missing';
+
+        if ($runtimeState === 'missing' && $manifest->status === 'ready') {
+            return 'degraded';
+        }
+
+        return $manifest->status;
     }
 
     /**

@@ -65,6 +65,7 @@ php artisan outpost:info billing           # URLs, DSNs, credentials, runtime; a
 php artisan outpost:open billing           # starts the instance first when needed
 php artisan outpost:open billing mailpit   # browser endpoints: app, mailpit, vite
 php artisan outpost:start billing
+php artisan outpost:start billing --recreate # rebuild a missing container around the surviving worktree
 php artisan outpost:stop billing
 php artisan outpost:reload billing          # force an immediate Octane worker reload
 php artisan outpost:shell billing
@@ -83,9 +84,10 @@ php artisan outpost:remove billing --forget --force # local cleanup when Apple's
 - `outpost:open` starts a stopped instance before opening its URL in the macOS default browser
 - `outpost:info --json` is the stable machine-readable way for agents and scripts to discover instance and service endpoints
 - `outpost:list --json` is the stable machine-readable inventory; `outpost:exec <name> -- <command...>` passes argument tokens without a shell, streams output, preserves the inner exit code, and runs as the non-root application user. `outpost:shell` uses the same user. Both accept `--root` for explicit elevation.
-- `outpost:list` and `outpost:info` report a running instance whose provisioning failed as `degraded`; the manifest's `status` distinguishes `provisioning`, `ready`, and `failed`.
+- `outpost:list` and `outpost:info` report a running instance whose provisioning failed as `degraded`. They also expose effective `status => degraded` when runtime `state => missing`, rather than repeating the manifest's stale `ready` value. The persisted manifest status remains `provisioning`, `ready`, or `failed`.
 - Octane instances poll the configured `octane.watch` paths and reload workers automatically after PHP changes. Use `outpost:reload <name>` when an immediate explicit reload is needed.
 - `outpost:remove` refuses a dirty worktree even with `--force`; use `--discard-changes` only when destroying those changes is intentional. `--force` skips confirmations and keeps the branch. Quick lifecycle calls stop after `lifecycle_timeout` seconds (30 by default); `--forget` deliberately removes only the local worktree and manifest when Apple's VM cannot be reached, leaving an orphaned container and printing its cleanup command.
+- When `state` is `missing` but the manifest and worktree survive, run `outpost:start <name> --recreate`. It boots the exact configured image around the existing files, preserves `.env` and its application key, reinstalls Composer dependencies, and reruns migrations. Add `--mount-path-repos` in non-interactive use when external path repositories are required. Container-local MySQL, PostgreSQL, Redis, and Mailpit data was lost with the missing container and cannot be restored; worktree SQLite data survives.
 
 ### 5. Use an outpost safely as an agent
 
@@ -156,6 +158,7 @@ Read before executing:
 - An agent needs database coordinates without parsing terminal tables: `php artisan outpost:info billing --json`, then read `endpoints.mysql.url`, `endpoints.pgsql.url`, or `endpoints.redis.url` when present.
 - An agent needs to run a test without an interactive shell: `php artisan outpost:exec billing -- php artisan test --filter=Feature`, then use the command's unchanged exit code.
 - An agent changed PHP code in an Octane instance but suspects a stale response: wait for the polling watcher or run `php artisan outpost:reload billing`, then probe `http://localhost` inside an HTTP instance or `--insecure https://localhost` inside an HTTPS instance. `route:list` runs in a fresh CLI process and does not prove the long-running workers have reloaded. On authenticated routes, a redirect may occur before `SubstituteBindings`; authenticate the probe before using its status to judge route-model binding.
+- An agent finds `state => missing` and `status => degraded` while the worktree remains: inspect `git -C .outpost/<name>/app status --short`, then run `php artisan outpost:start <name> --recreate` without moving or discarding work. Include `--mount-path-repos` only when the instance previously required reviewed external repositories.
 - An agent has finished changing an outpost: inspect `git -C .outpost/<name>/app status --short`; only when authorized, commit from the host with `git -C .outpost/<name>/app ...` rather than through `outpost:exec`; stop the instance when work remains uncommitted, and remove it only after the worktree is clean. Outpost enforces this at removal time.
 - An app on SQLite needs no services: the instance boots with nginx and PHP-FPM only, and Outpost creates `database/database.sqlite` automatically.
 - A Redis queue needs a worker: add a `queue` process using `['@php', 'artisan', 'queue:work', '--sleep=1']`, recreate the instance, and inspect its output with `php artisan outpost:logs <name> --follow`.

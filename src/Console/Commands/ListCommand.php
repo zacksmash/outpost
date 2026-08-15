@@ -63,6 +63,10 @@ class ListCommand extends Command
                     fn (Manifest $manifest): array => [
                         ...$manifest->toArray(),
                         'state' => $instanceStates[$manifest->name],
+                        'status' => $runtime->instanceStatus(
+                            $manifest,
+                            $instanceStates[$manifest->name],
+                        ),
                     ],
                     $manifests,
                 ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));

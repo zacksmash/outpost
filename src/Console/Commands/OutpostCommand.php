@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use RuntimeException;
 use Zacksmash\Outpost\Certificates;
+use Zacksmash\Outpost\Console\Concerns\ResolvesPathRepositoryMounts;
 use Zacksmash\Outpost\Detector;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Git;
@@ -23,7 +24,6 @@ use Zacksmash\Outpost\Provisioner;
 use Zacksmash\Outpost\Runtime;
 use Zacksmash\Outpost\Supervisord;
 
-use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\error;
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\note;
@@ -35,6 +35,8 @@ use function Laravel\Prompts\warning;
 
 class OutpostCommand extends Command
 {
+    use ResolvesPathRepositoryMounts;
+
     /**
      * The command signature.
      */
@@ -246,10 +248,11 @@ class OutpostCommand extends Command
                     : "Fetching GitHub pull request #{$pullRequest}",
             );
 
-            $mounts = $this->mounts(
+            $mounts = $this->pathRepositoryMounts(
                 $pathRepositories,
                 $outposts->worktreePath($name),
                 $this->laravel->basePath(),
+                (bool) $this->option('mount-path-repos'),
             );
             $gitDirectory = $git->commonDirectory();
 
@@ -443,42 +446,6 @@ class OutpostCommand extends Command
         }
 
         return null;
-    }
-
-    /**
-     * Resolve which composer path repositories should be mounted, if any.
-     *
-     * The repository list comes from a writable file inside the worktree,
-     * so nothing is mounted without a human saying yes — and a scripted
-     * run without the explicit flag mounts nothing at all.
-     *
-     * @return list<string>
-     */
-    protected function mounts(PathRepositories $pathRepositories, string $worktree, string $project): array
-    {
-        $scan = $pathRepositories->scan($worktree, $project);
-
-        foreach ($scan->warnings as $warning) {
-            warning($warning);
-        }
-
-        if (! $scan->any()) {
-            return [];
-        }
-
-        warning('This application uses composer path repositories outside the worktree:');
-        note(implode("\n", $scan->paths));
-
-        if ($this->option('mount-path-repos')
-            || confirm('Mount these path repositories read-only into the instance?', false)) {
-            $scan->createHostBridges(dirname($worktree));
-
-            return $scan->mounts();
-        }
-
-        warning('Mounting nothing. Provisioning may fail; re-run with --mount-path-repos to mount them.');
-
-        return [];
     }
 
     /**

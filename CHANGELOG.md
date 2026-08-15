@@ -2,6 +2,15 @@
 
 ## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.1...HEAD)
 
+### Added
+
+- `php artisan outpost:start <name> --recreate` rebuilds a missing container around its surviving worktree, manifest, runtime configuration, HTTPS files, and approved path repositories without regenerating the application key.
+
+### Changed
+
+- `outpost:info --json` and `outpost:list --json` now expose `status: degraded` when the live container state is `missing`, instead of contradicting that state with the manifest's stale `ready` status.
+- The package now defaults to the exact `ghcr.io/zacksmash/outpost:0.1.2` image.
+
 ## [v0.1.1](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.0...v0.1.1) - 2026-08-15
 
 ### Added

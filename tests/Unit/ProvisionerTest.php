@@ -198,6 +198,36 @@ it('runs the container steps in order, pinned to the instance php version', func
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('db:seed', $process->command, true));
 });
 
+it('recovers a surviving worktree without replacing its key or rebuilding assets', function () {
+    File::put($this->root.'/feature-x/app/.env', "APP_KEY=base64:existing\nAPP_URL=http://localhost\n");
+    File::put($this->root.'/feature-x/app/package.json', json_encode([
+        'scripts' => ['build' => 'vite build'],
+    ], JSON_THROW_ON_ERROR));
+
+    Process::fake();
+    $steps = [];
+
+    $this->provisioner->recover(
+        fakeManifest(name: 'feature-x', php: '8.5', database: 'sqlite', services: []),
+        onStep: function (string $step) use (&$steps) {
+            $steps[] = $step;
+        },
+    );
+
+    expect($steps)->toBe([
+        'Refreshing the environment configuration',
+        'Installing composer dependencies',
+        'Running the database migrations',
+    ])->and(File::get($this->root.'/feature-x/app/.env'))->toContain('APP_KEY=base64:existing');
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'php8.5', 'artisan', 'migrate', '--force',
+    ]);
+    Process::assertDidntRun(fn (PendingProcess $process) => in_array('key:generate', $process->command, true));
+    Process::assertDidntRun(fn (PendingProcess $process) => in_array('npm', $process->command, true));
+});
+
 it('installs npm dependencies and builds assets when the app has a build script', function () {
     Process::fake();
 

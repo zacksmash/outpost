@@ -136,10 +136,10 @@ it('reads labels from apple container image metadata', function () {
 it('pulls an image from an oci registry', function () {
     Process::fake();
 
-    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.1.1');
+    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.1.2');
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.1.1',
+        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.1.2',
     ]);
 });
 
@@ -148,8 +148,8 @@ it('surfaces the real error when an image pull fails', function () {
         processPattern('container', 'image', 'pull').' *' => Process::result('', 'denied', 1),
     ]);
 
-    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.1.1');
-})->throws(RuntimeException::class, 'Unable to pull the [ghcr.io/zacksmash/outpost:0.1.1] image: denied');
+    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.1.2');
+})->throws(RuntimeException::class, 'Unable to pull the [ghcr.io/zacksmash/outpost:0.1.2] image: denied');
 
 it('builds an image with dns, tag, and build arguments', function () {
     Process::fake();
@@ -381,6 +381,13 @@ it('maps every container to its state', function () {
         'feature-x-app' => 'running',
         'feature-y-app' => 'stopped',
     ]);
+});
+
+it('degrades only a stale ready manifest whose container is missing', function () {
+    expect($this->runtime->instanceStatus(fakeManifest(status: 'ready'), 'missing'))->toBe('degraded')
+        ->and($this->runtime->instanceStatus(fakeManifest(status: 'ready'), 'stopped'))->toBe('ready')
+        ->and($this->runtime->instanceStatus(fakeManifest(status: 'failed'), 'missing'))->toBe('failed')
+        ->and($this->runtime->instanceStatus(fakeManifest(status: 'provisioning'), 'missing'))->toBe('provisioning');
 });
 
 it('opens a shell and passes the exit code through', function () {

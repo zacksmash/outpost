@@ -136,6 +136,7 @@ php artisan outpost:info billing                 # URLs and credentials; --json 
 php artisan outpost:open billing                 # start if needed, then open
 php artisan outpost:open billing mailpit         # endpoints: app, mailpit, vite
 php artisan outpost:start billing
+php artisan outpost:start billing --recreate      # rebuild a missing container around the worktree
 php artisan outpost:stop billing                 # preserves worktree and data
 php artisan outpost:reload billing               # reload Octane workers
 php artisan outpost:exec billing -- php artisan test
@@ -167,6 +168,8 @@ git -C .outpost/billing/app commit -am "Finish billing"
 
 Removal refuses a dirty worktree, even with `--force`. Preserve the work or use `--discard-changes` to explicitly destroy it. `--force` skips prompts and retains the branch. To recreate an instance from another base, remove it and then delete or rename the retained branch yourself.
 
+If the manifest and worktree survive but Apple container no longer has the container, run `outpost:start <name> --recreate`. Outpost pulls the exact image when needed, preserves the worktree and application key, remounts approved path repositories, and reruns Composer plus migrations. The missing container's writable service data is already gone and cannot be recovered; SQLite data inside the worktree survives. Add `--mount-path-repos` in a non-interactive recovery when those repositories are required.
+
 If an Apple container VM is stuck, `outpost:remove <name> --forget` removes only Outpost's local worktree and manifest, reports the orphaned container, and prints its later cleanup command.
 
 Composer path repositories outside the worktree are offered as read-only mounts and default to no. Approved relative repositories also receive an ignored host-side bridge so their Composer symlinks resolve in both the container and host tools. The bridge itself is a host symlink and cannot enforce read-only access, so do not edit the external package through it unless that source was explicitly assigned.
@@ -180,7 +183,7 @@ Publish configuration with `php artisan vendor:publish --tag="outpost-config"`.
 | Key | Default | Description |
 | --- | --- | --- |
 | `domain` | `outpost` | Local publication domain. |
-| `image` | `ghcr.io/zacksmash/outpost:0.1.1` | Exact OCI image used by instances. |
+| `image` | `ghcr.io/zacksmash/outpost:0.1.2` | Exact OCI image used by instances. |
 | `dns` | `1.1.1.1` | Nameserver injected into builds and instances. |
 | `path` | `.outpost` | Project-relative instance directory. |
 | `resources.cpus` | `4` | Virtual CPUs per instance. |
