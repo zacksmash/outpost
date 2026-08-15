@@ -253,10 +253,16 @@ class OutpostCommand extends Command
             );
             $gitDirectory = $git->commonDirectory();
 
-            $outposts->writeRuntime($name, [
+            $runtimeFiles = [
                 'nginx.conf' => $nginx->generate($manifest),
                 'supervisord.conf' => $supervisord->generate($manifest, $commands),
-            ]);
+            ];
+
+            if ($manifest->server === 'octane') {
+                $runtimeFiles['octane-watch'] = File::get(dirname(__DIR__, 3).'/stubs/octane-watch.sh');
+            }
+
+            $outposts->writeRuntime($name, $runtimeFiles);
 
             $tlsDirectory = $outposts->runtimePath($name).'/tls';
 
@@ -312,12 +318,7 @@ class OutpostCommand extends Command
             $runtime->flushDnsCache();
         } catch (RuntimeException $e) {
             error($e->getMessage());
-
-            if ($saved !== null) {
-                $saved = $saved->withStatus('failed');
-                $outposts->save($saved);
-                note("Everything created so far was left in place for debugging.\nRemove the instance with:\n\n  php artisan outpost:remove {$saved->name}");
-            }
+            $this->preserveFailedInstance($outposts, $saved);
 
             return self::FAILURE;
         }
@@ -335,9 +336,27 @@ class OutpostCommand extends Command
             note("Inspect service URLs and credentials with:\n\n  php artisan outpost:info {$manifest->name}");
         }
 
+        if ($manifest->server === 'octane') {
+            note("PHP changes are watched with polling. Force an immediate worker reload with:\n\n  php artisan outpost:reload {$manifest->name}");
+        }
+
         outro("The instance is ready: {$manifest->url}");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Mark any instance created before a failure and leave it available for debugging.
+     */
+    protected function preserveFailedInstance(Outposts $outposts, ?Manifest $manifest): void
+    {
+        if ($manifest === null) {
+            return;
+        }
+
+        $manifest = $manifest->withStatus('failed');
+        $outposts->save($manifest);
+        note("Everything created so far was left in place for debugging.\nRemove the instance with:\n\n  php artisan outpost:remove {$manifest->name}");
     }
 
     /**

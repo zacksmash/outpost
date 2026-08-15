@@ -11,7 +11,7 @@ beforeEach(function () {
 
 it('builds the base image from the package stubs', function () {
     Process::fake([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.0') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.1') => Process::result('', 'not found', 1),
         processPattern('container', 'build').' *' => Process::result('built'),
     ]);
 
@@ -21,7 +21,7 @@ it('builds the base image from the package stubs', function () {
         $context = end($process->command);
 
         return array_slice($process->command, 0, 6) === [
-            'container', 'build', '--dns', '1.1.1.1', '--tag', 'ghcr.io/zacksmash/outpost:0.1.0',
+            'container', 'build', '--dns', '1.1.1.1', '--tag', 'ghcr.io/zacksmash/outpost:0.1.1',
         ] && is_file($context.'/Dockerfile')
             && is_file($context.'/wait-for-app.sh')
             && is_file($context.'/vite.sh');
@@ -30,7 +30,7 @@ it('builds the base image from the package stubs', function () {
 
 it('passes the configured database credentials as build arguments', function () {
     Process::fake([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.0') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.1') => Process::result('', 'not found', 1),
         processPattern('container', 'build').' *' => Process::result('built'),
     ]);
 
@@ -58,11 +58,11 @@ it('refuses malformed php versions', function () {
 
 it('keeps an existing image when the rebuild is declined', function () {
     Process::fake([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.0') => Process::result('[{"reference":"ghcr.io/zacksmash/outpost:0.1.0"}]'),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.1') => Process::result('[{"reference":"ghcr.io/zacksmash/outpost:0.1.1"}]'),
     ]);
 
     $this->artisan('outpost:build')
-        ->expectsConfirmation('The [ghcr.io/zacksmash/outpost:0.1.0] image already exists. Rebuild it?', 'no')
+        ->expectsConfirmation('The [ghcr.io/zacksmash/outpost:0.1.1] image already exists. Rebuild it?', 'no')
         ->expectsOutputToContain('outpost:build --force')
         ->assertSuccessful();
 
@@ -71,12 +71,12 @@ it('keeps an existing image when the rebuild is declined', function () {
 
 it('rebuilds an existing image when confirmed', function () {
     Process::fake([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.0') => Process::result('[{"reference":"ghcr.io/zacksmash/outpost:0.1.0"}]'),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.1') => Process::result('[{"reference":"ghcr.io/zacksmash/outpost:0.1.1"}]'),
         processPattern('container', 'build').' *' => Process::result('built'),
     ]);
 
     $this->artisan('outpost:build')
-        ->expectsConfirmation('The [ghcr.io/zacksmash/outpost:0.1.0] image already exists. Rebuild it?', 'yes')
+        ->expectsConfirmation('The [ghcr.io/zacksmash/outpost:0.1.1] image already exists. Rebuild it?', 'yes')
         ->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'build');
@@ -84,7 +84,7 @@ it('rebuilds an existing image when confirmed', function () {
 
 it('rebuilds an existing image without asking when forced', function () {
     Process::fake([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.0') => Process::result('[{"reference":"ghcr.io/zacksmash/outpost:0.1.0"}]'),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.1') => Process::result('[{"reference":"ghcr.io/zacksmash/outpost:0.1.1"}]'),
         processPattern('container', 'build').' *' => Process::result('built'),
     ]);
 
@@ -125,7 +125,7 @@ it('refuses an empty php version list', function () {
 
 it('fails with the real error when the build breaks', function () {
     Process::fake([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.0') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.1') => Process::result('', 'not found', 1),
         processPattern('container', 'build').' *' => Process::result('', 'dns lookup failed', 1),
     ]);
 

@@ -25,7 +25,8 @@ it('reports successful checks and non-blocking warnings', function () {
         ->and($output)->toContain('newer than the verified')
         ->and($output)->toContain('System Settings > Privacy & Security > Local Network')
         ->and($output)->toContain('CLI tools')
-        ->and($output)->toContain('outpost:exec <name> -- curl --fail --silent --head localhost');
+        ->and($output)->toContain('outpost:exec <name> -- curl --fail --silent --show-error http://localhost')
+        ->and($output)->toContain('--insecure https://localhost');
 });
 
 it('fails when required checks fail and prints their remedies', function () {

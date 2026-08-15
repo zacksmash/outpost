@@ -41,3 +41,14 @@ it('records the runtime path contract in the image', function () {
     expect($dockerfile)->toContain('LABEL '.str_replace('=', '="', $label).'"')
         ->and($workflow)->toContain($label);
 });
+
+it('publishes the arm64 image on native hardware with a reusable build cache', function () {
+    $workflow = File::get(dirname(__DIR__, 2).'/.github/workflows/publish-image.yml');
+
+    expect($workflow)
+        ->toContain('runs-on: ubuntu-24.04-arm')
+        ->toContain('platforms: linux/arm64')
+        ->toContain('cache-from: type=gha')
+        ->toContain('cache-to: type=gha,mode=max')
+        ->not->toContain('docker/setup-qemu-action');
+});

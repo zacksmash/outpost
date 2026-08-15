@@ -106,6 +106,7 @@ class OutpostServiceProvider extends ServiceProvider
             Console\Commands\OpenCommand::class,
             Console\Commands\OutpostCommand::class,
             Console\Commands\PullCommand::class,
+            Console\Commands\ReloadCommand::class,
             Console\Commands\RemoveCommand::class,
             Console\Commands\ShellCommand::class,
             Console\Commands\StartCommand::class,

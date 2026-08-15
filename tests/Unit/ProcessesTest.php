@@ -24,6 +24,7 @@ it('allows no configured processes', function () {
 
 it('adds the octane and vite development processes', function () {
     config([
+        'octane.watch' => ['app', 'config/**/*.php', 'routes'],
         'outpost.processes' => [],
         'outpost.vite.port' => 5173,
         'outpost.vite.hot_file' => 'public/hot',
@@ -37,8 +38,10 @@ it('adds the octane and vite development processes', function () {
         url: 'http://billing-app.outpost',
     ))->toBe([
         'octane' => [
-            'env', 'CHOKIDAR_USEPOLLING=true', 'php8.5', 'artisan', 'octane:start',
-            '--server=swoole', '--host=127.0.0.1', '--port=8000', '--watch',
+            '/bin/bash', '/etc/outpost/octane-watch', 'php8.5',
+            '["/app/app","/app/config/**/*.php","/app/routes"]',
+            'php8.5', 'artisan', 'octane:start',
+            '--server=swoole', '--host=127.0.0.1', '--port=8000',
         ],
         'vite' => [
             '/usr/local/bin/outpost-vite',
@@ -52,16 +55,21 @@ it('adds the octane and vite development processes', function () {
     ]);
 });
 
-it('builds the command for each octane server', function (string $server, array $options) {
-    config(['outpost.processes' => []]);
+it('builds the polling watcher command for each octane server', function (string $server, array $options) {
+    config([
+        'octane.watch' => ['app', 'routes/**/*.php'],
+        'outpost.processes' => [],
+    ]);
 
     expect((new Processes(app('config')))->commands(
         php: '8.5',
         server: 'octane',
         octaneServer: $server,
     )['octane'])->toBe([
-        'env', 'CHOKIDAR_USEPOLLING=true', 'php8.5', 'artisan', 'octane:start',
-        "--server={$server}", '--host=127.0.0.1', '--port=8000', ...$options, '--watch',
+        '/bin/bash', '/etc/outpost/octane-watch', 'php8.5',
+        '["/app/app","/app/routes/**/*.php"]',
+        'php8.5', 'artisan', 'octane:start',
+        "--server={$server}", '--host=127.0.0.1', '--port=8000', ...$options,
     ]);
 })->with([
     'Swoole' => ['swoole', []],
@@ -80,12 +88,30 @@ it('refuses an unsupported managed octane server', function () {
 })->throws(RuntimeException::class, 'Octane server');
 
 it('rejects configured processes that collide with managed processes', function () {
-    config(['outpost.processes' => [
-        'octane' => ['@php', 'artisan', 'something-else'],
-    ]]);
+    config([
+        'octane.watch' => ['app'],
+        'outpost.processes' => [
+            'octane' => ['@php', 'artisan', 'something-else'],
+        ],
+    ]);
 
     (new Processes(app('config')))->commands('8.4', server: 'octane');
 })->throws(RuntimeException::class, 'reserved');
+
+it('rejects missing or unsafe octane watch paths', function (mixed $watch) {
+    config([
+        'octane.watch' => $watch,
+        'outpost.processes' => [],
+    ]);
+
+    (new Processes(app('config')))->commands('8.5', server: 'octane');
+})->with([
+    'missing paths' => [[]],
+    'not a list' => [['app' => true]],
+    'absolute path' => [['/Users/example/app']],
+    'traversal' => [['../secrets']],
+    'empty path' => [['']],
+])->throws(RuntimeException::class, 'octane.watch');
 
 it('validates the vite port and hot file', function (array $vite) {
     config([

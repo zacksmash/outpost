@@ -49,7 +49,7 @@ The first interactive `outpost` run invokes setup automatically when needed. One
 
 If the machine should keep another publication domain, set `OUTPOST_DOMAIN` before setup. Otherwise, an approved setup plan changes the shared domain to `outpost` and restarts Apple container. Non-interactive `outpost` creation never attempts this setup implicitly; run `php artisan outpost:install --force` first, adding `--https` only when trust-store changes are explicitly allowed.
 
-The doctor treats Apple `container` 1.2.x as verified. It reports older versions as blocking and newer unverified minors as warnings. It never changes host or runtime state and prints the command or file change for every failed check. Browsers and host CLI tools can each require Local Network permission. When host access fails, enable the calling application under System Settings > Privacy & Security > Local Network; an agent can verify the app from inside with `php artisan outpost:exec <name> -- curl --fail --silent --head localhost`.
+The doctor treats Apple `container` 1.2.x as verified. It reports older versions as blocking and newer unverified minors as warnings. It never changes host or runtime state and prints the command or file change for every failed check. Browsers and host CLI tools can each require Local Network permission. When host access fails, enable the calling application under System Settings > Privacy & Security > Local Network. An agent can verify an HTTP instance from inside with `php artisan outpost:exec <name> -- curl --fail --silent --show-error http://localhost`; for HTTPS use `--insecure https://localhost`. Plain HTTP redirects for HTTPS instances, and the published instance hostname does not resolve from inside its own container.
 
 ### 4. Create and manage instances
 
@@ -66,6 +66,7 @@ php artisan outpost:open billing           # starts the instance first when need
 php artisan outpost:open billing mailpit   # browser endpoints: app, mailpit, vite
 php artisan outpost:start billing
 php artisan outpost:stop billing
+php artisan outpost:reload billing          # force an immediate Octane worker reload
 php artisan outpost:shell billing
 php artisan outpost:exec billing -- php artisan test --filter=Feature
 php artisan outpost:exec billing --root -- apt-get update # explicit elevation only
@@ -83,6 +84,7 @@ php artisan outpost:remove billing --forget --force # local cleanup when Apple's
 - `outpost:info --json` is the stable machine-readable way for agents and scripts to discover instance and service endpoints
 - `outpost:list --json` is the stable machine-readable inventory; `outpost:exec <name> -- <command...>` passes argument tokens without a shell, streams output, preserves the inner exit code, and runs as the non-root application user. `outpost:shell` uses the same user. Both accept `--root` for explicit elevation.
 - `outpost:list` and `outpost:info` report a running instance whose provisioning failed as `degraded`; the manifest's `status` distinguishes `provisioning`, `ready`, and `failed`.
+- Octane instances poll the configured `octane.watch` paths and reload workers automatically after PHP changes. Use `outpost:reload <name>` when an immediate explicit reload is needed.
 - `outpost:remove` refuses a dirty worktree even with `--force`; use `--discard-changes` only when destroying those changes is intentional. `--force` skips confirmations and keeps the branch. Quick lifecycle calls stop after `lifecycle_timeout` seconds (30 by default); `--forget` deliberately removes only the local worktree and manifest when Apple's VM cannot be reached, leaving an orphaned container and printing its cleanup command.
 
 ### 5. Use an outpost safely as an agent
@@ -120,7 +122,7 @@ The worktree's Git file points into the primary repository's common Git director
 
 Services are detected from the app's own configuration (database driver, redis usage across cache/session/queue/broadcast, smtp mailer). When detection guesses wrong, set `services` in `config/outpost.php` (e.g. `['mysql', 'redis']`) to skip detection, then remove and recreate the instance. The manifest at `.outpost/<name>/outpost.json` records what was detected.
 
-Outpost uses Octane automatically when the app exposes Octane configuration; otherwise it uses PHP-FPM. `octane.server => auto` mirrors the app's `OCTANE_SERVER` and supports `swoole`, `roadrunner`, and `frankenphp`. Set `server` to `fpm` to force the traditional request lifecycle or `octane` to require Octane, and override `octane.server` only when an outpost should differ from the primary app. All three runtimes run behind nginx with websocket forwarding and live reload.
+Outpost uses Octane automatically when the app exposes Octane configuration; otherwise it uses PHP-FPM. `octane.server => auto` mirrors the app's `OCTANE_SERVER` and supports `swoole`, `roadrunner`, and `frankenphp`. Set `server` to `fpm` to force the traditional request lifecycle or `octane` to require Octane, and override `octane.server` only when an outpost should differ from the primary app. All three runtimes run behind nginx with websocket forwarding. Outpost polls the application-relative paths in `config('octane.watch')` and runs `octane:reload` when they change, avoiding unreliable bind-mount filesystem events. The watch list must be non-empty and may not escape the application. Use `php artisan outpost:reload <name>` for an explicit reload.
 
 The image provides Swoole and pinned RoadRunner and FrankenPHP executables. RoadRunner apps must lock `spiral/roadrunner-http:^3.3`; the separate CLI downloader package is not required by Outpost. FrankenPHP embeds PHP 8.5, so the app must permit that version. Outpost validates both conditions before creating a worktree and records the resolved runtime as `octane_server` in the manifest.
 
@@ -153,6 +155,7 @@ Read before executing:
 - A reviewer needs to try a GitHub pull request without disturbing their own branch: `php artisan outpost --pr=482 --name=pr-482 --open`, then `php artisan outpost:remove pr-482` when done.
 - An agent needs database coordinates without parsing terminal tables: `php artisan outpost:info billing --json`, then read `endpoints.mysql.url`, `endpoints.pgsql.url`, or `endpoints.redis.url` when present.
 - An agent needs to run a test without an interactive shell: `php artisan outpost:exec billing -- php artisan test --filter=Feature`, then use the command's unchanged exit code.
+- An agent changed PHP code in an Octane instance but suspects a stale response: wait for the polling watcher or run `php artisan outpost:reload billing`, then probe `http://localhost` inside an HTTP instance or `--insecure https://localhost` inside an HTTPS instance. `route:list` runs in a fresh CLI process and does not prove the long-running workers have reloaded. On authenticated routes, a redirect may occur before `SubstituteBindings`; authenticate the probe before using its status to judge route-model binding.
 - An agent has finished changing an outpost: inspect `git -C .outpost/<name>/app status --short`; only when authorized, commit from the host with `git -C .outpost/<name>/app ...` rather than through `outpost:exec`; stop the instance when work remains uncommitted, and remove it only after the worktree is clean. Outpost enforces this at removal time.
 - An app on SQLite needs no services: the instance boots with nginx and PHP-FPM only, and Outpost creates `database/database.sqlite` automatically.
 - A Redis queue needs a worker: add a `queue` process using `['@php', 'artisan', 'queue:work', '--sleep=1']`, recreate the instance, and inspect its output with `php artisan outpost:logs <name> --follow`.

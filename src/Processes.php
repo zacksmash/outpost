@@ -107,8 +107,10 @@ class Processes
             };
 
             $commands['octane'] = [
-                'env',
-                'CHOKIDAR_USEPOLLING=true',
+                '/bin/bash',
+                '/etc/outpost/octane-watch',
+                "php{$php}",
+                $this->octaneWatchPaths(),
                 "php{$php}",
                 'artisan',
                 'octane:start',
@@ -116,7 +118,6 @@ class Processes
                 '--host=127.0.0.1',
                 '--port=8000',
                 ...$serverOptions,
-                '--watch',
             ];
         }
 
@@ -125,6 +126,41 @@ class Processes
         }
 
         return $commands;
+    }
+
+    /**
+     * Resolve safe container paths for Outpost's polling Octane watcher.
+     */
+    protected function octaneWatchPaths(): string
+    {
+        $paths = $this->config->get('octane.watch');
+
+        if (! is_array($paths) || ! array_is_list($paths) || $paths === []) {
+            throw new RuntimeException(
+                'The [octane.watch] value must be a non-empty list of application-relative paths.',
+            );
+        }
+
+        $absolute = [];
+
+        foreach ($paths as $path) {
+            if (! is_string($path)
+                || $path === ''
+                || str_starts_with($path, '/')
+                || str_contains($path, '\\')
+                || str_contains($path, "\0")
+                || str_contains($path, "\n")
+                || str_contains($path, "\r")
+                || in_array('..', explode('/', $path), true)) {
+                throw new RuntimeException(
+                    'Every [octane.watch] entry must be a safe, non-empty path relative to the application.',
+                );
+            }
+
+            $absolute[] = '/app/'.$path;
+        }
+
+        return json_encode($absolute, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     }
 
     /**

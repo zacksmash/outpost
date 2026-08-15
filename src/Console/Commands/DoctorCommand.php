@@ -58,7 +58,7 @@ class DoctorCommand extends Command
             }
         }
 
-        note('Browsers and CLI tools can still require permission to reach container addresses. If direct host access fails, enable the calling app under System Settings > Privacy & Security > Local Network. Agents can verify from inside an instance with [php artisan outpost:exec <name> -- curl --fail --silent --head localhost].');
+        note('Browsers and CLI tools can still require permission to reach container addresses. If direct host access fails, enable the calling app under System Settings > Privacy & Security > Local Network. Agents can verify HTTP from inside with [php artisan outpost:exec <name> -- curl --fail --silent --show-error http://localhost]. For HTTPS, use [--insecure https://localhost]; the published hostname does not resolve inside its own container.');
 
         if ($failures !== []) {
             error(sprintf('Outpost found %d blocking issue%s.', count($failures), count($failures) === 1 ? '' : 's'));

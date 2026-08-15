@@ -16,7 +16,7 @@ class Runtime
     /**
      * The exact shared image shipped for this package contract.
      */
-    public const string PUBLISHED_IMAGE = 'ghcr.io/zacksmash/outpost:0.1.0';
+    public const string PUBLISHED_IMAGE = 'ghcr.io/zacksmash/outpost:0.1.1';
 
     /**
      * The OCI label used to advertise the image's runtime mount contract.

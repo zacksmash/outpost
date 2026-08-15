@@ -10,9 +10,7 @@
     <a href="https://packagist.org/packages/zacksmash/outpost"><img src="https://img.shields.io/packagist/dt/zacksmash/outpost.svg?style=flat-square" alt="Total Downloads"></a>
 </p>
 
-Outpost spins up any branch of your Laravel application as an isolated instance with its own container, its own services, and its own URL — powered by Apple's [`container`](https://github.com/apple/container) runtime.
-
-Think `git worktree add`, except the checkout also boots a working stack:
+Outpost turns any branch of a Laravel application into an isolated development instance powered by Apple's [`container`](https://github.com/apple/container) runtime.
 
 ```bash
 php artisan outpost feature/billing
@@ -20,92 +18,52 @@ php artisan outpost feature/billing
 # ⚡ The instance is ready: https://feature-billing-app.outpost
 ```
 
-Each instance runs in its own lightweight virtual machine with exactly the services your application needs — MySQL, PostgreSQL, Redis, Mailpit — provisioned, migrated, and reachable in your browser. Your real app, your real database, and your real machine are untouched. Review a pull request while your own branch keeps running. Hand an AI agent a sandbox where a destructive command can't reach anything that matters.
+Each instance has an editable Git worktree, its own VM, URL, database, and detected services. Use it to review a pull request, run another branch beside your current work, or give an agent a disposable sandbox without copying code in or out.
 
 ## Requirements
 
 - macOS 26 or newer on Apple silicon
-- Apple's `container` CLI 1.2.x — install the [signed package](https://github.com/apple/container/releases)
-- A Laravel application in a git repository with at least one commit
-- Optional trusted HTTPS: [`mkcert`](https://github.com/FiloSottile/mkcert) — `brew install mkcert`
+- Apple's `container` CLI 1.2.x from its [signed releases](https://github.com/apple/container/releases)
+- A Laravel application in a Git repository with at least one commit
+- Optional trusted HTTPS: [`mkcert`](https://github.com/FiloSottile/mkcert)
 
-## Installation
-
-Install Outpost as a development dependency:
+## Install
 
 ```bash
 composer require zacksmash/outpost --dev
 php artisan outpost
 ```
 
-That's the normal path. On the first run, Outpost inspects the Mac and presents one setup plan before changing anything. With a single confirmation it can:
+The first run presents one setup plan, then can start Apple container, configure the `.outpost` publication domain and DNS resolver, prepare trusted HTTPS, and pull the exact versioned image. macOS may ask for an administrator password when registering DNS or installing certificate trust.
 
-- start the Apple container service;
-- configure its machine-wide publication domain as `outpost` and restart it;
-- register the macOS `.outpost` resolver;
-- prepare trusted HTTPS when the primary application uses it and `mkcert` is installed; and
-- pull the exact shared base image.
-
-The resolver command and certificate trust store are protected by macOS, so the operating system may still ask for an administrator password. Outpost shows both operations in the plan first. It updates only Apple container's user-level configuration and Outpost's ignored `.outpost` state; it does not change application source files.
-
-After preparation, the original `outpost` command continues directly into branch and instance selection. Later projects reuse the machine-wide runtime, resolver, trust authority, and image; Outpost only fills in anything that is missing.
-
-## Setup and Customization
-
-Run setup explicitly when you want to prepare the machine before creating an instance:
+Prepare or inspect the machine explicitly with:
 
 ```bash
 php artisan outpost:install
+php artisan outpost:doctor    # read-only diagnostics
 ```
 
-The installer uses the same consolidated plan. `--force` skips its Laravel confirmation, while `--https` explicitly permits trust-store setup in a forced or non-interactive run. DNS registration must already exist in a non-interactive run; otherwise, perform setup once from an attached administrator terminal. Use `--local` to build a customized image instead of pulling the published one.
-
-The initial shared image tag is `ghcr.io/zacksmash/outpost:0.1.0`. The release workflow publishes it for ARM64 from the same package stubs when the matching GitHub release is published; until that first release, use the local build path. Exact tags keep an installation reproducible instead of silently changing underneath it. The image records its `/etc/outpost` runtime-path contract as an OCI label, and doctor rejects an older, unlabeled, or mismatched local image before creation with an `outpost:build --force` repair.
-
-You do not need to publish configuration for normal use. For different PHP versions, sandbox credentials, resources, or workflows, publish it and build the configured image locally. The first local build takes several minutes:
-
-```bash
-php artisan vendor:publish --tag="outpost-config"
-php artisan outpost:build --force
-
-# Or perform the complete guided setup while choosing a local build:
-php artisan outpost:install --local
-```
-
-`--local` belongs to `outpost:install`; `outpost:build` accepts `--force`. Local setup builds only when doctor finds the image missing or incompatible—it does not rebuild an already compatible image. A first local build does not require `--force`, but use it after package image or runtime-contract changes so an existing tag is actually replaced.
-
-Run the doctor at any point to inspect the host, live runtime, DNS publication and resolver state, base image, and application prerequisites without changing anything:
-
-```bash
-php artisan outpost:doctor
-```
-
-For trusted local HTTPS, install `mkcert`. With the default `https => auto`, Outpost mirrors the primary Laravel application's scheme. It first reads the root URL Laravel generates from the current application; when that still says HTTP, Outpost briefly checks the same hostname for a trusted HTTPS listener. That catches secured Herd and Valet sites even when `APP_URL` was not updated. The first `outpost` run includes authority setup in its plan when HTTPS is detected. It can also be prepared explicitly:
+For HTTPS, install `mkcert`; Outpost automatically mirrors the primary application's trusted HTTP or HTTPS scheme. Override detection with `OUTPOST_HTTPS=true` or `OUTPOST_HTTPS=false`.
 
 ```bash
 brew install mkcert
 php artisan outpost:certify
 ```
 
-`mkcert` may ask for your macOS password while installing its local certificate authority. Each secure instance then receives a certificate for its exact hostname—never a wildcard—under `.outpost/<name>/runtime/tls`, and that directory is mounted read-only. The application, Vite, and Mailpit use the same trusted hostname on their respective ports. If automatic detection needs an override, set `OUTPOST_HTTPS=true` to require HTTPS or `OUTPOST_HTTPS=false` to require HTTP. A detected HTTPS app falls back to HTTP until trusted Outpost HTTPS is prepared; changing the domain invalidates the setup marker automatically. Existing instances retain the scheme recorded in their manifest, so recreate one when its scheme should change.
+### Custom images
 
-Already publishing under another domain? Set `OUTPOST_DOMAIN` to match it before the first run. Otherwise, the approved setup plan changes Apple container's shared publication domain to `outpost` and restarts the runtime.
-
-Outpost has verified Apple's `container` 1.2.x line. Older versions fail the compatibility check; newer minors produce a warning rather than blocking you.
-
-## Creating an Instance
-
-The `outpost` command walks you through everything:
+The published configuration works without customization. To change installed PHP versions, sandbox credentials, or other image settings:
 
 ```bash
-php artisan outpost
+php artisan vendor:publish --tag="outpost-config"
+php artisan outpost:build --force
 ```
 
-You'll pick a branch (or type a new name to create one), confirm the instance's name, and Outpost handles the rest: it checks out the branch into a dedicated worktree, detects which services and web server the app needs, boots a container, writes the instance's `.env`, installs dependencies, prepares the front end, runs your migrations, and prints the URL.
+`outpost:install --local` builds instead of pulling when the configured image is missing or incompatible. It does not replace an existing compatible image; use `outpost:build --force` when a rebuild is intentional.
 
-In a non-interactive run, Outpost never attempts one-time privileged setup implicitly. Prepare the machine first with `php artisan outpost:install --force` (and `--https` when trust-store changes are explicitly allowed), then rerun the instance command.
+## Create an Instance
 
-Everything can be provided up front when you'd rather not be asked:
+Run `php artisan outpost` to choose a branch and instance name interactively, or provide everything up front:
 
 ```bash
 php artisan outpost feature/billing --name=billing --seed
@@ -113,164 +71,145 @@ php artisan outpost origin/review/invoices --name=invoices --open
 php artisan outpost --pr=482 --name=pr-482 --open
 ```
 
-Local branches, known remote branches, and new branch names all work in the same `branch` argument. When you choose a remote branch such as `origin/review/invoices`, Outpost fetches only that branch and creates a local tracking branch for the editable worktree. If the local branch already exists, Outpost preserves and uses it instead of resetting it.
-
-Removing an instance keeps its branch unless you accept the interactive branch-deletion prompt. To recreate the same instance name from a different base commit, remove the instance, delete or rename the retained branch explicitly, then create it again from the new reference. Outpost never resets an existing branch behind your back.
-
-For a GitHub pull request, `--pr=482` fetches GitHub's pull-request ref through `origin` into an editable `outpost/pr-482` branch. Use `--remote=upstream` when the pull request belongs to a different configured remote. An existing PR branch is preserved, so work committed inside a previous instance is never silently discarded.
+Outpost creates a worktree under `.outpost/<name>/app`, detects the application runtime and services, boots the VM, prepares `.env` from `.env.example`, installs dependencies, builds the front end, migrates the database, and waits for a real application response.
 
 | Option | Description |
 | --- | --- |
-| `branch` | Local branch, remote branch, or new local branch the instance should run. |
-| `--name` | The instance name. Defaults to the branch name, slugged. |
-| `--pr` | GitHub pull request number to fetch instead of a branch. |
+| `branch` | Existing local or remote branch, or a new local branch. |
+| `--name` | Instance name; defaults to the slugged branch name. |
+| `--pr` | GitHub pull request number to fetch into an editable branch. |
 | `--remote` | Git remote used with `--pr`; defaults to `origin`. |
-| `--open` | Open the URL in the default browser when creation finishes. |
-| `--seed` | Seed the database after migrating. |
-| `--mount-path-repos` | Mount composer path repositories without asking. |
+| `--open` | Open the application after creation. |
+| `--seed` | Seed after migrating. |
+| `--mount-path-repos` | Mount Composer path repositories without prompting. |
 
-### Service Detection
+Remote and pull-request refs become local editable branches. Existing local branches are preserved and never reset. Non-interactive creation does not perform privileged first-time setup; run `outpost:install --force` first, adding `--https` when certificate trust changes are allowed.
 
-Outpost inspects your application's own configuration — the same sources `php artisan about` reads — to decide what each instance runs. A SQLite app needs no services at all. A `DB_CONNECTION=mysql` app gets MySQL with a database and credentials already provisioned. Redis appears whenever your cache, session, queue, or broadcasting uses it, and Mailpit appears when your mailer is SMTP.
+## What Runs
 
-When detection guesses wrong, set `services` in `config/outpost.php` to skip detection entirely, then remove and recreate the instance. Each instance's manifest at `.outpost/<name>/outpost.json` records what was detected, so you can always see exactly what an instance is running and why.
+Outpost reads the application's configuration to select MySQL or PostgreSQL, Redis, Mailpit, PHP-FPM or Octane, and the front-end workflow. Override service detection with the `services` config key.
 
-Octane applications run automatically behind the same websocket-aware nginx reverse proxy used by every outpost. By default, `octane.server` mirrors the application's own `OCTANE_SERVER` setting and supports `swoole`, `roadrunner`, and `frankenphp`. Override it only when an outpost should use a different runtime:
+Detected services use standard ports on the instance's private IP, so instances do not compete for host ports:
+
+| Service | Port |
+| --- | ---: |
+| MySQL | `3306` |
+| PostgreSQL | `5432` |
+| Redis | `6379` |
+| Mailpit SMTP / UI | `1025` / `8025` |
+
+Run `outpost:info <name>` for URLs and credentials. Set `expose_services` to `false` to keep backing services on container loopback.
+
+### Octane
+
+Octane supports Swoole, RoadRunner, and FrankenPHP behind Outpost's nginx proxy. The default `octane.server` mirrors `OCTANE_SERVER`; use `server => fpm` to force PHP-FPM or configure a runtime explicitly:
 
 ```php
 'server' => 'octane',
-
-'octane' => [
-    'server' => 'frankenphp',
-],
+'octane' => ['server' => 'frankenphp'],
 ```
 
-The base image supplies Swoole plus pinned, checksum-verified RoadRunner and FrankenPHP binaries, so no runtime executable is downloaded while an instance starts. RoadRunner applications still need the PHP worker package in their lock file; install it with `composer require spiral/roadrunner-http:^3.3 --with-all-dependencies`. The pinned FrankenPHP binary embeds PHP 8.5, and Outpost reports an actionable error before creating anything when the application cannot run on that version. Every runtime gets live reload for the bind-mounted worktree and the selected runtime is recorded in the manifest and shown by `outpost:info`.
+Outpost polls the application's configured `octane.watch` paths so host edits reload workers across bind mounts. Force a reload with `php artisan outpost:reload <name>`. RoadRunner applications must require `spiral/roadrunner-http`; FrankenPHP requires the application to support its embedded PHP 8.5.
 
-Set `server` to `fpm` to use the traditional request lifecycle instead, or to `octane` to require Octane explicitly. HTTPS still terminates at Outpost's nginx proxy, so Octane listens only on container loopback regardless of the selected runtime.
+### Front end
 
-External Scout drivers are still reported as deferred. Horizon is reported as deferred unless you configure it as an application process. Outpost records every selected server, front-end mode, deferred capability, and supervised process in the manifest, so a Redis-backed queue never looks active when no worker is actually running.
+The default `frontend => build` installs dependencies and runs the application's build script once. A lock file uses `npm ci`; otherwise Outpost uses `npm install`. Set `frontend` to `vite` for a supervised polling Vite server with HMR, or `none` to skip Node entirely.
 
-### Service Access
+### Application processes
 
-Detected services are reachable from macOS on the instance hostname and their standard ports: MySQL `3306`, PostgreSQL `5432`, Redis `6379`, Mailpit SMTP `1025`, and the Mailpit UI `8025`. Each instance has its own private IP, so ten MySQL instances can all use `3306` without publishing or juggling host ports. MySQL, PostgreSQL, and Redis require the sandbox credentials from `config/outpost.php`; Mailpit and its SMTP listener contain disposable development mail.
-
-Use one command to get copyable URLs, credentials, state, runtime, and process details:
-
-```bash
-php artisan outpost:info billing
-php artisan outpost:info billing --json   # structured output for agents and scripts
-php artisan outpost:open billing mailpit
-```
-
-Set `expose_services` to `false` when an application should keep every backing service on container loopback. The application URL and an enabled Vite endpoint remain reachable because they are the instance's public development surface.
-
-### Front-end Workflow
-
-The default `frontend` mode is `build`: Outpost installs npm dependencies and runs the application's `build` script once during provisioning. Applications with `package-lock.json` use `npm ci` so a fresh worktree stays reproducible and the lock file remains untouched; applications without a lock file fall back to `npm install`. Set the mode to `vite` for a supervised Vite development server with HMR, or `none` to skip npm completely:
-
-```php
-'frontend' => 'vite',
-```
-
-Vite mode requires a `package.json` `dev` script. Outpost keeps Vite on container loopback, explicitly allows only the instance hostname, proxies its public `<scheme>://<instance>.outpost:5173` endpoint through nginx, writes that address to Laravel's hot file, enables polling for the macOS bind mount, and keeps the process alive with Supervisor. This gives HMR the same trusted scheme as the application and avoids mixed-content failures. Change `vite.port` or `vite.hot_file` when the application uses nonstandard values. The public Vite port lives on the instance's private IP, so it does not reserve a host port or collide with another instance.
-
-### Application Processes
-
-Queue workers, the scheduler, Horizon, and other long-running commands can run with the instance under Supervisor. Publish `config/outpost.php`, then define each command as a shell-free argument list:
+Run queue workers, the scheduler, Horizon, or other long-lived commands under Supervisor with shell-free argument lists:
 
 ```php
 'processes' => [
-    'queue' => ['@php', 'artisan', 'queue:work', '--sleep=1', '--tries=1'],
+    'queue' => ['@php', 'artisan', 'queue:work', '--sleep=1'],
     'scheduler' => ['@php', 'artisan', 'schedule:work'],
-    'horizon' => ['@php', 'artisan', 'horizon'],
 ],
 ```
 
-`@php` resolves to the PHP version Outpost selected from the application's Composer constraint. Processes run from `/app` as the application user, send output to `outpost:logs`, and do not start until dependencies, the environment, and migrations are ready. Supervisor restarts them after crashes and normal container restarts. Argument arrays are passed directly without a shell; use one item per argument and do not use shell operators. The names `octane` and `vite` are reserved whenever Outpost is managing those processes.
+`@php` resolves to the selected PHP version. Processes start after provisioning, restart with the instance, and write to `outpost:logs`.
 
-## Day-to-Day
+## Manage Instances
 
 ```bash
-php artisan outpost:list             # every instance, its state, and its URL
-php artisan outpost:list --json      # machine-readable inventory for agents and scripts
-php artisan outpost:info billing     # runtime details, URLs, DSNs, and credentials; --json available
-php artisan outpost:doctor           # diagnose host, runtime, DNS, image, and app readiness
-php artisan outpost:certify          # prepare or recheck trusted local HTTPS; --force repeats setup
-php artisan outpost:pull             # refresh the exact configured OCI image
-php artisan outpost:open billing     # start if needed, then open in the default browser
-php artisan outpost:open billing mailpit # open Mailpit; `vite` is also supported
-php artisan outpost:start billing    # start a stopped instance
-php artisan outpost:stop billing     # stop it; worktree and data survive
-php artisan outpost:shell billing    # open a shell inside the instance
-php artisan outpost:exec billing -- php artisan test --filter=Feature
-php artisan outpost:exec billing --root -- apt-get update # explicit elevation when genuinely needed
-php artisan outpost:logs billing     # show the service logs; --follow streams
-php artisan outpost:remove billing   # remove the container, worktree, and data
-php artisan outpost:remove billing --discard-changes # explicitly destroy uncommitted work
-php artisan outpost:remove billing --forget # discard local state when its VM is stuck
+php artisan outpost:list                         # inventory; --json available
+php artisan outpost:info billing                 # URLs and credentials; --json available
+php artisan outpost:open billing                 # start if needed, then open
+php artisan outpost:open billing mailpit         # endpoints: app, mailpit, vite
+php artisan outpost:start billing
+php artisan outpost:stop billing                 # preserves worktree and data
+php artisan outpost:reload billing               # reload Octane workers
+php artisan outpost:exec billing -- php artisan test
+php artisan outpost:shell billing
+php artisan outpost:logs billing --follow
+php artisan outpost:remove billing               # destroys the VM and its data
 ```
 
-If these checks pass but a browser or host CLI cannot reach the instance address, allow the calling application under **System Settings → Privacy & Security → Local Network**, quit it completely, and reopen it. macOS applies this permission per application. Agents can bypass host reachability for an application response check with `php artisan outpost:exec billing -- curl --fail --silent --head localhost`.
+`outpost:exec` passes every token after `--` directly to the command without a shell, streams output, and preserves its exit code. It and `outpost:shell` run as a host-ID-mapped non-root user; use `--root` only when elevation is required.
 
-Stopping an instance preserves its database — the data lives in the container's own writable layer and survives across `stop` and `start`. Removing an instance destroys all of it, which is rather the point. Removal refuses a dirty worktree even with `--force`; commit or preserve the work first, or pass `--discard-changes` to state the destructive intent explicitly. It then asks for confirmation and offers to delete the branch when safe; `--force` skips those questions and retains the branch. If Apple's per-container VM is stuck, lifecycle operations stop after `lifecycle_timeout` seconds instead of waiting indefinitely. `outpost:remove <name> --forget` is the explicit last resort: it removes the worktree and Outpost manifest without contacting the runtime, warns about the orphaned container, and prints the exact cleanup command to run after recovering Apple container.
+If macOS blocks direct browser or CLI access, allow the calling application under **System Settings → Privacy & Security → Local Network**, then restart it. An agent can probe from inside the instance:
 
-`outpost:exec` is the non-interactive path for scripts and agents. Everything after `--` is passed as an argument list directly to `container exec` from the instance's `/app` working directory; no shell interprets it, output streams normally, and the inner command's exit code is returned unchanged. Commands and provisioning run as a non-root `outpost` user mapped to the host user's numeric ID, so Composer plugins remain enabled and files written through `/app` have the right host ownership. Pass `--root` only for a command that genuinely needs elevation. `outpost:shell` follows the same user default and also supports explicit `--root`.
+```bash
+# HTTP
+php artisan outpost:exec billing -- curl --fail --silent --show-error http://localhost
 
-## How Instances Work
+# HTTPS
+php artisan outpost:exec billing -- curl --fail --silent --show-error --insecure https://localhost
+```
 
-Instances live under `.outpost/` in your project root (Outpost adds it to your `.gitignore`). Each instance keeps three things there: the git worktree at `app/`, generated nginx and supervisord configuration at `runtime/`, and its manifest at `outpost.json`.
+## Worktrees and Safety
 
-The worktree is bind-mounted into the container, so the instance's code is editable right on your Mac — changes appear instantly, no sync step. The repository's common Git directory is mounted read-only at its original absolute path, allowing tools such as `git diff` and `pint --dirty` to inspect worktree state without giving the instance write access to host refs. Git commits intentionally cannot update refs from inside the instance; when authorized, make them from the host with `git -C .outpost/<name>/app add ...` and `git -C .outpost/<name>/app commit ...`. The container gets its own IP address on Apple's container network and is reachable at `<scheme>://<name>-<app>.outpost`. No ports are published onto macOS; web and service endpoints use standard ports on that unique IP, so nothing collides with Herd, Sail, or another instance. Outpost allocates 4 CPUs and 2 GB of memory by default instead of inheriting Apple's smaller machine-wide memory default; tune `resources.cpus` and `resources.memory` for lighter or heavier applications.
+The worktree is mounted read-write at `/app`; edit it with normal host tools. Git metadata is mounted read-only so `git diff` and tools such as `pint --dirty` work inside the instance, but commits must be made from the host:
 
-The instance's `.env` is seeded from your `.env.example` — never from your real `.env`, so real credentials stay out of sandboxes — and pointed at the instance's own services with the sandbox credentials from `config/outpost.php`. The published image contains the documented default credentials and PHP versions. Changing either requires a local `outpost:build` before creating more instances.
+```bash
+git -C .outpost/billing/app status --short
+git -C .outpost/billing/app commit -am "Finish billing"
+```
 
-## Isolation and Its Limits
+Removal refuses a dirty worktree, even with `--force`. Preserve the work or use `--discard-changes` to explicitly destroy it. `--force` skips prompts and retains the branch. To recreate an instance from another base, remove it and then delete or rename the retained branch yourself.
 
-An instance is a real virtual machine boundary: a destructive command inside it can't touch unrelated host files. Three things deliberately cross that boundary, and all are visible:
+If an Apple container VM is stuck, `outpost:remove <name> --forget` removes only Outpost's local worktree and manifest, reports the orphaned container, and prints its later cleanup command.
 
-- **The worktree** is mounted read-write at `/app`. That's the product — you're meant to edit the code.
-- **Git metadata** is mounted read-only at its original absolute path so worktree-aware tools can inspect it without changing host refs.
-- **Composer path repositories** outside the worktree can't resolve inside the container, so Outpost offers to mount them **read-only**, lists every path first, and defaults to *no*. Relative repositories are resolved from the primary checkout and mounted where the same Composer URL resolves from `/app`; for example, `../outpost` is mounted at `/outpost`. An approved mount also creates an ignored host-side bridge under the instance directory, allowing Composer's relative vendor symlink to resolve both inside the container and from host tools such as Artisan, IDEs, Herd, and Boost. The container mount remains read-only, but a host symlink cannot enforce read-only access—do not edit an external package through `vendor/` or the bridge unless that source was explicitly assigned. Outpost keeps its own generated configuration under `/etc/outpost`, so these package paths cannot collide with runtime files. Non-interactive runs mount nothing unless you pass `--mount-path-repos` explicitly. Read-only bounds destruction inside the instance, not disclosure — that's why a human confirms.
+Composer path repositories outside the worktree are offered as read-only mounts and default to no. Approved relative repositories also receive an ignored host-side bridge so their Composer symlinks resolve in both the container and host tools. The bridge itself is a host symlink and cannot enforce read-only access, so do not edit the external package through it unless that source was explicitly assigned.
 
-Instances are development sandboxes, not production parity. The database accounts inside them are deliberately permissive, exactly like Sail's. Direct service access binds selected ports to the instance network and protects MySQL, PostgreSQL, and Redis with the documented sandbox credentials; disable `expose_services` when network-level separation from other local containers matters more than host database-tool access.
+An instance is a development sandbox, not production parity. Its database credentials are deliberately permissive, and enabled services are reachable from the local container network. Disable `expose_services` when network separation matters more than host database-tool access.
 
 ## Configuration
 
+Publish configuration with `php artisan vendor:publish --tag="outpost-config"`.
+
 | Key | Default | Description |
 | --- | --- | --- |
-| `domain` | `outpost` | The local domain instance URLs live on. |
-| `image` | `ghcr.io/zacksmash/outpost:0.1.0` | Exact OCI image reference used by instances. |
+| `domain` | `outpost` | Local publication domain. |
+| `image` | `ghcr.io/zacksmash/outpost:0.1.1` | Exact OCI image used by instances. |
 | `dns` | `1.1.1.1` | Nameserver injected into builds and instances. |
-| `path` | `.outpost` | Where instances live, relative to your project. |
-| `resources.cpus` | `4` | Virtual CPUs allocated to each instance. |
-| `resources.memory` | `2G` | Memory allocated to each instance; accepts runtime sizes such as `2048M` or `3G`. |
-| `php` | `['8.4', '8.5']` | PHP versions in the base image. |
-| `server` | `auto` | Use Octane when installed, otherwise PHP-FPM; accepts `auto`, `fpm`, or `octane`. |
-| `octane.server` | `auto` | Mirror `OCTANE_SERVER`, or select `swoole`, `roadrunner`, or `frankenphp`. |
-| `frontend` | `build` | Front-end workflow; accepts `build`, `vite`, or `none`. |
-| `vite.port` | `5173` | Public per-instance port for the nginx-proxied Vite development server. |
-| `vite.hot_file` | `public/hot` | Laravel Vite hot-file path, relative to the application. |
-| `https` | `auto` | Mirror the primary app's detected local scheme; `true` requires HTTPS and `false` requires HTTP. |
-| `tls.path` | `.outpost/tls` | Project-local HTTPS trust metadata; exact leaf certificates live in each instance's runtime directory. |
-| `services` | `null` | Set an array to skip service detection. |
-| `expose_services` | `true` | Make detected services reachable on the instance hostname and standard ports. |
-| `processes` | `[]` | Named, shell-free argument lists supervised with the instance. |
-| `database` | `outpost` / `outpost` / `password` | Sandbox database credentials. |
-| `lifecycle_timeout` | `30` | Seconds to wait for quick Apple container lifecycle operations before reporting a stuck VM with recovery guidance. |
-| `timeout` | `60` | Seconds to wait for an instance to answer HTTP. |
+| `path` | `.outpost` | Project-relative instance directory. |
+| `resources.cpus` | `4` | Virtual CPUs per instance. |
+| `resources.memory` | `2G` | Memory per instance. |
+| `php` | `['8.4', '8.5']` | PHP versions installed in the image. |
+| `server` | `auto` | `auto`, `fpm`, or `octane`. |
+| `octane.server` | `auto` | `swoole`, `roadrunner`, or `frankenphp`. |
+| `frontend` | `build` | `build`, `vite`, or `none`. |
+| `vite.port` | `5173` | Public Vite port on the instance IP. |
+| `vite.hot_file` | `public/hot` | Application-relative Laravel hot file. |
+| `https` | `auto` | Mirror the primary app; accepts `true` or `false`. |
+| `services` | `null` | Explicit service list; `null` enables detection. |
+| `expose_services` | `true` | Expose detected services on the instance IP. |
+| `processes` | `[]` | Named supervised argument lists. |
+| `database` | `outpost` / `outpost` / `password` | Sandbox credentials. |
+| `lifecycle_timeout` | `30` | Timeout for quick VM lifecycle operations. |
+| `timeout` | `60` | Timeout for the application readiness check. |
 
 ## Changelog
 
-Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed recently.
+See [CHANGELOG](CHANGELOG.md) for recent changes.
 
 ## Contributing
 
-Thank you for considering contributing to Outpost! Please review our [contributing guide](.github/CONTRIBUTING.md) to get started.
+See the [contributing guide](.github/CONTRIBUTING.md).
 
-## Security Vulnerabilities
+## Security
 
-Please review [our security policy](.github/SECURITY.md) on how to report security vulnerabilities.
+Report vulnerabilities through the [security policy](.github/SECURITY.md).
 
 ## Credits
 
