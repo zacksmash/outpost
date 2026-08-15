@@ -55,17 +55,21 @@ class PathRepositoryScan
      * resolves from the host worktree into this mirrored tree, keeping host
      * Artisan, IDE, Herd, and Boost usage functional without making the
      * external repository writable inside the instance.
+     *
+     * @param  list<string>|null  $mounts
      */
-    public function createHostBridges(string $instance): void
+    public function createHostBridges(string $instance, ?array $mounts = null): void
     {
-        $instance = rtrim($instance, '/');
-
-        if ($instance === '' || ! is_dir($instance) || is_link($instance)) {
-            throw new RuntimeException("Unable to create path repository links under [{$instance}].");
-        }
+        $instance = $this->validatedInstance($instance);
+        $selected = $mounts ?? $this->mounts();
 
         foreach ($this->paths as $index => $path) {
             $target = $this->targets[$index] ?? $path;
+
+            if (! in_array($path.':'.$target.':ro', $selected, true)) {
+                continue;
+            }
+
             $segments = $this->targetSegments($target);
             $source = realpath($path);
             $parent = $instance;
@@ -100,6 +104,45 @@ class PathRepositoryScan
                 throw new RuntimeException("Unable to link the host path repository [{$path}] at [{$bridge}].");
             }
         }
+    }
+
+    /**
+     * Find current mounts whose host bridge proves a legacy approval.
+     *
+     * Only mounts from this freshly validated scan can be returned.
+     *
+     * @return list<string>
+     */
+    public function bridgedMounts(string $instance): array
+    {
+        $instance = $this->validatedInstance($instance);
+        $approved = [];
+
+        foreach ($this->paths as $index => $path) {
+            $target = $this->targets[$index] ?? $path;
+            $bridge = $instance.'/'.implode('/', $this->targetSegments($target));
+            $source = realpath($path);
+
+            if ($source !== false && is_link($bridge) && realpath($bridge) === $source) {
+                $approved[] = $path.':'.$target.':ro';
+            }
+        }
+
+        return $approved;
+    }
+
+    /**
+     * Validate the host-owned instance root used for bridge links.
+     */
+    protected function validatedInstance(string $instance): string
+    {
+        $instance = rtrim($instance, '/');
+
+        if ($instance === '' || ! is_dir($instance) || is_link($instance)) {
+            throw new RuntimeException("Unable to create path repository links under [{$instance}].");
+        }
+
+        return $instance;
     }
 
     /**

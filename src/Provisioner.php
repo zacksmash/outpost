@@ -68,10 +68,10 @@ class Provisioner
      * and must not be regenerated here. Runtime-dependent dependencies and
      * built assets are refreshed against the replacement image.
      */
-    public function recover(Manifest $manifest, ?Closure $onStep = null): void
+    public function recover(Manifest $manifest, ?Closure $onStep = null, ?Manifest $previous = null): void
     {
         $this->step($onStep, 'Refreshing the environment configuration',
-            fn () => $this->prepareEnvironment($manifest));
+            fn () => $this->prepareEnvironment($manifest, $previous));
 
         $this->step($onStep, 'Installing composer dependencies',
             fn () => $this->php($manifest, ['/usr/local/bin/composer', 'install', '--no-interaction', '--prefer-dist']));
@@ -138,7 +138,7 @@ class Provisioner
     /**
      * Seed the instance's .env file and point it at the sandbox services.
      */
-    protected function prepareEnvironment(Manifest $manifest): void
+    protected function prepareEnvironment(Manifest $manifest, ?Manifest $previous = null): void
     {
         $worktree = $this->outposts->worktreePath($manifest->name);
 
@@ -154,7 +154,12 @@ class Provisioner
             }
         }
 
-        $this->writeEnvironment($worktree.'/.env', $this->environmentValues($manifest));
+        $values = $this->environmentValues($manifest);
+        $obsolete = $previous === null
+            ? []
+            : array_values(array_diff($this->managedEnvironmentKeys($previous), array_keys($values)));
+
+        $this->writeEnvironment($worktree.'/.env', $values, $obsolete);
 
         if ($manifest->database === 'sqlite') {
             File::ensureDirectoryExists($worktree.'/database');
@@ -225,6 +230,43 @@ class Provisioner
     }
 
     /**
+     * List the environment keys Outpost owns for an instance configuration.
+     *
+     * @return list<string>
+     */
+    protected function managedEnvironmentKeys(Manifest $manifest): array
+    {
+        $keys = ['APP_URL'];
+        $databaseService = match ($manifest->database) {
+            'mysql', 'mariadb' => 'mysql',
+            'pgsql' => 'pgsql',
+            default => null,
+        };
+
+        if ($databaseService !== null && $manifest->uses($databaseService)) {
+            $keys = [...$keys, 'DB_CONNECTION', 'DB_HOST', 'DB_PORT', 'DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD'];
+        }
+
+        if ($manifest->database === 'sqlite') {
+            $keys = [...$keys, 'DB_CONNECTION', 'DB_DATABASE'];
+        }
+
+        if ($manifest->uses('redis')) {
+            $keys = [...$keys, 'REDIS_HOST', 'REDIS_PORT'];
+
+            if ($manifest->exposeServices) {
+                $keys[] = 'REDIS_PASSWORD';
+            }
+        }
+
+        if ($manifest->uses('mailpit')) {
+            $keys = [...$keys, 'MAIL_MAILER', 'MAIL_HOST', 'MAIL_PORT'];
+        }
+
+        return $keys;
+    }
+
+    /**
      * Read a sandbox database credential, refusing unsafe characters.
      */
     protected function credential(string $key): string
@@ -244,10 +286,15 @@ class Provisioner
      * Write the given values into the environment file, replacing in place.
      *
      * @param  array<string, string>  $values
+     * @param  list<string>  $obsolete
      */
-    protected function writeEnvironment(string $path, array $values): void
+    protected function writeEnvironment(string $path, array $values, array $obsolete = []): void
     {
         $contents = rtrim(File::get($path));
+
+        foreach ($obsolete as $key) {
+            $contents = (string) preg_replace('/^'.preg_quote($key, '/').'=.*(?:\r\n|\n|\r)?/m', '', $contents);
+        }
 
         foreach ($values as $key => $value) {
             $contents = preg_match($pattern = "/^{$key}=.*/m", $contents) === 1

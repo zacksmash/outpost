@@ -247,6 +247,55 @@ it('recovers a surviving worktree without replacing its key and refreshes runtim
     ]);
 });
 
+it('removes environment values managed by services disabled during recovery', function () {
+    File::put($this->root.'/feature-x/app/.env', implode("\n", [
+        'APP_KEY=base64:existing',
+        'APP_URL=http://feature-x-app.outpost',
+        'DB_CONNECTION=mysql',
+        'DB_HOST=127.0.0.1',
+        'DB_PORT=3306',
+        'DB_DATABASE=outpost',
+        'DB_USERNAME=outpost',
+        'DB_PASSWORD=password',
+        'REDIS_HOST=127.0.0.1',
+        'REDIS_PORT=6379',
+        'REDIS_PASSWORD=password',
+        'MAIL_MAILER=smtp',
+        'MAIL_HOST=127.0.0.1',
+        'MAIL_PORT=1025',
+        'CUSTOM_VALUE=preserved',
+    ])."\n");
+
+    Process::fake();
+
+    $previous = fakeManifest(
+        name: 'feature-x',
+        database: 'mysql',
+        services: ['mysql', 'redis', 'mailpit'],
+        exposeServices: true,
+    );
+    $current = fakeManifest(
+        name: 'feature-x',
+        frontend: 'none',
+        database: null,
+        services: [],
+        url: 'https://feature-x-app.outpost',
+        exposeServices: false,
+    );
+
+    $this->provisioner->recover($current, previous: $previous);
+
+    $environment = File::get($this->root.'/feature-x/app/.env');
+
+    expect($environment)->toContain('APP_KEY=base64:existing')
+        ->and($environment)->toContain('APP_URL=https://feature-x-app.outpost')
+        ->and($environment)->toContain('CUSTOM_VALUE=preserved')
+        ->and($environment)->not->toContain('DB_CONNECTION=')
+        ->and($environment)->not->toContain('REDIS_HOST=')
+        ->and($environment)->not->toContain('REDIS_PASSWORD=')
+        ->and($environment)->not->toContain('MAIL_MAILER=');
+});
+
 it('installs npm dependencies and builds assets when the app has a build script', function () {
     Process::fake();
 

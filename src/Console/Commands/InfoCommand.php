@@ -67,6 +67,7 @@ class InfoCommand extends Command
                 'frontend' => $manifest->frontend,
                 'services' => $manifest->services,
                 'processes' => $manifest->processes,
+                'path_repository_mounts' => $manifest->pathRepositoryMounts,
                 'process_states' => $processStates,
                 'resources' => [
                     'cpus' => $manifest->cpus,
@@ -166,7 +167,7 @@ class InfoCommand extends Command
             ['Runtime', "PHP {$manifest->php} / PHP-FPM"],
             ['Frontend', $manifest->frontend],
             ['Services', $manifest->services === [] ? 'none' : implode(', ', $manifest->services)],
-            ['Processes', $manifest->processes === [] ? 'none' : implode(', ', $manifest->processes)],
+            ['App processes', $manifest->processes === [] ? 'none' : implode(', ', $manifest->processes)],
         ];
 
         if ($manifest->cpus !== null && $manifest->memory !== null) {

@@ -7,11 +7,13 @@ namespace Zacksmash\Outpost\Console\Commands;
 use Illuminate\Console\Command;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
+use Zacksmash\Outpost\Certificates;
 use Zacksmash\Outpost\Console\Concerns\RebuildsInstanceContainers;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Console\Concerns\ResolvesPathRepositoryMounts;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\DependencyCaches;
+use Zacksmash\Outpost\Detector;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Host;
@@ -28,6 +30,7 @@ use function Laravel\Prompts\error;
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
+use function Laravel\Prompts\spin;
 
 #[AsCommand(name: 'outpost:upgrade')]
 class UpgradeCommand extends Command
@@ -42,7 +45,8 @@ class UpgradeCommand extends Command
     protected $signature = 'outpost:upgrade
         {name? : The name of the instance}
         {--all : Upgrade all outdated or missing instances}
-        {--mount-path-repos : Mount discovered Composer path repositories without prompting}';
+        {--force : Rebuild from the current Outpost configuration even when the image is current}
+        {--mount-path-repos : Approve newly discovered Composer path repositories without prompting}';
 
     /**
      * The command description.
@@ -56,6 +60,8 @@ class UpgradeCommand extends Command
         Outposts $outposts,
         RuntimeDriver $runtime,
         Doctor $doctor,
+        Detector $detector,
+        Certificates $certificates,
         Git $git,
         Host $host,
         DependencyCaches $dependencyCaches,
@@ -81,9 +87,11 @@ class UpgradeCommand extends Command
         try {
             ['image' => $image, 'digest' => $digest] = $this->configuredImage($runtime, $doctor);
             $states = $runtime->states();
+            $force = (bool) $this->option('force');
             $targets = array_values(array_filter(
                 $manifests,
-                fn (Manifest $manifest): bool => ! isset($states[$manifest->container])
+                fn (Manifest $manifest): bool => $force
+                    || ! isset($states[$manifest->container])
                     || $manifest->imageOutdated($image, $digest) !== false,
             ));
 
@@ -97,6 +105,45 @@ class UpgradeCommand extends Command
 
             if ($this->hasUnsafeWorktree($targets, $outposts, $git)) {
                 return self::FAILURE;
+            }
+
+            $previousManifests = [];
+
+            foreach ($targets as $manifest) {
+                $previousManifests[$manifest->name] = $manifest;
+            }
+
+            if ($force) {
+                $detection = $detector->detect();
+                $secure = $certificates->enabled();
+                $domain = config()->string('outpost.domain');
+                $resources = $runtime->validatedResources(
+                    config('outpost.resources.cpus'),
+                    config('outpost.resources.memory'),
+                );
+
+                $targets = array_map(
+                    fn (Manifest $manifest): Manifest => $manifest->withConfiguration(
+                        $detection,
+                        ($secure ? 'https' : 'http')."://{$manifest->container}.{$domain}",
+                        config()->boolean('outpost.expose_services'),
+                        $resources['cpus'],
+                        $resources['memory'],
+                    ),
+                    $targets,
+                );
+
+                if ($secure) {
+                    foreach ($targets as $manifest) {
+                        spin(
+                            fn () => $certificates->createForHost(
+                                "{$manifest->container}.{$domain}",
+                                $outposts->runtimePath($manifest->name).'/tls',
+                            ),
+                            "Creating the HTTPS certificate for [{$manifest->name}]",
+                        );
+                    }
+                }
             }
 
             foreach ($targets as $manifest) {
@@ -117,6 +164,7 @@ class UpgradeCommand extends Command
                     $outposts->worktreePath($manifest->name),
                     $this->laravel->basePath(),
                     (bool) $this->option('mount-path-repos'),
+                    $manifest->pathRepositoryMounts,
                 );
             }
 
@@ -138,9 +186,12 @@ class UpgradeCommand extends Command
                     $digest,
                     $mounts[$manifest->name],
                     $state,
+                    $previousManifests[$manifest->name],
                 );
 
-                info(($state === null ? 'Recreated' : 'Upgraded')." [{$manifest->name}] to [{$image}].");
+                info($force
+                    ? "Rebuilt [{$manifest->name}] from the current Outpost configuration using [{$image}]."
+                    : ($state === null ? 'Recreated' : 'Upgraded')." [{$manifest->name}] to [{$image}].");
             }
         } catch (RuntimeException $e) {
             error($e->getMessage());
@@ -150,7 +201,7 @@ class UpgradeCommand extends Command
         }
 
         outro(sprintf(
-            'Finished upgrading %d instance%s.',
+            $force ? 'Finished rebuilding %d instance%s.' : 'Finished upgrading %d instance%s.',
             count($targets),
             count($targets) === 1 ? '' : 's',
         ));

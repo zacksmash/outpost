@@ -372,9 +372,17 @@ class Doctor
     {
         try {
             if (! $this->certificates->wantsHttps()) {
+                if ($this->certificates->exists()) {
+                    return DoctorCheck::warning(
+                        self::TLS_CHECK,
+                        'Trusted HTTPS is prepared but disabled; new instances use HTTP.',
+                        'Run: php artisan outpost:install --https --force',
+                    );
+                }
+
                 return DoctorCheck::pass(
                     self::TLS_CHECK,
-                    'HTTPS is disabled; new instances use HTTP.',
+                    'HTTPS is disabled; new instances use HTTP. Run [php artisan outpost:install --https] to enable it.',
                 );
             }
 

@@ -44,6 +44,7 @@ it('shows runtime details and service connection information', function () {
         ->and($output)->toContain('apple-container')
         ->and($output)->toContain('running')
         ->and($output)->toContain('PHP 8.4 / PHP-FPM')
+        ->and($output)->toContain('App processes')
         ->and($output)->toContain('4 CPU / 2G')
         ->and($output)->toContain(Runtime::PUBLISHED_IMAGE)
         ->and($output)->toContain('mysql://outpost:password@billing-app.outpost:3306/outpost')
@@ -51,7 +52,12 @@ it('shows runtime details and service connection information', function () {
 });
 
 it('provides structured json for agents and scripts', function () {
-    app(Outposts::class)->save(fakeManifest(name: 'billing', services: [], exposeServices: false));
+    app(Outposts::class)->save(fakeManifest(
+        name: 'billing',
+        services: [],
+        exposeServices: false,
+        pathRepositoryMounts: ['/Users/example/package:/package:ro'],
+    ));
 
     Process::fake([
         processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
@@ -74,6 +80,7 @@ it('provides structured json for agents and scripts', function () {
         ->and($output)->not->toHaveKeys(['server', 'octane_server'])
         ->and($output['process_states'])->toBe([])
         ->and($output['resources'])->toBe(['cpus' => 4, 'memory' => '2G'])
+        ->and($output['path_repository_mounts'])->toBe(['/Users/example/package:/package:ro'])
         ->and($output['endpoints']['application']['url'])->toBe('http://billing-app.outpost')
         ->and($output['expose_services'])->toBeFalse();
 });

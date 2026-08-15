@@ -34,7 +34,7 @@ return [
     |
     */
 
-    'image' => env('OUTPOST_IMAGE', 'ghcr.io/zacksmash/outpost:0.4.0'),
+    'image' => env('OUTPOST_IMAGE', 'ghcr.io/zacksmash/outpost:0.5.0'),
 
     /*
     |--------------------------------------------------------------------------
@@ -112,8 +112,9 @@ return [
     | Local HTTPS
     |--------------------------------------------------------------------------
     |
-    | HTTPS is explicit. Set OUTPOST_HTTPS=true and run outpost:certify to
-    | issue exact-host certificates for new instances. HTTP is the default.
+    | HTTPS is explicit. Run outpost:install --https to persist the preference
+    | and prepare exact-host certificates for new instances. HTTP is the
+    | default. You may also set OUTPOST_HTTPS=true and run outpost:certify.
     |
     */
 

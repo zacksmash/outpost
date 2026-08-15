@@ -39,6 +39,7 @@ function fakeManifest(
     ?string $image = Runtime::PUBLISHED_IMAGE,
     ?string $imageDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     string $runtime = Runtime::DRIVER,
+    array $pathRepositoryMounts = [],
 ): Manifest {
     return new Manifest(
         name: $name,
@@ -58,5 +59,6 @@ function fakeManifest(
         image: $image,
         imageDigest: $imageDigest,
         runtime: $runtime,
+        pathRepositoryMounts: $pathRepositoryMounts,
     );
 }

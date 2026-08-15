@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Zacksmash\Outpost\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Foundation\Application;
+use Illuminate\Support\Facades\File;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Certificates;
@@ -27,7 +29,7 @@ class InstallCommand extends Command
      */
     protected $signature = 'outpost:install
         {--force : Run setup without prompting for confirmation}
-        {--https : Prepare trusted local HTTPS}
+        {--https : Enable and prepare trusted local HTTPS}
         {--local : Build a missing or incompatible base image locally instead of pulling it}';
 
     /**
@@ -43,6 +45,7 @@ class InstallCommand extends Command
         Doctor $doctor,
         RuntimeDriver $runtime,
         RuntimeConfiguration $runtimeConfiguration,
+        Application $application,
     ): int {
         $checks = $doctor->inspect();
 
@@ -101,6 +104,11 @@ class InstallCommand extends Command
             }
 
             $refresh = false;
+
+            if ($this->option('https') && ! $certificates->wantsHttps()) {
+                $this->enableHttps($application);
+                $refresh = true;
+            }
 
             if (! $this->hasRuntimeBlocker($checks)
                 && $this->failed($checks, Doctor::DNS_RESOLVER_CHECK)) {
@@ -207,6 +215,10 @@ class InstallCommand extends Command
         $domain = config()->string('outpost.domain');
         $actions = [];
 
+        if ($this->option('https') && ! $certificates->wantsHttps()) {
+            $actions[] = 'Enable trusted local HTTPS for new instances';
+        }
+
         if ($this->failed($checks, Doctor::RUNTIME_CHECK)) {
             $actions[] = 'Start the Apple container system';
             $actions[] = "Finish [{$domain}] networking after it starts";
@@ -306,6 +318,44 @@ class InstallCommand extends Command
     protected function approveSetup(): bool
     {
         return (bool) $this->option('force') || confirm('Prepare Outpost now?', true);
+    }
+
+    /**
+     * Persist the explicit HTTPS preference for subsequent Artisan processes.
+     */
+    protected function enableHttps(Application $application): void
+    {
+        if ($application->configurationIsCached()) {
+            throw new RuntimeException(
+                'Unable to enable trusted HTTPS while configuration is cached. Run [php artisan config:clear], then rerun [php artisan outpost:install --https].',
+            );
+        }
+
+        $path = $application->environmentFilePath();
+
+        if (! File::isFile($path)) {
+            throw new RuntimeException(
+                'Unable to enable trusted HTTPS because [.env] does not exist. Create it from [.env.example], then rerun [php artisan outpost:install --https].',
+            );
+        }
+
+        if (! File::isWritable($path)) {
+            throw new RuntimeException(
+                'Unable to enable trusted HTTPS because [.env] is not writable. Make it writable, then rerun [php artisan outpost:install --https].',
+            );
+        }
+
+        $contents = rtrim(File::get($path), "\r\n");
+        $pattern = '/^(?:export\s+)?OUTPOST_HTTPS\s*=.*$/m';
+        $updated = preg_match($pattern, $contents) === 1
+            ? preg_replace($pattern, 'OUTPOST_HTTPS=true', $contents)
+            : ($contents === '' ? 'OUTPOST_HTTPS=true' : $contents."\nOUTPOST_HTTPS=true");
+
+        if (! is_string($updated) || File::put($path, $updated."\n") === false) {
+            throw new RuntimeException('Unable to write the trusted HTTPS preference to [.env].');
+        }
+
+        config()->set('outpost.https', true);
     }
 
     /**

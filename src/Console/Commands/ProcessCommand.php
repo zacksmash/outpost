@@ -69,7 +69,7 @@ class ProcessCommand extends Command
                     'processes' => [],
                 ]);
             } else {
-                info("The [{$manifest->name}] instance has no configured application processes.");
+                info("The [{$manifest->name}] instance has no configured application processes. Its web runtime is nginx + PHP-FPM.");
             }
 
             return self::SUCCESS;

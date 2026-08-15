@@ -1,6 +1,23 @@
 # Release Notes
 
-## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.4.0...HEAD)
+## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.0...HEAD)
+
+## [v0.5.0](https://github.com/zacksmash/outpost/commits/main/compare/v0.4.0...v0.5.0) - 2026-08-15
+
+### Added
+
+- Added `outpost:upgrade --force` to rebuild current-image containers from the latest HTTPS, PHP, resource, service, process, and frontend configuration while preserving the existing worktree and branch.
+
+### Fixed
+
+- `outpost:install --https` now persists `OUTPOST_HTTPS=true` in the host application's `.env` before preparing certificates, so the option actually enables HTTPS for new instances. Doctor warns when trusted HTTPS from an earlier installation is prepared but disabled and prints the exact enable command.
+- Forced configuration rebuilds reconcile Outpost-managed `.env` keys, removing stale database, Redis, or Mailpit values when those services or exposure settings are disabled.
+- Container upgrades and missing-container recovery now persist and reuse each instance's previously approved Composer path-repository mounts. Only newly discovered repositories require confirmation or `--mount-path-repos`; legacy instances recover prior approval from their safe host bridge.
+
+### Changed
+
+- Human-readable instance output now distinguishes the managed PHP-FPM web runtime from optional configured application processes.
+- Pinned the package and release image together at `ghcr.io/zacksmash/outpost:0.5.0`.
 
 ## [v0.4.0](https://github.com/zacksmash/outpost/commits/main/compare/v0.3.0...v0.4.0) - 2026-08-15
 

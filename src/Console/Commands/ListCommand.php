@@ -98,11 +98,11 @@ class ListCommand extends Command
         }
 
         table(
-            ['Name', 'Branch', 'PHP', 'Services', 'Processes', 'State', 'Image', 'Upgrade', 'URL'],
+            ['Name', 'Branch', 'Runtime', 'Services', 'App Processes', 'State', 'Image', 'Upgrade', 'URL'],
             array_map(fn (Manifest $manifest): array => [
                 $manifest->name,
                 $manifest->branch,
-                $manifest->php,
+                "PHP {$manifest->php} / FPM",
                 $manifest->services === [] ? '—' : implode(', ', $manifest->services),
                 $manifest->processes === [] ? '—' : implode(', ', $manifest->processes),
                 $instanceStates[$manifest->name],

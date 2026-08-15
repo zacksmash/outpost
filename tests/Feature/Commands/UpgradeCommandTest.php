@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
 use Zacksmash\Outpost\Outposts;
+use Zacksmash\Outpost\PathRepositories;
 use Zacksmash\Outpost\Runtime;
 
 beforeEach(function () {
@@ -147,10 +148,195 @@ it('refuses a dirty worktree before deleting its container', function () {
         processPattern('git', '-C', $this->worktree, 'status', '--short') => Process::result(" M app/Invoice.php\n?? notes.txt\n"),
     ]);
 
-    $this->artisan('outpost:upgrade', ['name' => 'feature-x'])
+    $this->artisan('outpost:upgrade', ['name' => 'feature-x', '--force' => true])
         ->expectsOutputToContain('uncommitted changes')
         ->expectsOutputToContain('M app/Invoice.php')
         ->expectsOutputToContain('notes.txt')
+        ->assertFailed();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => in_array($process->command[1] ?? null, ['stop', 'delete', 'run'], true));
+});
+
+it('reuses recorded path repository mounts during a forced rebuild without another flag', function () {
+    $package = $this->root.'/package-source';
+    $mount = "{$package}:{$package}:ro";
+
+    File::ensureDirectoryExists($package);
+    File::put($this->worktree.'/composer.json', json_encode([
+        'repositories' => [['type' => 'path', 'url' => $package]],
+    ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+    app(Outposts::class)->save(fakeManifest(
+        name: 'feature-x',
+        image: Runtime::PUBLISHED_IMAGE,
+        imageDigest: $this->currentDigest,
+        pathRepositoryMounts: [$mount],
+    ));
+    fakeUpgradeProcesses($this->root, $this->currentDigest);
+
+    $this->artisan('outpost:upgrade', ['name' => 'feature-x', '--force' => true])
+        ->expectsOutputToContain('Reusing 1 previously approved path repository mount')
+        ->assertSuccessful();
+
+    expect(app(Outposts::class)->find('feature-x')?->pathRepositoryMounts)->toBe([$mount]);
+
+    Process::assertRan(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'run'
+        && in_array($mount, $process->command, true));
+});
+
+it('recovers approved mounts from host bridges for legacy manifests', function () {
+    $package = $this->root.'/package-source';
+    $mount = "{$package}:{$package}:ro";
+
+    File::ensureDirectoryExists($package);
+    File::put($this->worktree.'/composer.json', json_encode([
+        'repositories' => [['type' => 'path', 'url' => $package]],
+    ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+    app(PathRepositories::class)
+        ->scan($this->worktree, $this->app->basePath())
+        ->createHostBridges(dirname($this->worktree));
+    app(Outposts::class)->save(fakeManifest(
+        name: 'feature-x',
+        image: Runtime::PUBLISHED_IMAGE,
+        imageDigest: $this->currentDigest,
+    ));
+    fakeUpgradeProcesses($this->root, $this->currentDigest);
+
+    $this->artisan('outpost:upgrade', ['name' => 'feature-x', '--force' => true])
+        ->assertSuccessful();
+
+    expect(app(Outposts::class)->find('feature-x')?->pathRepositoryMounts)->toBe([$mount]);
+    Process::assertRan(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'run'
+        && in_array($mount, $process->command, true));
+});
+
+it('keeps recorded mounts while requiring approval only for newly discovered repositories', function () {
+    $approvedPackage = $this->root.'/approved-package';
+    $newPackage = $this->root.'/new-package';
+    $approvedMount = "{$approvedPackage}:{$approvedPackage}:ro";
+    $newMount = "{$newPackage}:{$newPackage}:ro";
+
+    File::ensureDirectoryExists($approvedPackage);
+    File::ensureDirectoryExists($newPackage);
+    File::put($this->worktree.'/composer.json', json_encode([
+        'repositories' => [
+            ['type' => 'path', 'url' => $approvedPackage],
+            ['type' => 'path', 'url' => $newPackage],
+        ],
+    ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+    app(Outposts::class)->save(fakeManifest(
+        name: 'feature-x',
+        image: Runtime::PUBLISHED_IMAGE,
+        imageDigest: $this->currentDigest,
+        pathRepositoryMounts: [$approvedMount],
+    ));
+    fakeUpgradeProcesses($this->root, $this->currentDigest);
+
+    $this->artisan('outpost:upgrade', ['name' => 'feature-x', '--force' => true])
+        ->expectsConfirmation('Mount this newly discovered path repository read-only into the instance?', 'no')
+        ->expectsOutputToContain('Keeping 1 previously approved mount')
+        ->assertSuccessful();
+
+    expect(app(Outposts::class)->find('feature-x')?->pathRepositoryMounts)->toBe([$approvedMount]);
+    Process::assertRan(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'run'
+        && in_array($approvedMount, $process->command, true)
+        && ! in_array($newMount, $process->command, true));
+});
+
+it('force rebuilds a current image from the latest Outpost configuration', function () {
+    app(Outposts::class)->save(fakeManifest(
+        name: 'feature-x',
+        image: Runtime::PUBLISHED_IMAGE,
+        imageDigest: $this->currentDigest,
+    ));
+
+    File::put($this->worktree.'/.env', implode("\n", [
+        'APP_KEY=base64:existing',
+        'APP_URL=http://feature-x-app.outpost',
+        'DB_CONNECTION=mysql',
+        'DB_HOST=127.0.0.1',
+        'REDIS_PASSWORD=password',
+        'CUSTOM_VALUE=preserved',
+    ])."\n");
+
+    $tls = $this->root.'/tls';
+    File::ensureDirectoryExists($tls);
+    File::put($tls.'/domain', "outpost\n");
+    File::put($tls.'/trusted', "mkcert\n");
+    File::ensureDirectoryExists($this->runtime.'/tls');
+    File::put($this->runtime.'/tls/certificate.pem', 'certificate');
+    File::put($this->runtime.'/tls/key.pem', 'key');
+
+    config([
+        'database.default' => null,
+        'outpost.https' => true,
+        'outpost.tls.path' => $tls,
+        'outpost.php' => ['8.4'],
+        'outpost.frontend' => 'none',
+        'outpost.services' => ['redis', 'mailpit'],
+        'outpost.expose_services' => false,
+        'outpost.processes' => [
+            'queue' => ['@php', 'artisan', 'queue:work'],
+        ],
+        'outpost.resources.cpus' => 6,
+        'outpost.resources.memory' => '3G',
+    ]);
+
+    fakeUpgradeProcesses($this->root, $this->currentDigest, [
+        processPattern('mkcert', '-cert-file').' *' => Process::result('created'),
+    ]);
+
+    $this->artisan('outpost:upgrade', ['name' => 'feature-x', '--force' => true])
+        ->expectsOutputToContain('Rebuilt [feature-x] from the current Outpost configuration')
+        ->expectsOutputToContain('worktree and branch [feature/billing] are preserved')
+        ->assertSuccessful();
+
+    $manifest = app(Outposts::class)->find('feature-x');
+    $environment = File::get($this->worktree.'/.env');
+
+    expect($manifest?->url)->toBe('https://feature-x-app.outpost')
+        ->and($manifest?->services)->toBe(['redis', 'mailpit'])
+        ->and($manifest?->exposeServices)->toBeFalse()
+        ->and($manifest?->processes)->toBe(['queue'])
+        ->and($manifest?->frontend)->toBe('none')
+        ->and($manifest?->cpus)->toBe(6)
+        ->and($manifest?->memory)->toBe('3G')
+        ->and(File::get($this->runtime.'/nginx.conf'))->toContain('listen 443 ssl default_server;')
+        ->and(File::get($this->runtime.'/supervisord.conf'))->toContain('[program:outpost-queue]')
+        ->and(File::get($this->runtime.'/supervisord.conf'))->toContain('/usr/bin/redis-server')
+        ->and($environment)->toContain('APP_URL=https://feature-x-app.outpost')
+        ->and($environment)->toContain('CUSTOM_VALUE=preserved')
+        ->and($environment)->not->toContain('DB_CONNECTION=')
+        ->and($environment)->not->toContain('DB_HOST=')
+        ->and($environment)->not->toContain('REDIS_PASSWORD=');
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'mkcert',
+        '-cert-file', $this->runtime.'/tls/certificate.pem',
+        '-key-file', $this->runtime.'/tls/key.pem',
+        'feature-x-app.outpost',
+    ]);
+    Process::assertRan(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'run'
+        && in_array('6', $process->command, true)
+        && in_array('3G', $process->command, true));
+    Process::assertDidntRun(fn (PendingProcess $process) => in_array('npm', $process->command, true));
+});
+
+it('preflights trusted https before a forced rebuild deletes the container', function () {
+    app(Outposts::class)->save(fakeManifest(
+        name: 'feature-x',
+        image: Runtime::PUBLISHED_IMAGE,
+        imageDigest: $this->currentDigest,
+    ));
+
+    config([
+        'outpost.https' => true,
+        'outpost.tls.path' => $this->root.'/missing-tls',
+    ]);
+
+    fakeUpgradeProcesses($this->root, $this->currentDigest);
+
+    $this->artisan('outpost:upgrade', ['name' => 'feature-x', '--force' => true])
+        ->expectsOutputToContain('outpost:certify')
         ->assertFailed();
 
     Process::assertDidntRun(fn (PendingProcess $process) => in_array($process->command[1] ?? null, ['stop', 'delete', 'run'], true));

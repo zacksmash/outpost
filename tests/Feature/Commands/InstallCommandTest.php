@@ -32,7 +32,7 @@ it('finishes immediately when outpost is already ready', function () {
     $doctor->shouldReceive('inspect')->once()->andReturn([
         DoctorCheck::pass('Platform', 'macOS 27.0 on arm64'),
         DoctorCheck::pass('Runtime', 'The Apple container system is running.'),
-        DoctorCheck::pass('Base image', 'The [ghcr.io/zacksmash/outpost:0.4.0] image is available.'),
+        DoctorCheck::pass('Base image', 'The [ghcr.io/zacksmash/outpost:0.5.0] image is available.'),
     ]);
 
     app()->instance(Doctor::class, $doctor);
@@ -111,8 +111,8 @@ it('offers to pull a missing base image and verifies the result', function () {
     app()->instance(Doctor::class, $doctor);
 
     Process::fake([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.4.0') => Process::result('', 'not found', 1),
-        processPattern('container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.4.0') => Process::result('pulled'),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.5.0') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.5.0') => Process::result('pulled'),
     ]);
 
     $this->artisan('outpost:install')
@@ -133,7 +133,7 @@ it('builds the base image locally when requested', function () {
     app()->instance(Doctor::class, $doctor);
 
     Process::fake([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.4.0') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.5.0') => Process::result('', 'not found', 1),
         processPattern('container', 'build').' *' => Process::result('built'),
     ]);
 
@@ -250,7 +250,7 @@ it('uses one confirmation for networking https and the shared image', function (
     $runtime->shouldReceive('stopSystem')->once();
     $runtime->shouldReceive('startSystem')->once();
     $runtime->shouldReceive('registerDomain')->once()->with('outpost');
-    $runtime->shouldReceive('pull')->once()->with('ghcr.io/zacksmash/outpost:0.4.0', Mockery::type('callable'));
+    $runtime->shouldReceive('pull')->once()->with('ghcr.io/zacksmash/outpost:0.5.0', Mockery::type('callable'));
 
     $configuration = Mockery::mock(RuntimeConfiguration::class);
     $configuration->shouldReceive('setDomain')->once()->with('outpost');
@@ -322,6 +322,74 @@ it('offers to prepare trusted https when setup is missing', function () {
         ->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === ['mkcert', '-install']);
+});
+
+it('enables trusted https in the application environment when explicitly requested', function (string $environment, string $expected) {
+    app()->useEnvironmentPath($this->root);
+    File::ensureDirectoryExists($this->root);
+    File::put($this->root.'/.env', $environment);
+    File::ensureDirectoryExists($this->root.'/tls');
+    File::put($this->root.'/tls/domain', "outpost\n");
+    File::put($this->root.'/tls/trusted', "mkcert\n");
+
+    $doctor = Mockery::mock(Doctor::class);
+    $doctor->shouldReceive('inspect')->twice()->andReturn(
+        [DoctorCheck::warning(
+            Doctor::TLS_CHECK,
+            'Trusted HTTPS is prepared but disabled.',
+            'Run: php artisan outpost:install --https --force',
+        )],
+        [DoctorCheck::pass(Doctor::TLS_CHECK, 'Trusted HTTPS is ready.')],
+    );
+
+    app()->instance(Doctor::class, $doctor);
+
+    Process::fake();
+
+    $this->artisan('outpost:install', ['--force' => true, '--https' => true])
+        ->expectsOutputToContain('Enable trusted local HTTPS for new instances')
+        ->assertSuccessful();
+
+    expect(File::get($this->root.'/.env'))
+        ->toBe($expected)
+        ->and(config('outpost.https'))->toBeTrue();
+
+    Process::assertNothingRan();
+})->with([
+    'replace a disabled preference' => [
+        "APP_NAME=Outpost\nOUTPOST_HTTPS=false\n",
+        "APP_NAME=Outpost\nOUTPOST_HTTPS=true\n",
+    ],
+    'append a missing preference' => [
+        "APP_NAME=Outpost\n",
+        "APP_NAME=Outpost\nOUTPOST_HTTPS=true\n",
+    ],
+]);
+
+it('explains when trusted https cannot be enabled without an environment file', function () {
+    app()->useEnvironmentPath($this->root);
+    File::ensureDirectoryExists($this->root.'/tls');
+    File::put($this->root.'/tls/domain', "outpost\n");
+    File::put($this->root.'/tls/trusted', "mkcert\n");
+
+    $doctor = Mockery::mock(Doctor::class);
+    $doctor->shouldReceive('inspect')->once()->andReturn([
+        DoctorCheck::warning(
+            Doctor::TLS_CHECK,
+            'Trusted HTTPS is prepared but disabled.',
+            'Run: php artisan outpost:install --https --force',
+        ),
+    ]);
+
+    app()->instance(Doctor::class, $doctor);
+
+    Process::fake();
+
+    $this->artisan('outpost:install', ['--force' => true, '--https' => true])
+        ->expectsOutputToContain('because [.env] does not exist')
+        ->assertFailed();
+
+    Process::assertNothingRan();
 });
 
 it('refuses non-interactive setup without the explicit force option', function () {

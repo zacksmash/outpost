@@ -178,9 +178,12 @@ it('reports when an instance has no configured application processes', function 
     app(Outposts::class)->save(fakeManifest(name: 'billing', processes: []));
     Process::fake();
 
-    $this->artisan('outpost:process', ['name' => 'billing'])
-        ->expectsOutputToContain('has no configured application processes')
-        ->assertSuccessful();
+    $exit = Artisan::call('outpost:process', ['name' => 'billing']);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(0)
+        ->and($output)->toContain('has no configured application processes')
+        ->and($output)->toContain('web runtime is nginx + PHP-FPM');
 
     Process::assertNothingRan();
 });

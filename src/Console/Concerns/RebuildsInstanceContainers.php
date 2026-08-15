@@ -82,7 +82,7 @@ trait RebuildsInstanceContainers
         $dirty = false;
 
         foreach ($manifests as $manifest) {
-            $this->assertRebuildable($manifest, $outposts);
+            $this->assertWorktreeRebuildable($manifest, $outposts);
             $status = $git->worktreeStatus($outposts->worktreePath($manifest->name));
 
             if ($status === '') {
@@ -107,20 +107,29 @@ trait RebuildsInstanceContainers
      */
     protected function assertRebuildable(Manifest $manifest, Outposts $outposts): void
     {
-        $worktree = $outposts->worktreePath($manifest->name);
-        $runtimePath = $outposts->runtimePath($manifest->name);
+        $this->assertWorktreeRebuildable($manifest, $outposts);
 
-        if (! File::isDirectory($worktree) || ! File::exists($worktree.'/.env')) {
-            throw new RuntimeException(
-                "Unable to rebuild [{$manifest->name}] because its worktree or environment file is missing.",
-            );
-        }
+        $runtimePath = $outposts->runtimePath($manifest->name);
 
         if ($manifest->secure()
             && (! File::exists($runtimePath.'/tls/certificate.pem')
                 || ! File::exists($runtimePath.'/tls/key.pem'))) {
             throw new RuntimeException(
                 "Unable to rebuild [{$manifest->name}] because its HTTPS certificate files are missing.",
+            );
+        }
+    }
+
+    /**
+     * Validate the surviving source files before performing any maintenance.
+     */
+    protected function assertWorktreeRebuildable(Manifest $manifest, Outposts $outposts): void
+    {
+        $worktree = $outposts->worktreePath($manifest->name);
+
+        if (! File::isDirectory($worktree) || ! File::exists($worktree.'/.env')) {
+            throw new RuntimeException(
+                "Unable to rebuild [{$manifest->name}] because its worktree or environment file is missing.",
             );
         }
     }
@@ -145,8 +154,11 @@ trait RebuildsInstanceContainers
         string $digest,
         array $mounts,
         ?string $existingState,
+        ?Manifest $previousManifest = null,
     ): Manifest {
         $this->assertRebuildable($manifest, $outposts);
+
+        $previousManifest ??= $manifest;
 
         $worktree = $outposts->worktreePath($manifest->name);
         $runtimePath = $outposts->runtimePath($manifest->name);
@@ -157,7 +169,9 @@ trait RebuildsInstanceContainers
             $manifest->memory ?? config()->string('outpost.resources.memory'),
         );
         $commands = $processes->commands($manifest->php);
-        $rebuilt = $manifest->withProcesses(array_keys($commands));
+        $rebuilt = $manifest
+            ->withProcesses(array_keys($commands))
+            ->withPathRepositoryMounts($mounts);
         $nginxConfig = $nginx->generate($rebuilt);
         $supervisorConfig = $supervisord->generate($rebuilt, $commands);
         $manifest = $manifest->withStatus('provisioning');
@@ -219,6 +233,7 @@ trait RebuildsInstanceContainers
             $provisioner->recover(
                 $manifest,
                 onStep: fn (string $step) => info($step),
+                previous: $previousManifest,
             );
 
             if ($manifest->processes !== []) {

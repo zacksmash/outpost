@@ -19,6 +19,7 @@ class Manifest implements Arrayable
      *
      * @param  list<string>  $services
      * @param  list<string>  $processes
+     * @param  list<string>  $pathRepositoryMounts
      */
     public function __construct(
         public readonly string $name,
@@ -38,6 +39,7 @@ class Manifest implements Arrayable
         public readonly ?string $image = null,
         public readonly ?string $imageDigest = null,
         public readonly string $runtime = Runtime::DRIVER,
+        public readonly array $pathRepositoryMounts = [],
     ) {}
 
     /**
@@ -160,6 +162,9 @@ class Manifest implements Arrayable
             image: $image,
             imageDigest: $imageDigest,
             runtime: $runtime,
+            pathRepositoryMounts: array_key_exists('path_repository_mounts', $data)
+                ? static::stringList($data, 'path_repository_mounts')
+                : [],
         );
     }
 
@@ -205,6 +210,54 @@ class Manifest implements Arrayable
             status: $this->status,
             image: $this->image,
             imageDigest: $this->imageDigest,
+        );
+    }
+
+    /**
+     * Return a copy with the currently approved path repository mounts.
+     *
+     * @param  list<string>  $mounts
+     */
+    public function withPathRepositoryMounts(array $mounts): self
+    {
+        return $this->copy(
+            processes: $this->processes,
+            status: $this->status,
+            image: $this->image,
+            imageDigest: $this->imageDigest,
+            pathRepositoryMounts: $mounts,
+        );
+    }
+
+    /**
+     * Return a copy using the application's current Outpost configuration.
+     */
+    public function withConfiguration(
+        Detection $detection,
+        string $url,
+        bool $exposeServices,
+        int $cpus,
+        string $memory,
+    ): self {
+        return new self(
+            name: $this->name,
+            container: $this->container,
+            url: $url,
+            branch: $this->branch,
+            php: $detection->php,
+            frontend: $detection->frontend,
+            exposeServices: $exposeServices,
+            services: $detection->services,
+            processes: $this->processes,
+            database: $detection->database,
+            createdAt: $this->createdAt,
+            cpus: $cpus,
+            memory: $memory,
+            status: $this->status,
+            image: $this->image,
+            imageDigest: $this->imageDigest,
+            runtime: $this->runtime,
+            pathRepositoryMounts: $this->pathRepositoryMounts,
         );
     }
 
@@ -265,6 +318,7 @@ class Manifest implements Arrayable
             'status' => $this->status,
             'image' => $this->image,
             'image_digest' => $this->imageDigest,
+            'path_repository_mounts' => $this->pathRepositoryMounts,
         ];
     }
 
@@ -272,12 +326,14 @@ class Manifest implements Arrayable
      * Copy immutable instance metadata with updated lifecycle fields.
      *
      * @param  list<string>  $processes
+     * @param  list<string>|null  $pathRepositoryMounts
      */
     protected function copy(
         array $processes,
         string $status,
         ?string $image,
         ?string $imageDigest,
+        ?array $pathRepositoryMounts = null,
     ): self {
         return new self(
             name: $this->name,
@@ -297,6 +353,7 @@ class Manifest implements Arrayable
             image: $image,
             imageDigest: $imageDigest,
             runtime: $this->runtime,
+            pathRepositoryMounts: $pathRepositoryMounts ?? $this->pathRepositoryMounts,
         );
     }
 

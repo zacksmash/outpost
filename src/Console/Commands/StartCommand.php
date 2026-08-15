@@ -41,7 +41,7 @@ class StartCommand extends Command
      */
     protected $signature = 'outpost:start
         {name? : The name of the instance}
-        {--mount-path-repos : Mount discovered Composer path repositories without prompting}';
+        {--mount-path-repos : Approve newly discovered Composer path repositories without prompting}';
 
     /**
      * The command description.
@@ -94,6 +94,7 @@ class StartCommand extends Command
                     $outposts->worktreePath($manifest->name),
                     $this->laravel->basePath(),
                     (bool) $this->option('mount-path-repos'),
+                    $manifest->pathRepositoryMounts,
                 );
                 $manifest = $this->rebuildInstanceContainer(
                     $manifest,

@@ -220,7 +220,7 @@ class OutpostCommand extends Command
             $hooks->commands(LifecycleHooks::SETUP, $detection->php);
 
             info(sprintf(
-                'PHP %s (PHP-FPM) · Resources: %d CPU / %s · Frontend: %s · Services: %s · Processes: %s',
+                'PHP %s (PHP-FPM) · Resources: %d CPU / %s · Frontend: %s · Services: %s · App processes: %s',
                 $detection->php,
                 $resources['cpus'],
                 $resources['memory'],
@@ -271,6 +271,9 @@ class OutpostCommand extends Command
                 $this->laravel->basePath(),
                 (bool) $this->option('mount-path-repos'),
             );
+            $manifest = $manifest->withPathRepositoryMounts($mounts);
+            $outposts->save($manifest);
+            $saved = $manifest;
             $dependencyCacheMounts = $dependencyCaches->mounts();
             $gitDirectory = $git->commonDirectory();
 

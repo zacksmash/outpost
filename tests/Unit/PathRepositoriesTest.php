@@ -100,6 +100,37 @@ it('bridges container path repository targets so host tools can follow composer 
         ->and(readlink($instance.'/outpost'))->toBe($package);
 });
 
+it('creates host bridges only for the selected mounts', function () {
+    $instance = $this->root.'/instance';
+
+    File::ensureDirectoryExists($instance);
+    writeComposer($this->worktree, [
+        ['type' => 'path', 'url' => '../lib'],
+        ['type' => 'path', 'url' => '../other'],
+    ]);
+
+    $scan = $this->scanner->scan($this->worktree);
+    $scan->createHostBridges($instance, [$scan->mounts()[0]]);
+
+    expect(is_link($instance.'/lib'))->toBeTrue()
+        ->and(file_exists($instance.'/other'))->toBeFalse();
+});
+
+it('recognizes safe host bridges as approval evidence for legacy manifests', function () {
+    $instance = $this->root.'/instance';
+
+    File::ensureDirectoryExists($instance);
+    writeComposer($this->worktree, [
+        ['type' => 'path', 'url' => '../lib'],
+        ['type' => 'path', 'url' => '../other'],
+    ]);
+
+    $scan = $this->scanner->scan($this->worktree);
+    $scan->createHostBridges($instance, [$scan->mounts()[0]]);
+
+    expect($scan->bridgedMounts($instance))->toBe([$scan->mounts()[0]]);
+});
+
 it('mirrors nested absolute container targets without flattening their path', function () {
     $instance = $this->root.'/instance';
 

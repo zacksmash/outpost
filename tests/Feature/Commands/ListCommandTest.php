@@ -58,6 +58,9 @@ it('lists every instance with its live state', function () {
 
     expect($exit)->toBe(0)
         ->and($output)->toContain('feature-x')
+        ->and($output)->toContain('Runtime')
+        ->and($output)->toContain('PHP 8.4 / FPM')
+        ->and($output)->toContain('App Processes')
         ->and($output)->toContain('running')
         ->and($output)->toContain('missing')
         ->and($output)->toContain('http://feature-x-app.outpost')

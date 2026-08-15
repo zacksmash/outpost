@@ -55,13 +55,15 @@ php artisan outpost:doctor    # Read-only diagnostics; --json available
 
 ### HTTPS
 
-By default, instances are served over HTTP. If you would like trusted HTTPS, install `mkcert`, prepare the local certificate authority, and set `OUTPOST_HTTPS=true` in your environment:
+By default, instances are served over HTTP. To enable trusted HTTPS, install `mkcert` and let the installer persist `OUTPOST_HTTPS=true` in your application's `.env` while preparing the local certificate authority:
 
 ```shell
 brew install mkcert
 
-php artisan outpost:certify
+php artisan outpost:install --https
 ```
+
+The `--https` option enables HTTPS for future Artisan processes and prepares exact-host certificates for new instances. Run `outpost:certify` directly only when you need to recreate the trusted certificate setup without changing the preference.
 
 ### Custom Images
 
@@ -85,7 +87,13 @@ composer update zacksmash/outpost --with-all-dependencies
 php artisan outpost:upgrade --all
 ```
 
-Upgrading pulls and validates the configured image if it is missing, then replaces only outdated or missing containers. If you have published `config/outpost.php`, update its pinned `image` value or `OUTPOST_IMAGE` environment variable first. Every manifest records the image reference and digest used to create its container.
+Upgrading pulls and validates the configured image if it is missing, then replaces only outdated or missing containers. If you have published `config/outpost.php`, update its pinned `image` value or `OUTPOST_IMAGE` environment variable first. Every manifest records the image reference, digest, and approved Composer path-repository mounts used to create its container.
+
+When only Outpost configuration changed, force a rebuild without replacing the worktree:
+
+```shell
+php artisan outpost:upgrade billing --force
+```
 
 ## Creating Instances
 
@@ -184,7 +192,7 @@ php artisan outpost:process billing                    # --json available
 php artisan outpost:process billing queue --restart
 ```
 
-Only your configured application processes are controllable — Outpost keeps nginx, PHP-FPM, and backing services private. The `outpost:info --json` report includes a keyed `process_states` map alongside its `processes` name list: stopped containers report `unavailable`, incomplete provisioning reports `waiting`, and a failed live-state probe reports `unknown` for only the affected process. Table output never probes Supervisor.
+Every instance is served by Outpost-managed nginx and PHP-FPM. The **App Processes** column reports only the optional commands you configured above; Outpost keeps its web runtime and backing services private. The `outpost:info --json` report includes a keyed `process_states` map alongside its `processes` name list: stopped containers report `unavailable`, incomplete provisioning reports `waiting`, and a failed live-state probe reports `unknown` for only the affected process. Table output never probes Supervisor.
 
 ### Lifecycle Hooks
 
@@ -212,6 +220,7 @@ php artisan outpost:open billing posts            # App, Mailpit, or a configure
 php artisan outpost:start billing
 php artisan outpost:upgrade billing               # Replace only the container; preserves a clean worktree
 php artisan outpost:upgrade --all                 # Upgrade every outdated or missing instance
+php artisan outpost:upgrade billing --force       # Apply current config even when the image is current
 php artisan outpost:pull                          # Pull or refresh the shared base image
 php artisan outpost:stop billing                  # Preserves worktree and data
 php artisan outpost:exec billing -- php artisan test
@@ -244,7 +253,9 @@ A dirty worktree is a non-blocking warning, while a skipped "Configured checks" 
 
 ### Upgrading Instances
 
-The `outpost:upgrade` command pulls a missing configured image, verifies its runtime contract, and preflights every selected worktree before deleting any container. Dirty worktrees are always refused. The command keeps your source and branches, resets container-local databases and services, then refreshes Composer dependencies, front-end builds, migrations, and `setup` hooks. Rebuilt containers also pick up the repository's shared download caches. Add `--mount-path-repos` for non-interactive external repository mounts.
+The `outpost:upgrade` command pulls a missing configured image, verifies its runtime contract, and preflights every selected worktree before deleting any container. By default it replaces only outdated or missing containers. Add `--force` to rebuild a current container and re-read the current HTTPS, PHP, resources, services, service exposure, processes, and frontend settings. This is the maintenance path after changing `config/outpost.php` or its environment values.
+
+Dirty worktrees are always refused, including with `--force`; the flag forces a rebuild, not the destruction or mutation of uncommitted work. A rebuild keeps your source and branch, resets container-local databases and services, reconciles Outpost-managed `.env` values, then refreshes Composer dependencies, front-end builds, migrations, and `setup` hooks. Rebuilt containers also pick up the repository's shared download caches and automatically reuse path-repository mounts previously approved for that instance. Only newly discovered external repositories prompt for approval; add `--mount-path-repos` to approve those without prompting.
 
 ### Local Network Permission
 
@@ -274,7 +285,7 @@ If the manifest and worktree survive but Apple container no longer has the conta
 
 If an Apple container VM is stuck, `outpost:remove <name> --forget` removes only Outpost's local worktree and manifest, reports the orphaned container, and prints the command to clean it up later.
 
-Composer path repositories that live outside the worktree are offered as read-only mounts, defaulting to no. Approved relative repositories also receive an ignored, host-side bridge so their Composer symlinks resolve in both the container and your host tools. The bridge itself is a host symlink and cannot enforce read-only access — do not edit the external package through it unless that source was explicitly assigned.
+Composer path repositories that live outside the worktree are offered as read-only mounts, defaulting to no. Outpost records approved mounts in the instance manifest and reuses them for upgrades and missing-container recovery; a newly discovered repository still requires confirmation or `--mount-path-repos`. Approved relative repositories also receive an ignored, host-side bridge so their Composer symlinks resolve in both the container and your host tools. The bridge itself is a host symlink and cannot enforce read-only access — do not edit the external package through it unless that source was explicitly assigned.
 
 Finally, remember that an instance is a development sandbox, not production parity. Its database credentials are deliberately permissive, and enabled services are reachable from the local container network. Disable `expose_services` when network separation matters more than host database-tool access.
 
@@ -289,7 +300,7 @@ php artisan vendor:publish --tag="outpost-config"
 | Key | Default | Description |
 | --- | --- | --- |
 | `domain` | `outpost` | Local publication domain. |
-| `image` | `ghcr.io/zacksmash/outpost:0.4.0` | Exact OCI image used by instances. |
+| `image` | `ghcr.io/zacksmash/outpost:0.5.0` | Exact OCI image used by instances. |
 | `dns` | `1.1.1.1` | Nameserver injected into builds and instances. |
 | `path` | `.outpost` | Project-relative instance directory. |
 | `resources.cpus` | `4` | Virtual CPUs per instance. |

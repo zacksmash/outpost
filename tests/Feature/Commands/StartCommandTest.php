@@ -91,6 +91,10 @@ it('recreates a missing container without replacing the surviving worktree', fun
     File::put($runtime.'/nginx.conf', 'nginx');
     File::put($runtime.'/supervisord.conf', 'supervisor');
     File::put($runtime.'/octane-watch', 'legacy watcher');
+    app(Outposts::class)->save(fakeManifest(
+        'feature-x',
+        pathRepositoryMounts: [sys_get_temp_dir().':'.sys_get_temp_dir().':ro'],
+    ));
 
     Process::fake([
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
@@ -107,10 +111,7 @@ it('recreates a missing container without replacing the surviving worktree', fun
         processPattern('dscacheutil', '-flushcache') => Process::result(''),
     ]);
 
-    $this->artisan('outpost:start', [
-        'name' => 'feature-x',
-        '--mount-path-repos' => true,
-    ])
+    $this->artisan('outpost:start', ['name' => 'feature-x'])
         ->expectsOutputToContain('Recreated [feature-x]: http://feature-x-app.outpost')
         ->assertSuccessful();
 
@@ -119,7 +120,10 @@ it('recreates a missing container without replacing the surviving worktree', fun
         ->and(File::get($runtime.'/nginx.conf'))->toContain('fastcgi_pass unix:/run/php/php8.4-fpm.sock;')
         ->and(File::get($runtime.'/supervisord.conf'))->toContain('[program:php-fpm]')
         ->and(File::exists($runtime.'/octane-watch'))->toBeFalse()
-        ->and(is_link($this->root.'/feature-x'.sys_get_temp_dir()))->toBeTrue();
+        ->and(is_link($this->root.'/feature-x'.sys_get_temp_dir()))->toBeTrue()
+        ->and(app(Outposts::class)->find('feature-x')?->pathRepositoryMounts)->toBe([
+            sys_get_temp_dir().':'.sys_get_temp_dir().':ro',
+        ]);
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'run', '--detach', '--name', 'feature-x-app', '--dns', '1.1.1.1',

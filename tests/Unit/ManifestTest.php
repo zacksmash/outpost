@@ -62,6 +62,18 @@ it('loads old manifests without a processes field', function () {
     expect(Manifest::fromArray($data)->processes)->toBe([]);
 });
 
+it('records approved path repository mounts and defaults legacy manifests to none', function () {
+    $mount = '/Users/example/package:/package:ro';
+    $data = [...fakeManifest()->toArray(), 'path_repository_mounts' => [$mount]];
+
+    expect(Manifest::fromArray($data)->pathRepositoryMounts)->toBe([$mount])
+        ->and(Manifest::fromArray($data)->toArray()['path_repository_mounts'])->toBe([$mount]);
+
+    unset($data['path_repository_mounts']);
+
+    expect(Manifest::fromArray($data)->pathRepositoryMounts)->toBe([]);
+});
+
 it('normalizes legacy octane and vite manifests to the standard runtime', function () {
     $data = [
         ...fakeManifest()->toArray(),
@@ -105,12 +117,12 @@ it('detects image reference and digest upgrades while keeping legacy state unkno
     $current = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     $new = 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
-    expect(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.4.0', $current))->toBeFalse()
+    expect(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.5.0', $current))->toBeFalse()
         ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.2.2', $current))->toBeTrue()
-        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.4.0', $new))->toBeTrue()
-        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.4.0', null))->toBeNull()
+        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.5.0', $new))->toBeTrue()
+        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.5.0', null))->toBeNull()
         ->and(fakeManifest(image: null, imageDigest: null)
-            ->imageOutdated('ghcr.io/zacksmash/outpost:0.4.0', $current))->toBeNull();
+            ->imageOutdated('ghcr.io/zacksmash/outpost:0.5.0', $current))->toBeNull();
 });
 
 it('updates image identity without changing instance metadata', function () {
@@ -135,6 +147,19 @@ it('updates configured processes without changing instance metadata', function (
 
     expect($manifest->processes)->toBe(['queue'])
         ->and($manifest->name)->toBe('feature-billing');
+});
+
+it('preserves approved path repository mounts across immutable updates', function () {
+    $mount = '/Users/example/package:/package:ro';
+    $manifest = Manifest::fromArray([
+        ...fakeManifest()->toArray(),
+        'path_repository_mounts' => [$mount],
+    ]);
+
+    expect($manifest->withStatus('failed')->pathRepositoryMounts)->toBe([$mount])
+        ->and($manifest->withImage('outpost:next', 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')->pathRepositoryMounts)
+        ->toBe([$mount])
+        ->and($manifest->withProcesses(['queue'])->pathRepositoryMounts)->toBe([$mount]);
 });
 
 it('rejects invalid lifecycle metadata', function (string $key, mixed $value) {
@@ -176,6 +201,13 @@ it('rejects a non-boolean service exposure value', function () {
 it('rejects processes that are not a list of strings', function () {
     Manifest::fromArray([...fakeManifest()->toArray(), 'processes' => ['queue', 1]]);
 })->throws(InvalidArgumentException::class, 'The manifest [processes] value must only contain strings.');
+
+it('rejects path repository mounts that are not a list of strings', function (mixed $value) {
+    Manifest::fromArray([...fakeManifest()->toArray(), 'path_repository_mounts' => $value]);
+})->with([
+    'associative mounts' => [['package' => '/package:/package:ro']],
+    'non-string mount' => [['/package:/package:ro', 1]],
+])->throws(InvalidArgumentException::class, 'manifest [path_repository_mounts]');
 
 it('rejects unsupported frontend modes', function (mixed $value) {
     Manifest::fromArray([...fakeManifest()->toArray(), 'frontend' => $value]);

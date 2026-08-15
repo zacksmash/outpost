@@ -30,7 +30,7 @@ php artisan outpost:install        # optional explicit host setup
 
 The first interactive `php artisan outpost` offers required setup before creating an instance. Setup can start Apple container, configure its publication domain, register DNS, and pull the exact image. Use `outpost:install --local` to build a missing image locally; use `outpost:build --force` to intentionally replace an existing local image.
 
-HTTP is the default. For trusted HTTPS, set `OUTPOST_HTTPS=true`, install `mkcert`, and run `php artisan outpost:certify`. This installs the local authority and gives each new instance an exact-host certificate. Non-interactive setup requires the explicit `--force` option, and changing the trust store additionally requires the explicit `--https` option.
+HTTP is the default. For trusted HTTPS, install `mkcert` and run `php artisan outpost:install --https`; the installer persists `OUTPOST_HTTPS=true` in the host application's `.env`, installs the local authority, and gives each new instance an exact-host certificate. Add `--force` for non-interactive setup. Run `outpost:certify` directly only to recreate certificate state without changing the preference.
 
 Doctor is read-only. Apply its `FAIL` remedies before creation. Browsers and host CLI tools may separately need macOS Local Network permission. When host access fails, probe inside the instance:
 
@@ -68,7 +68,7 @@ php artisan outpost:remove billing
 - `outpost:exec` passes tokens without a shell, streams output, preserves the inner exit code, and runs as the host-ID-mapped non-root user. Use `--root` only for intentional elevation.
 - `outpost:doctor`, `outpost:list`, `outpost:info`, `outpost:process`, and `outpost:verify` expose stable `--json` reports. Instance-specific JSON commands require an explicit name and never prompt. Pre-report failures return a top-level `error` and an unsuccessful exit code. Missing containers and failed provisioning report degraded state.
 - Repository-configured `outpost.previews` entries resolve same-origin review paths and optional notes for every instance. Open one with `outpost:open <name> <preview>` or read it from `endpoints.<preview>` in info JSON. Invalid custom entries are omitted from discovery; requesting one explicitly reports its configuration error.
-- `outpost:process <name> --json` reports configured application process state. Add a process name and `--restart` to restart only that supervised process after long-lived PHP code changes. `outpost:info --json` also exposes the keyed `process_states` map; `unavailable` means the container is stopped or missing, `waiting` means provisioning is incomplete, and `unknown` isolates a failed live-state probe. Table info does not probe Supervisor.
+- Outpost serves every instance through its private nginx and PHP-FPM runtime. The **App Processes** column and `outpost:process <name> --json` report only user-configured supervised commands. Add a process name and `--restart` to restart one after long-lived PHP code changes. `outpost:info --json` also exposes the keyed `process_states` map; `unavailable` means the container is stopped or missing, `waiting` means provisioning is incomplete, and `unknown` isolates a failed live-state probe. Table info does not probe Supervisor.
 - `outpost:verify --json` is the stable handoff report. It runs host-owned `verify` hooks, checks runtime, container, image, final Git state, a fresh production asset build when `package.json` defines a `build` script, configured project checks, and the application response. API-only apps skip asset building. Dirty worktrees warn without failing; a skipped `Configured checks` row means no project-specific test or lint command ran.
 - `outpost:remove` refuses dirty worktrees even with `--force` before running `teardown` hooks. Successful hook file writes do not cause a second refusal. `--discard-changes` explicitly destroys uncommitted work. Teardown runs only for ready, running instances; `--forget` bypasses hook parsing and execution and reports the orphaned container.
 
@@ -78,11 +78,12 @@ php artisan outpost:remove billing
 composer update zacksmash/outpost --with-all-dependencies
 php artisan outpost:pull            # refresh the shared base image when needed
 php artisan outpost:upgrade --all
+php artisan outpost:upgrade <name> --force  # apply config changes to a current image
 ```
 
-Manifests record the runtime driver, container image reference, and digest. List and info JSON expose `runtime`, `image`, `image_digest`, `configured_image`, `configured_image_digest`, and tri-state `outdated`. The only supported runtime value is `apple-container`.
+Manifests record the runtime driver, container image reference, digest, and approved Composer path-repository mounts. List and info JSON expose `runtime`, `image`, `image_digest`, `path_repository_mounts`, `configured_image`, `configured_image_digest`, and tri-state `outdated`. The only supported runtime value is `apple-container`.
 
-`outpost:upgrade <name>` and `--all` pull a missing configured image, verify its contract, preflight every selected worktree, and replace only outdated or missing containers. Dirty worktrees are refused. Source and branches survive; container-local databases and service data reset; Composer, front-end builds, migrations, and `setup` hooks run again. Use `--mount-path-repos` in non-interactive runs that require reviewed external repositories.
+`outpost:upgrade <name>` and `--all` pull a missing configured image, verify its contract, preflight every selected worktree, and replace only outdated or missing containers. Add `--force` after HTTPS, PHP, resources, services, service exposure, processes, or frontend configuration changes; it rebuilds current-image containers and records the current settings. Dirty worktrees are still refused because recovery writes `.env` and runs dependency scripts, builds, and hooks. Source and branches survive; container-local databases and service data reset; Outpost-managed environment values are reconciled; Composer, front-end builds, migrations, and `setup` hooks run again. Previously approved path-repository mounts are reused automatically. Only newly discovered external repositories prompt; use `--mount-path-repos` to approve those without interaction.
 
 When runtime state is `missing` but the manifest and worktree survive, `outpost:start <name>` recreates the container automatically through the same path, refusing dirty worktrees exactly like `outpost:upgrade`. It preserves `.env` and `APP_KEY`. Lost container-local MySQL, PostgreSQL, Redis, and Mailpit data cannot be recovered; SQLite inside the worktree survives.
 
@@ -149,7 +150,7 @@ Hook failure preserves the instance and fails the lifecycle operation. Teardown 
 
 Important config values are `domain`, `image`, `dns`, `path`, `resources`, `php`, `frontend`, `https`, `tls.path`, `services`, `expose_services`, `previews`, `processes`, `checks`, `hooks`, `database`, `lifecycle_timeout`, and `timeout`. Image-level changes require `outpost:build --force` and instance upgrades.
 
-Composer path repositories outside the worktree are offered as default-no read-only mounts. Approved relative repositories receive an ignored host bridge so Composer vendor links work for host tools. Do not edit through that bridge unless the external repository is explicitly in scope.
+Composer path repositories outside the worktree are offered as default-no read-only mounts. Approved mounts are recorded per instance and reused during upgrades and recovery; newly discovered repositories still require explicit approval. Approved relative repositories receive an ignored host bridge so Composer vendor links work for host tools. Do not edit through that bridge unless the external repository is explicitly in scope.
 
 ## References
 
@@ -164,6 +165,7 @@ Composer path repositories outside the worktree are offered as default-no read-o
 - Restart a stale queue worker: `php artisan outpost:process <name> queue --restart`, then confirm its reported state is `running`.
 - Recover a missing container: inspect worktree status, then run `php artisan outpost:start <name>`.
 - Upgrade an outdated instance: inspect worktree status, then run `php artisan outpost:upgrade <name>`.
+- Apply changed Outpost configuration: inspect worktree status, then run `php artisan outpost:upgrade <name> --force`.
 - Verify an agent handoff: run `php artisan outpost:verify <name> --json`, inspect every `FAIL`, and do not claim project tests ran when `Configured checks` is `SKIP`.
 - Recreate from another base: remove the instance, then explicitly delete or rename the retained branch before creating it from the new reference.
 
