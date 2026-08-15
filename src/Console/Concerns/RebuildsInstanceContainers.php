@@ -7,6 +7,7 @@ namespace Zacksmash\Outpost\Console\Concerns;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
+use Zacksmash\Outpost\DatabaseServices;
 use Zacksmash\Outpost\DependencyCaches;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Git;
@@ -159,6 +160,12 @@ trait RebuildsInstanceContainers
         $this->assertRebuildable($manifest, $outposts);
 
         $previousManifest ??= $manifest;
+
+        $database = DatabaseServices::reconcile($manifest->database, $manifest->services);
+
+        if ($database !== null && $database !== $manifest->database) {
+            $manifest = $manifest->withDatabase($database);
+        }
 
         $worktree = $outposts->worktreePath($manifest->name);
         $runtimePath = $outposts->runtimePath($manifest->name);

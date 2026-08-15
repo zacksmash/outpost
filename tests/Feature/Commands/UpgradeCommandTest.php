@@ -112,6 +112,37 @@ it('upgrades only the container while preserving and reprovisioning the worktree
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('key:generate', $process->command, true));
 });
 
+it('rebuilds a current legacy sqlite instance around its single managed database', function () {
+    app(Outposts::class)->save(fakeManifest(
+        name: 'feature-x',
+        database: 'sqlite',
+        services: ['mysql', 'redis', 'mailpit'],
+        image: Runtime::PUBLISHED_IMAGE,
+        imageDigest: $this->currentDigest,
+    ));
+
+    File::put($this->worktree.'/.env', implode("\n", [
+        'APP_KEY=base64:existing',
+        'DB_CONNECTION=sqlite',
+        'DB_DATABASE=/app/database/database.sqlite',
+    ])."\n");
+
+    fakeUpgradeProcesses($this->root, $this->currentDigest);
+
+    $this->artisan('outpost:upgrade', ['name' => 'feature-x'])
+        ->assertSuccessful();
+
+    $manifest = app(Outposts::class)->find('feature-x');
+    $environment = File::get($this->worktree.'/.env');
+
+    expect($manifest?->database)->toBe('mysql')
+        ->and($manifest?->services)->toBe(['mysql', 'redis', 'mailpit'])
+        ->and($environment)->toContain('DB_CONNECTION=mysql')
+        ->and($environment)->toContain('DB_HOST=127.0.0.1')
+        ->and($environment)->toContain('DB_DATABASE=outpost')
+        ->and($environment)->not->toContain('/app/database/database.sqlite');
+});
+
 it('reruns repository-owned setup hooks after rebuilding a container', function () {
     config(['outpost.hooks.setup' => [
         'search' => ['@php', 'artisan', 'scout:sync-index-settings'],

@@ -1,6 +1,17 @@
 # Release Notes
 
-## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.1...HEAD)
+## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.2...HEAD)
+
+## [v0.5.2](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.1...v0.5.2) - 2026-08-15
+
+### Fixed
+
+- Normal upgrades and missing-container recovery now migrate legacy instances whose single managed MySQL or PostgreSQL service was provisioned beside an unrelated application database. `outpost:upgrade` detects and rebuilds this mismatch even when the instance already uses the configured image.
+- Doctor now warns when `outpost.image` or `OUTPOST_IMAGE` pins a different official release image than the installed package ships, while continuing to accept intentional compatible custom images.
+
+### Changed
+
+- Pinned the package and release image together at `ghcr.io/zacksmash/outpost:0.5.2`.
 
 ## [v0.5.1](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.0...v0.5.1) - 2026-08-15
 

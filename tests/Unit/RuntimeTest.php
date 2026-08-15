@@ -152,10 +152,10 @@ it('falls back to the apple image id when descriptor metadata is absent', functi
 it('pulls an image from an oci registry', function () {
     Process::fake();
 
-    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.5.1');
+    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.5.2');
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.5.1',
+        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.5.2',
     ]);
 });
 
@@ -164,8 +164,8 @@ it('surfaces the real error when an image pull fails', function () {
         processPattern('container', 'image', 'pull').' *' => Process::result('', 'denied', 1),
     ]);
 
-    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.5.1');
-})->throws(RuntimeException::class, 'Unable to pull the [ghcr.io/zacksmash/outpost:0.5.1] image: denied');
+    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.5.2');
+})->throws(RuntimeException::class, 'Unable to pull the [ghcr.io/zacksmash/outpost:0.5.2] image: denied');
 
 it('builds an image with dns, tag, and build arguments', function () {
     Process::fake();

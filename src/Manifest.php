@@ -230,6 +230,20 @@ class Manifest implements Arrayable
     }
 
     /**
+     * Return a copy using the managed database selected for a rebuild.
+     */
+    public function withDatabase(string $database): self
+    {
+        return $this->copy(
+            processes: $this->processes,
+            status: $this->status,
+            image: $this->image,
+            imageDigest: $this->imageDigest,
+            database: $database,
+        );
+    }
+
+    /**
      * Return a copy using the application's current Outpost configuration.
      */
     public function withConfiguration(
@@ -334,6 +348,7 @@ class Manifest implements Arrayable
         ?string $image,
         ?string $imageDigest,
         ?array $pathRepositoryMounts = null,
+        ?string $database = null,
     ): self {
         return new self(
             name: $this->name,
@@ -345,7 +360,7 @@ class Manifest implements Arrayable
             exposeServices: $this->exposeServices,
             services: $this->services,
             processes: $processes,
-            database: $this->database,
+            database: $database ?? $this->database,
             createdAt: $this->createdAt,
             cpus: $this->cpus,
             memory: $this->memory,

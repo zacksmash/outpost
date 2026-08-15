@@ -12,6 +12,7 @@ use Zacksmash\Outpost\Console\Concerns\RebuildsInstanceContainers;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Console\Concerns\ResolvesPathRepositoryMounts;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
+use Zacksmash\Outpost\DatabaseServices;
 use Zacksmash\Outpost\DependencyCaches;
 use Zacksmash\Outpost\Detector;
 use Zacksmash\Outpost\Doctor;
@@ -92,7 +93,8 @@ class UpgradeCommand extends Command
                 $manifests,
                 fn (Manifest $manifest): bool => $force
                     || ! isset($states[$manifest->container])
-                    || $manifest->imageOutdated($image, $digest) !== false,
+                    || $manifest->imageOutdated($image, $digest) !== false
+                    || DatabaseServices::reconcile($manifest->database, $manifest->services) !== $manifest->database,
             ));
 
             if ($targets === []) {

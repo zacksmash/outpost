@@ -31,7 +31,9 @@ class Detector
 
         return new Detection(
             services: $services,
-            database: $this->databaseForServices($database, $services),
+            database: is_array($this->config->get('outpost.services'))
+                ? DatabaseServices::reconcile($database, $services)
+                : $database,
             php: $this->php(),
             frontend: $this->frontend(),
         );
@@ -68,12 +70,8 @@ class Detector
 
         $services = [];
 
-        if (in_array($database, ['mysql', 'mariadb'], true)) {
-            $services[] = 'mysql';
-        }
-
-        if ($database === 'pgsql') {
-            $services[] = 'pgsql';
+        if (($databaseService = DatabaseServices::forConnection($database)) !== null) {
+            $services[] = $databaseService;
         }
 
         if ($this->usesRedis()) {
@@ -85,32 +83,6 @@ class Detector
         }
 
         return $services;
-    }
-
-    /**
-     * Honor an unambiguous database choice in an explicit service list.
-     *
-     * @param  list<string>  $services
-     */
-    protected function databaseForServices(?string $database, array $services): ?string
-    {
-        if (! is_array($this->config->get('outpost.services'))) {
-            return $database;
-        }
-
-        $databases = array_values(array_unique(array_intersect($services, ['mysql', 'pgsql'])));
-
-        if (count($databases) !== 1) {
-            return $database;
-        }
-
-        $service = $databases[0];
-
-        if ($service === 'mysql' && in_array($database, ['mysql', 'mariadb'], true)) {
-            return $database;
-        }
-
-        return $service;
     }
 
     /**

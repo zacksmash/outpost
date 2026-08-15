@@ -180,11 +180,7 @@ class Provisioner
     {
         $values = ['APP_URL' => $manifest->url];
 
-        $databaseService = match ($manifest->database) {
-            'mysql', 'mariadb' => 'mysql',
-            'pgsql' => 'pgsql',
-            default => null,
-        };
+        $databaseService = DatabaseServices::forConnection($manifest->database);
 
         // Point the application at the container-local database only when the
         // instance actually runs it — a services override may deliberately
@@ -237,11 +233,7 @@ class Provisioner
     protected function managedEnvironmentKeys(Manifest $manifest): array
     {
         $keys = ['APP_URL'];
-        $databaseService = match ($manifest->database) {
-            'mysql', 'mariadb' => 'mysql',
-            'pgsql' => 'pgsql',
-            default => null,
-        };
+        $databaseService = DatabaseServices::forConnection($manifest->database);
 
         if ($databaseService !== null && $manifest->uses($databaseService)) {
             $keys = [...$keys, 'DB_CONNECTION', 'DB_HOST', 'DB_PORT', 'DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD'];

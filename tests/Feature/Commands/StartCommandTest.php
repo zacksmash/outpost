@@ -84,7 +84,7 @@ it('recreates a missing container without replacing the surviving worktree', fun
     File::ensureDirectoryExists($worktree);
     File::ensureDirectoryExists($runtime);
     File::ensureDirectoryExists($git);
-    File::put($worktree.'/.env', "APP_KEY=base64:existing\nAPP_URL=http://localhost\n");
+    File::put($worktree.'/.env', "APP_KEY=base64:existing\nAPP_URL=http://localhost\nDB_CONNECTION=sqlite\nDB_DATABASE=/app/database/database.sqlite\n");
     File::put($worktree.'/composer.json', json_encode([
         'repositories' => [['type' => 'path', 'url' => sys_get_temp_dir()]],
     ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
@@ -93,6 +93,8 @@ it('recreates a missing container without replacing the surviving worktree', fun
     File::put($runtime.'/octane-watch', 'legacy watcher');
     app(Outposts::class)->save(fakeManifest(
         'feature-x',
+        database: 'sqlite',
+        services: ['mysql', 'redis'],
         pathRepositoryMounts: [sys_get_temp_dir().':'.sys_get_temp_dir().':ro'],
     ));
 
@@ -116,6 +118,10 @@ it('recreates a missing container without replacing the surviving worktree', fun
         ->assertSuccessful();
 
     expect(File::get($worktree.'/.env'))->toContain('APP_KEY=base64:existing')
+        ->and(File::get($worktree.'/.env'))->toContain('DB_CONNECTION=mysql')
+        ->and(File::get($worktree.'/.env'))->toContain('DB_HOST=127.0.0.1')
+        ->and(File::get($worktree.'/.env'))->not->toContain('/app/database/database.sqlite')
+        ->and(app(Outposts::class)->find('feature-x')?->database)->toBe('mysql')
         ->and(app(Outposts::class)->find('feature-x')?->status)->toBe('ready')
         ->and(File::get($runtime.'/nginx.conf'))->toContain('fastcgi_pass unix:/run/php/php8.4-fpm.sock;')
         ->and(File::get($runtime.'/supervisord.conf'))->toContain('[program:php-fpm]')

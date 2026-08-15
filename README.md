@@ -87,7 +87,7 @@ composer update zacksmash/outpost --with-all-dependencies
 php artisan outpost:upgrade --all
 ```
 
-Upgrading pulls and validates the configured image if it is missing, then replaces only outdated or missing containers. If you have published `config/outpost.php`, update its pinned `image` value or `OUTPOST_IMAGE` environment variable first. Every manifest records the image reference, digest, and approved Composer path-repository mounts used to create its container.
+Upgrading pulls and validates the configured image if it is missing, then replaces outdated or missing containers. If you have published `config/outpost.php`, its copied `image` value does not change with Composer updates: update that pin or `OUTPOST_IMAGE` to the release shown in the package's config first. `outpost:doctor` warns when an official configured tag differs from the image shipped by the installed package. Every manifest records the image reference, digest, and approved Composer path-repository mounts used to create its container.
 
 When only Outpost configuration changed, force a rebuild without replacing the worktree:
 
@@ -253,7 +253,7 @@ A dirty worktree is a non-blocking warning, while a skipped "Configured checks" 
 
 ### Upgrading Instances
 
-The `outpost:upgrade` command pulls a missing configured image, verifies its runtime contract, and preflights every selected worktree before deleting any container. By default it replaces only outdated or missing containers. Add `--force` to rebuild a current container and re-read the current HTTPS, PHP, resources, services, service exposure, processes, and frontend settings. This is the maintenance path after changing `config/outpost.php` or its environment values.
+The `outpost:upgrade` command pulls a missing configured image, verifies its runtime contract, and preflights every selected worktree before deleting any container. By default it replaces outdated or missing containers and repairs legacy manifests whose sole managed database is not yet the application's sandbox connection. Add `--force` to rebuild any other current container and re-read the current HTTPS, PHP, resources, services, service exposure, processes, and frontend settings. This is the maintenance path after changing `config/outpost.php` or its environment values.
 
 Dirty worktrees are always refused, including with `--force`; the flag forces a rebuild, not the destruction or mutation of uncommitted work. A rebuild keeps your source and branch, resets container-local databases and services, reconciles Outpost-managed `.env` values, then refreshes Composer dependencies, front-end builds, migrations, and `setup` hooks. Rebuilt containers also pick up the repository's shared download caches and automatically reuse path-repository mounts previously approved for that instance. Only newly discovered external repositories prompt for approval; add `--mount-path-repos` to approve those without prompting.
 
@@ -300,7 +300,7 @@ php artisan vendor:publish --tag="outpost-config"
 | Key | Default | Description |
 | --- | --- | --- |
 | `domain` | `outpost` | Local publication domain. |
-| `image` | `ghcr.io/zacksmash/outpost:0.5.1` | Exact OCI image used by instances. |
+| `image` | `ghcr.io/zacksmash/outpost:0.5.2` | Exact OCI image used by instances. |
 | `dns` | `1.1.1.1` | Nameserver injected into builds and instances. |
 | `path` | `.outpost` | Project-relative instance directory. |
 | `resources.cpus` | `4` | Virtual CPUs per instance. |

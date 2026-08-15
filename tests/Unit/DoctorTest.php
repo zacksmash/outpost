@@ -57,7 +57,7 @@ function fakeHealthyDoctor(array $overrides = []): void
         processPattern('container', 'system', 'status', '--format', 'json') => Process::result('{"status":"running"}'),
         processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result('{"dns":{"domain":"outpost"}}'),
         processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\noutpost\n"),
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.5.1') => Process::result(fakeImageInspect()),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.5.2') => Process::result(fakeImageInspect()),
         processPattern('git', 'rev-parse', 'HEAD') => Process::result("abc123\n"),
     ]);
 }
@@ -73,12 +73,42 @@ it('passes a healthy supported environment', function () {
         ->and($checks['Platform']->detail)->toBe('macOS 27.0 on arm64')
         ->and($checks['Runtime version']->detail)->toContain('1.2.2')
         ->and($checks['Publication domain']->detail)->toContain('[outpost]')
-        ->and($checks['Base image']->detail)->toContain('[ghcr.io/zacksmash/outpost:0.5.1]');
+        ->and($checks['Base image']->detail)->toContain('[ghcr.io/zacksmash/outpost:0.5.2]');
+});
+
+it('warns when published configuration pins an older official image', function () {
+    $image = 'ghcr.io/zacksmash/outpost:0.5.0';
+
+    config(['outpost.image' => $image]);
+    fakeHealthyDoctor([
+        processPattern('container', 'image', 'inspect', $image) => Process::result(fakeImageInspect()),
+    ]);
+
+    $check = collect($this->doctor->inspect())->keyBy('name')[Doctor::BASE_IMAGE_CHECK];
+
+    expect($check->status)->toBe(DoctorCheck::WARNING)
+        ->and($check->detail)->toContain("[{$image}]")
+        ->and($check->detail)->toContain('this package ships ['.Runtime::PUBLISHED_IMAGE.']')
+        ->and($check->remedy)->toContain('Update [outpost.image] or OUTPOST_IMAGE')
+        ->and($check->remedy)->toContain('outpost:upgrade --all');
+});
+
+it('accepts an intentional compatible custom image without a version warning', function () {
+    $image = 'example.test/custom-outpost:latest';
+
+    config(['outpost.image' => $image]);
+    fakeHealthyDoctor([
+        processPattern('container', 'image', 'inspect', $image) => Process::result(fakeImageInspect()),
+    ]);
+
+    $check = collect($this->doctor->inspect())->keyBy('name')[Doctor::BASE_IMAGE_CHECK];
+
+    expect($check->status)->toBe(DoctorCheck::PASS);
 });
 
 it('rejects an image whose immutable identity cannot be recorded', function () {
     fakeHealthyDoctor([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.5.1') => Process::result(json_encode([
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.5.2') => Process::result(json_encode([
             ['variants' => [['config' => ['config' => ['Labels' => [
                 Runtime::IMAGE_RUNTIME_PATH_LABEL => Runtime::IMAGE_RUNTIME_PATH,
             ]]]]]],
@@ -96,7 +126,7 @@ it('rejects an installed image without the required runtime path contract', func
     $labels = $runtimePath === null ? [] : [Runtime::IMAGE_RUNTIME_PATH_LABEL => $runtimePath];
 
     fakeHealthyDoctor([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.5.1') => Process::result(json_encode([
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.5.2') => Process::result(json_encode([
             ['variants' => [['config' => ['config' => ['Labels' => $labels]]]]],
         ], JSON_THROW_ON_ERROR)),
     ]);
@@ -123,7 +153,7 @@ it('points an incompatible custom image configuration at the current shared imag
     $check = collect($this->doctor->inspect())->keyBy('name')[Doctor::BASE_IMAGE_CHECK];
 
     expect($check->status)->toBe(DoctorCheck::FAIL)
-        ->and($check->remedy)->toContain('ghcr.io/zacksmash/outpost:0.5.1')
+        ->and($check->remedy)->toContain('ghcr.io/zacksmash/outpost:0.5.2')
         ->and($check->remedy)->toContain('outpost:build --force');
 });
 
@@ -239,7 +269,7 @@ it('reports domain, resolver, image, and project problems with fixes', function 
     fakeHealthyDoctor([
         processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result('{"dns":{"domain":"box"}}'),
         processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\nbox\n"),
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.5.1') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.5.2') => Process::result('', 'not found', 1),
         processPattern('git', 'rev-parse', 'HEAD') => Process::result('', 'unknown revision', 128),
     ]);
 

@@ -282,10 +282,27 @@ class Doctor
             );
         }
 
+        if ($this->isOfficialImage($image) && $image !== Runtime::PUBLISHED_IMAGE) {
+            return DoctorCheck::warning(
+                self::BASE_IMAGE_CHECK,
+                "The configured image [{$image}] is compatible, but this package ships [".Runtime::PUBLISHED_IMAGE.']. A published config or OUTPOST_IMAGE value may be pinning another release.',
+                'Update [outpost.image] or OUTPOST_IMAGE to ['.Runtime::PUBLISHED_IMAGE.'], then run [php artisan outpost:pull] and [php artisan outpost:upgrade --all].',
+            );
+        }
+
         return DoctorCheck::pass(
             self::BASE_IMAGE_CHECK,
             "The [{$image}] image is available and matches runtime-path contract [".Runtime::IMAGE_RUNTIME_PATH.'].',
         );
+    }
+
+    /**
+     * Determine whether a configured reference belongs to Outpost's shared image.
+     */
+    protected function isOfficialImage(string $image): bool
+    {
+        return str_starts_with($image, 'ghcr.io/zacksmash/outpost:')
+            || str_starts_with($image, 'ghcr.io/zacksmash/outpost@');
     }
 
     /**
