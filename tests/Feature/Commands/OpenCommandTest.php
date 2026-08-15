@@ -39,6 +39,23 @@ it('opens a running instance in the default browser', function () {
     ]);
 });
 
+it('opens the application even when an unrelated preview is invalid', function () {
+    config(['outpost.previews' => [
+        'broken' => ['path' => 'not/absolute'],
+    ]]);
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+        processPattern('open', 'http://feature-x-app.outpost') => Process::result(''),
+    ]);
+
+    $this->artisan('outpost:open', ['name' => 'feature-x'])
+        ->expectsOutputToContain('Opened: http://feature-x-app.outpost')
+        ->assertSuccessful();
+});
+
 it('starts a stopped instance before opening it', function () {
     Process::fake([
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
@@ -78,6 +95,27 @@ it('opens the mailpit endpoint', function () {
     $this->artisan('outpost:open', ['name' => 'feature-x', 'endpoint' => 'mailpit'])
         ->expectsOutputToContain('http://feature-x-app.outpost:8025')
         ->assertSuccessful();
+});
+
+it('opens a configured review link', function () {
+    config(['outpost.previews' => [
+        'posts' => ['path' => '/acme/posts', 'note' => 'Review CRUD behavior'],
+    ]]);
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+        processPattern('open', 'http://feature-x-app.outpost/acme/posts') => Process::result(''),
+    ]);
+
+    $this->artisan('outpost:open', ['name' => 'feature-x', 'endpoint' => 'posts'])
+        ->expectsOutputToContain('http://feature-x-app.outpost/acme/posts')
+        ->assertSuccessful();
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'open', 'http://feature-x-app.outpost/acme/posts',
+    ]);
 });
 
 it('refuses a browser endpoint the instance does not provide', function () {

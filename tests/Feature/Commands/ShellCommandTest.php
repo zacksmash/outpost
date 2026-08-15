@@ -55,7 +55,9 @@ it('opens a root shell only when explicitly requested', function () {
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'exec', '-i', ...($tty ? ['-t'] : []),
-        '--env', 'HOME=/root', '--user', 'root', '--workdir', '/app',
+        '--env', 'HOME=/root',
+        '--env', 'COMPOSER_CACHE_DIR=/root/.composer/cache', '--env', 'NPM_CONFIG_CACHE=/root/.npm',
+        '--user', 'root', '--workdir', '/app',
         'feature-x-app', 'bash',
     ]);
 });

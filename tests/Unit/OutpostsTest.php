@@ -19,8 +19,14 @@ it('builds instance paths', function () {
     expect($this->outposts->path('feature-x'))->toBe($this->root.'/feature-x')
         ->and($this->outposts->worktreePath('feature-x'))->toBe($this->root.'/feature-x/app')
         ->and($this->outposts->runtimePath('feature-x'))->toBe($this->root.'/feature-x/runtime')
-        ->and($this->outposts->manifestPath('feature-x'))->toBe($this->root.'/feature-x/outpost.json');
+        ->and($this->outposts->manifestPath('feature-x'))->toBe($this->root.'/feature-x/outpost.json')
+        ->and($this->outposts->dependencyCachePath('composer'))->toBe($this->root.'/.cache/composer')
+        ->and($this->outposts->dependencyCachePath('npm'))->toBe($this->root.'/.cache/npm');
 });
+
+it('rejects unknown dependency cache names', function () {
+    $this->outposts->dependencyCachePath('../vendor');
+})->throws(InvalidArgumentException::class, 'dependency cache [../vendor] is not supported');
 
 it('rejects names that are not URL-friendly slugs', function (string $name) {
     expect(fn () => $this->outposts->path($name))
@@ -128,10 +134,13 @@ it('rejects invalid names when writing runtime configuration', function () {
 
 it('deletes an instance directory', function () {
     $this->outposts->save(fakeManifest());
+    File::ensureDirectoryExists($this->outposts->dependencyCachePath('composer'));
+    File::put($this->outposts->dependencyCachePath('composer').'/archive.zip', 'cached');
 
     $this->outposts->delete('feature-billing');
 
-    expect(File::isDirectory($this->root.'/feature-billing'))->toBeFalse();
+    expect(File::isDirectory($this->root.'/feature-billing'))->toBeFalse()
+        ->and(File::get($this->outposts->dependencyCachePath('composer').'/archive.zip'))->toBe('cached');
 });
 
 it('deletes host path repository bridges without following them', function () {

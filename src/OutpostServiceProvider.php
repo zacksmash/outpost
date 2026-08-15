@@ -17,6 +17,8 @@ class OutpostServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/outpost.php', 'outpost');
 
+        $this->app->singleton(CommandConfiguration::class);
+
         $this->app->singleton(Certificates::class, function (Application $app) {
             return new Certificates(
                 $app->make('files'),
@@ -28,6 +30,8 @@ class OutpostServiceProvider extends ServiceProvider
         $this->app->singleton(Detector::class, function (Application $app) {
             return new Detector($app->make('config'), $app->basePath());
         });
+
+        $this->app->singleton(DependencyCaches::class);
 
         $this->app->singleton(Endpoints::class);
 
@@ -46,6 +50,8 @@ class OutpostServiceProvider extends ServiceProvider
         $this->app->singleton(Git::class, function (Application $app) {
             return new Git($app->basePath());
         });
+
+        $this->app->singleton(LifecycleHooks::class);
 
         $this->app->singleton(PathRepositories::class, function () {
             $home = $_SERVER['HOME'] ?? null;
@@ -71,6 +77,8 @@ class OutpostServiceProvider extends ServiceProvider
                 is_string($home) ? $home : null,
             );
         });
+
+        $this->app->singleton(VerificationChecks::class);
 
         $this->app->singleton(Outposts::class, function (Application $app) {
             $path = $app->make('config')->string('outpost.path');
@@ -105,12 +113,14 @@ class OutpostServiceProvider extends ServiceProvider
             Console\Commands\LogsCommand::class,
             Console\Commands\OpenCommand::class,
             Console\Commands\OutpostCommand::class,
+            Console\Commands\ProcessCommand::class,
             Console\Commands\PullCommand::class,
             Console\Commands\RemoveCommand::class,
             Console\Commands\ShellCommand::class,
             Console\Commands\StartCommand::class,
             Console\Commands\StopCommand::class,
             Console\Commands\UpgradeCommand::class,
+            Console\Commands\VerifyCommand::class,
         ]);
     }
 }

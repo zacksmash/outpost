@@ -2,8 +2,22 @@
 
 ## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.2.1...HEAD)
 
+### Added
+
+- Added `php artisan outpost:verify <name>` with a stable `--json` report for runtime, container, image, Git, production assets, configured shell-free project checks, and the served application response.
+- Added named `outpost.checks` commands for project-specific handoff verification, including `@php` resolution to the instance's selected PHP version.
+- Added host-owned `setup`, `verify`, and `teardown` lifecycle hooks for repository-specific commands without allowing instance branches to inject executable configuration.
+- Added `php artisan outpost:process <name> [process]` with `--restart` and stable `--json` output for inspecting and restarting configured application processes. `outpost:info --json` now includes their live, waiting, or unavailable states.
+- Added named, same-origin `outpost.previews` review links with optional notes. They resolve per instance through `outpost:info` and open through the existing `outpost:open <name> <endpoint>` command.
+- Added repository-scoped Composer and npm download caches shared by new and rebuilt instances without sharing `vendor` or `node_modules` between worktrees.
+
 ### Fixed
 
+- `outpost:remove` now runs teardown hooks only for ready, running instances, checks worktree safety before hook execution without rejecting hook-generated cleanup afterward, deletes stopped containers directly, and keeps `--forget` usable even when hook configuration is invalid.
+- `outpost:verify` now skips its production-assets check for API-only applications without a `package.json` build script, matching provisioning behavior, and routes verification hooks through the shared lifecycle runner.
+- `outpost:info` now isolates failed Supervisor reads as an `unknown` state for the affected process, preserves credentials and endpoints, and avoids process probes entirely for table output.
+- Invalid custom preview entries no longer hide the application endpoint, other valid previews, or all of `outpost:info`; explicitly opening an invalid preview still reports its configuration error.
+- Process restart now treats Supervisor `ERROR` output as a failure even when `supervisorctl` exits successfully.
 - Boolean `.env` values such as `OUTPOST_HTTPS=1` or `OUTPOST_EXPOSE_SERVICES=0` are now coerced instead of crashing commands with a raw stack trace.
 - A DNS-cache flush failure no longer marks a fully provisioned instance as failed; it warns and prints the manual flush command instead.
 - Instance creation now refuses container names that exceed the 63-character DNS label limit or cannot round-trip as a slug, instead of minting an instance whose URL never resolves or that later commands refuse to load.
@@ -24,7 +38,10 @@
 
 ### Changed
 
-- Console commands are registered lazily via `#[AsCommand]`, so applications no longer construct all sixteen Outpost commands on every artisan invocation.
+- Command parsing and combined process output now use shared implementations across managed processes, lifecycle hooks, verification checks, provisioning, and runtime operations.
+- External `RuntimeDriver` implementations must add `processStates()` and `restartProcess()`, and accept the optional `environment` argument on `boot()`. This is a breaking contract change for custom drivers; Apple container remains the only supported driver.
+- The package and release image are pinned together at `ghcr.io/zacksmash/outpost:0.3.0`.
+- Console commands are registered lazily via `#[AsCommand]`, so applications no longer construct all eighteen Outpost commands on every artisan invocation.
 - The image compatibility contract is now enforced by one shared check across doctor, instance creation, and container rebuilds.
 - Removed the deprecated, inert `--recreate` option from `outpost:start`.
 - Removed the undocumented `outpost` publish tag; configuration publishes via `outpost-config`.

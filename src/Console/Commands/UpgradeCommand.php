@@ -11,9 +11,11 @@ use Zacksmash\Outpost\Console\Concerns\RebuildsInstanceContainers;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Console\Concerns\ResolvesPathRepositoryMounts;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
+use Zacksmash\Outpost\DependencyCaches;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Host;
+use Zacksmash\Outpost\LifecycleHooks;
 use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Nginx;
 use Zacksmash\Outpost\Outposts;
@@ -56,11 +58,13 @@ class UpgradeCommand extends Command
         Doctor $doctor,
         Git $git,
         Host $host,
+        DependencyCaches $dependencyCaches,
         PathRepositories $pathRepositories,
         Provisioner $provisioner,
         Nginx $nginx,
         Processes $processes,
         Supervisord $supervisord,
+        LifecycleHooks $hooks,
     ): int {
         if ($this->option('all') && is_string($this->argument('name')) && $this->argument('name') !== '') {
             error('Choose an instance name or --all, not both.');
@@ -95,6 +99,10 @@ class UpgradeCommand extends Command
                 return self::FAILURE;
             }
 
+            foreach ($targets as $manifest) {
+                $hooks->commands(LifecycleHooks::SETUP, $manifest->php);
+            }
+
             $mounts = [];
 
             foreach ($targets as $manifest) {
@@ -121,6 +129,7 @@ class UpgradeCommand extends Command
                     $runtime,
                     $git,
                     $host,
+                    $dependencyCaches,
                     $provisioner,
                     $nginx,
                     $processes,

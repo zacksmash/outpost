@@ -44,7 +44,7 @@ function fakeCreation(array $overrides = []): void
         processPattern('git', 'rev-parse', 'HEAD') => Process::result('abc123'),
         processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\noutpost\n"),
         processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result('{"dns":{"domain":"outpost"}}'),
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.1') => Process::result(fakeImageInspect()),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.3.0') => Process::result(fakeImageInspect()),
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
         processPattern('git', 'branch', '--show-current') => Process::result("main\n"),
         processPattern('git', 'branch', '--format=%(refname:short)') => Process::result("main\nfeature-x\n"),
@@ -73,7 +73,7 @@ it('prepares missing prerequisites and continues creating the instance', functio
     app()->instance(Doctor::class, $doctor);
 
     fakeCreation([
-        processPattern('container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.2.1') => Process::result('pulled'),
+        processPattern('container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.3.0') => Process::result('pulled'),
     ]);
 
     $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
@@ -82,7 +82,7 @@ it('prepares missing prerequisites and continues creating the instance', functio
         ->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.2.1',
+        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.3.0',
     ]);
 });
 
@@ -143,21 +143,27 @@ it('creates a fully provisioned instance', function () {
         ->and($manifest['database'])->toBe('sqlite')
         ->and($manifest['status'])->toBe('ready')
         ->and($manifest['runtime'])->toBe('apple-container')
-        ->and($manifest['image'])->toBe('ghcr.io/zacksmash/outpost:0.2.1')
+        ->and($manifest['image'])->toBe('ghcr.io/zacksmash/outpost:0.3.0')
         ->and($manifest['image_digest'])->toBe('sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
 
     expect(File::exists($this->root.'/feature-x/runtime/nginx.conf'))->toBeTrue()
         ->and(File::exists($this->root.'/feature-x/runtime/supervisord.conf'))->toBeTrue()
+        ->and(File::isDirectory($this->root.'/.cache/composer'))->toBeTrue()
+        ->and(File::isDirectory($this->root.'/.cache/npm'))->toBeTrue()
         ->and(File::get($this->root.'/feature-x/app/.env'))->toContain('APP_URL=http://feature-x-laravel.outpost');
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'run', '--detach', '--name', 'feature-x-laravel', '--dns', '1.1.1.1',
         '--cpus', '4', '--memory', '2G',
         '--env', 'OUTPOST_UID=501', '--env', 'OUTPOST_GID=20',
+        '--env', 'COMPOSER_CACHE_DIR=/var/cache/outpost/composer',
+        '--env', 'NPM_CONFIG_CACHE=/var/cache/outpost/npm',
         '--volume', $this->root.'/feature-x/app:/app',
         '--volume', $this->root.'/feature-x/runtime:/etc/outpost:ro',
         '--volume', '/projects/app/.git:/projects/app/.git:ro',
-        'ghcr.io/zacksmash/outpost:0.2.1',
+        '--volume', $this->root.'/.cache/composer:/var/cache/outpost/composer',
+        '--volume', $this->root.'/.cache/npm:/var/cache/outpost/npm',
+        'ghcr.io/zacksmash/outpost:0.3.0',
     ]);
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === ['dscacheutil', '-flushcache']);
@@ -199,9 +205,67 @@ it('configures and releases application processes after provisioning', function 
         ->and($supervisor)->toContain('"php8.5" "artisan" "queue:work" "--sleep=1"');
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', '--env', 'HOME=/root', '--user', 'root', '--workdir', '/app',
+        'container', 'exec', '--env', 'HOME=/root',
+        '--env', 'COMPOSER_CACHE_DIR=/root/.composer/cache', '--env', 'NPM_CONFIG_CACHE=/root/.npm',
+        '--user', 'root', '--workdir', '/app',
         'feature-x-laravel', 'touch', '/var/lib/outpost/ready',
     ]);
+});
+
+it('runs repository-owned setup hooks after built-in provisioning', function () {
+    config(['outpost.hooks.setup' => [
+        'search' => ['@php', 'artisan', 'scout:sync-index-settings'],
+    ]]);
+
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->expectsOutputToContain('Running setup hook [search]')
+        ->assertSuccessful();
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-laravel', 'php8.5', 'artisan', 'scout:sync-index-settings',
+    ]);
+});
+
+it('marks an instance failed when a setup hook fails', function () {
+    config(['outpost.hooks.setup' => [
+        'search' => ['@php', 'artisan', 'scout:sync-index-settings'],
+    ]]);
+
+    fakeCreation([
+        processPattern('container', 'exec').' *'.processPattern('feature-x-laravel', 'php8.5', 'artisan', 'scout:sync-index-settings') => Process::result('', 'search unavailable', 1),
+    ]);
+
+    $exit = Artisan::call('outpost', ['branch' => 'feature-x', '--name' => 'feature-x']);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('Running setup hook [search] failed')
+        ->and($output)->toContain('search unavailable');
+
+    expect(json_decode(File::get($this->root.'/feature-x/outpost.json'), true)['status'])
+        ->toBe('failed');
+
+    Process::assertDidntRun(fn (PendingProcess $process) => in_array('curl', $process->command, true));
+});
+
+it('rejects malformed setup hooks before creating instance state', function () {
+    config(['outpost.hooks.setup' => [
+        'search' => 'php artisan scout:sync-index-settings',
+    ]]);
+
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->expectsOutputToContain('outpost.hooks.setup.search')
+        ->assertFailed();
+
+    expect(File::exists($this->root.'/feature-x/outpost.json'))->toBeFalse();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'run');
+    Process::assertDidntRun(fn (PendingProcess $process) => array_slice($process->command, 1, 2) === ['worktree', 'add']);
 });
 
 it('boots a trusted https instance with its certificate mounted read only', function () {
@@ -242,10 +306,14 @@ it('boots a trusted https instance with its certificate mounted read only', func
         'container', 'run', '--detach', '--name', 'feature-x-laravel', '--dns', '1.1.1.1',
         '--cpus', '4', '--memory', '2G',
         '--env', 'OUTPOST_UID=501', '--env', 'OUTPOST_GID=20',
+        '--env', 'COMPOSER_CACHE_DIR=/var/cache/outpost/composer',
+        '--env', 'NPM_CONFIG_CACHE=/var/cache/outpost/npm',
         '--volume', $this->root.'/feature-x/app:/app',
         '--volume', $this->root.'/feature-x/runtime:/etc/outpost:ro',
         '--volume', '/projects/app/.git:/projects/app/.git:ro',
-        'ghcr.io/zacksmash/outpost:0.2.1',
+        '--volume', $this->root.'/.cache/composer:/var/cache/outpost/composer',
+        '--volume', $this->root.'/.cache/npm:/var/cache/outpost/npm',
+        'ghcr.io/zacksmash/outpost:0.3.0',
     ]);
 });
 
@@ -434,7 +502,7 @@ it('provisions the application before checking its final HTTP response', functio
 
 it('requires the base image to be built first', function () {
     fakeCreation([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.1') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.3.0') => Process::result('', 'not found', 1),
     ]);
 
     $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])

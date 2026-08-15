@@ -10,7 +10,7 @@ it('resolves configured process commands and pins the php placeholder', function
         'vite' => ['npm', 'run', 'dev'],
     ]]);
 
-    expect((new Processes(app('config')))->commands('8.4'))->toBe([
+    expect(app(Processes::class)->commands('8.4'))->toBe([
         'queue' => ['php8.4', 'artisan', 'queue:work', '--queue=high priority'],
         'vite' => ['npm', 'run', 'dev'],
     ]);
@@ -19,13 +19,13 @@ it('resolves configured process commands and pins the php placeholder', function
 it('allows no configured processes', function () {
     config(['outpost.processes' => []]);
 
-    expect((new Processes(app('config')))->commands('8.4'))->toBe([]);
+    expect(app(Processes::class)->commands('8.4'))->toBe([]);
 });
 
 it('rejects a process collection that is not an array', function () {
     config(['outpost.processes' => 'artisan queue:work']);
 
-    (new Processes(app('config')))->commands('8.4');
+    app(Processes::class)->commands('8.4');
 })->throws(RuntimeException::class, 'The [outpost.processes] value must be an associative array.');
 
 it('rejects unsafe process names', function (string $name) {
@@ -33,7 +33,7 @@ it('rejects unsafe process names', function (string $name) {
         $name => ['@php', 'artisan', 'queue:work'],
     ]]);
 
-    (new Processes(app('config')))->commands('8.4');
+    app(Processes::class)->commands('8.4');
 })->with([
     'spaces' => ['queue worker'],
     'section syntax' => ['queue]'],
@@ -44,7 +44,7 @@ it('rejects unsafe process names', function (string $name) {
 it('rejects malformed process commands', function (mixed $command) {
     config(['outpost.processes' => ['queue' => $command]]);
 
-    (new Processes(app('config')))->commands('8.4');
+    app(Processes::class)->commands('8.4');
 })->with([
     'string command' => ['artisan queue:work'],
     'empty command' => [[]],

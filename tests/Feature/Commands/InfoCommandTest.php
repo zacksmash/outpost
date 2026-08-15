@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
@@ -71,9 +72,184 @@ it('provides structured json for agents and scripts', function () {
         ->and($output['configured_image_digest'])->toBe('sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
         ->and($output['outdated'])->toBeFalse()
         ->and($output)->not->toHaveKeys(['server', 'octane_server'])
+        ->and($output['process_states'])->toBe([])
         ->and($output['resources'])->toBe(['cpus' => 4, 'memory' => '2G'])
         ->and($output['endpoints']['application']['url'])->toBe('http://billing-app.outpost')
         ->and($output['expose_services'])->toBeFalse();
+});
+
+it('includes named review links and their notes in endpoint details', function () {
+    config(['outpost.previews' => [
+        'posts' => ['path' => '/acme/posts', 'note' => 'Review CRUD behavior'],
+    ]]);
+
+    app(Outposts::class)->save(fakeManifest(name: 'billing', services: [], exposeServices: false));
+
+    Process::fake([
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
+    ]);
+
+    expect(Artisan::call('outpost:info', ['name' => 'billing', '--json' => true]))->toBe(0);
+
+    $output = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($output['endpoints']['posts'])->toBe([
+        'url' => 'http://billing-app.outpost/acme/posts',
+        'path' => '/acme/posts',
+        'note' => 'Review CRUD behavior',
+    ]);
+
+    $exit = Artisan::call('outpost:info', ['name' => 'billing']);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(0)
+        ->and($output)->toContain('http://billing-app.outpost/acme/posts')
+        ->and($output)->toContain('Review CRUD behavior');
+});
+
+it('includes the live state of each configured application process in json', function () {
+    app(Outposts::class)->save(fakeManifest(
+        name: 'billing',
+        services: [],
+        processes: ['queue', 'scheduler'],
+        exposeServices: false,
+    ));
+
+    Process::fake([
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'billing-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+        processPattern('container', 'exec').' *'.processPattern('billing-app', 'supervisorctl', 'status', 'outpost-queue') => Process::result('outpost-queue RUNNING pid 41, uptime 0:02:10'),
+        processPattern('container', 'exec').' *'.processPattern('billing-app', 'supervisorctl', 'status', 'outpost-scheduler') => Process::result('outpost-scheduler FATAL Exited too quickly', '', 3),
+    ]);
+
+    expect(Artisan::call('outpost:info', ['name' => 'billing', '--json' => true]))->toBe(0);
+
+    $output = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($output['processes'])->toBe(['queue', 'scheduler'])
+        ->and($output['process_states'])->toBe([
+            'queue' => 'running',
+            'scheduler' => 'fatal',
+        ]);
+});
+
+it('keeps json details available when one process state cannot be read', function () {
+    app(Outposts::class)->save(fakeManifest(
+        name: 'billing',
+        services: [],
+        processes: ['queue', 'scheduler'],
+        exposeServices: false,
+    ));
+
+    Process::fake([
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'billing-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+        processPattern('container', 'exec').' *'.processPattern('billing-app', 'supervisorctl', 'status', 'outpost-queue') => Process::result('outpost-queue RUNNING pid 41, uptime 0:02:10'),
+        processPattern('container', 'exec').' *'.processPattern('billing-app', 'supervisorctl', 'status', 'outpost-scheduler') => Process::result('', 'supervisor unavailable', 1),
+    ]);
+
+    expect(Artisan::call('outpost:info', ['name' => 'billing', '--json' => true]))->toBe(0);
+
+    $output = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($output['endpoints']['application']['url'])->toBe('http://billing-app.outpost')
+        ->and($output['process_states'])->toBe([
+            'queue' => 'running',
+            'scheduler' => 'unknown',
+        ]);
+});
+
+it('does not query supervisor for human-readable details', function () {
+    app(Outposts::class)->save(fakeManifest(
+        name: 'billing',
+        services: [],
+        processes: ['queue'],
+        exposeServices: false,
+    ));
+
+    Process::fake([
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'billing-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+    ]);
+
+    $this->artisan('outpost:info', ['name' => 'billing'])->assertSuccessful();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'exec');
+});
+
+it('omits an invalid preview without hiding the remaining details', function () {
+    config(['outpost.previews' => [
+        'broken' => ['path' => 'not/absolute'],
+    ]]);
+    app(Outposts::class)->save(fakeManifest(name: 'billing', services: [], exposeServices: false));
+
+    Process::fake([
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
+    ]);
+
+    expect(Artisan::call('outpost:info', ['name' => 'billing', '--json' => true]))->toBe(0);
+
+    $output = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($output['endpoints'])->toHaveKey('application')
+        ->and($output['endpoints'])->not->toHaveKey('broken');
+});
+
+it('marks process state unavailable without querying a stopped container', function () {
+    app(Outposts::class)->save(fakeManifest(
+        name: 'billing',
+        services: [],
+        processes: ['queue'],
+        exposeServices: false,
+    ));
+
+    Process::fake([
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'billing-app', 'status' => ['state' => 'stopped']],
+        ], JSON_THROW_ON_ERROR)),
+    ]);
+
+    expect(Artisan::call('outpost:info', ['name' => 'billing', '--json' => true]))->toBe(0);
+
+    $output = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($output['process_states'])->toBe(['queue' => 'unavailable']);
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'exec');
+});
+
+it('marks application processes waiting when provisioning is incomplete', function () {
+    app(Outposts::class)->save(fakeManifest(
+        name: 'billing',
+        services: [],
+        processes: ['queue'],
+        exposeServices: false,
+        status: 'failed',
+    ));
+
+    Process::fake([
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'billing-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+    ]);
+
+    expect(Artisan::call('outpost:info', ['name' => 'billing', '--json' => true]))->toBe(0);
+
+    $output = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($output['process_states'])->toBe(['queue' => 'waiting']);
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'exec');
 });
 
 it('reports a running instance that failed provisioning as degraded', function () {

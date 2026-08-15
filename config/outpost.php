@@ -34,7 +34,7 @@ return [
     |
     */
 
-    'image' => env('OUTPOST_IMAGE', 'ghcr.io/zacksmash/outpost:0.2.1'),
+    'image' => env('OUTPOST_IMAGE', 'ghcr.io/zacksmash/outpost:0.3.0'),
 
     /*
     |--------------------------------------------------------------------------
@@ -152,6 +152,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Review Links
+    |--------------------------------------------------------------------------
+    |
+    | Give reviewers and agents named, same-origin application paths to open.
+    | Notes appear in outpost:info alongside the resolved instance URL.
+    |
+    */
+
+    'previews' => [
+        // 'posts' => ['path' => '/acme/posts', 'note' => 'Review CRUD behavior'],
+        // 'telescope' => ['path' => '/telescope'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Processes
     |--------------------------------------------------------------------------
     |
@@ -167,6 +182,47 @@ return [
         // 'queue' => ['@php', 'artisan', 'queue:work', '--sleep=1', '--tries=1'],
         // 'scheduler' => ['@php', 'artisan', 'schedule:work'],
         // 'horizon' => ['@php', 'artisan', 'horizon'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Verification Checks
+    |--------------------------------------------------------------------------
+    |
+    | These shell-free commands run when outpost:verify confirms an instance
+    | is ready for review or handoff. Each argument is a separate array item;
+    | use "@php" to select the same PHP version as the application.
+    |
+    */
+
+    'checks' => [
+        // 'tests' => ['@php', 'artisan', 'test'],
+        // 'lint' => ['composer', 'lint'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Repository Lifecycle Hooks
+    |--------------------------------------------------------------------------
+    |
+    | These named, shell-free commands supplement Outpost's built-in setup.
+    | They are loaded from the host checkout, not an instance branch. Setup
+    | runs after provisioning and rebuilds, verify runs before handoff checks,
+    | and teardown runs before a ready, running instance is destroyed. Removal
+    | skips teardown for stopped, missing, or incompletely provisioned instances.
+    |
+    */
+
+    'hooks' => [
+        'setup' => [
+            // 'search' => ['@php', 'artisan', 'scout:sync-index-settings'],
+        ],
+        'verify' => [
+            // 'generate' => ['npm', 'run', 'generate'],
+        ],
+        'teardown' => [
+            // 'cleanup' => ['@php', 'artisan', 'app:cleanup'],
+        ],
     ],
 
     /*

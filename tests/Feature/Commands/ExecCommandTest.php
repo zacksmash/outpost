@@ -56,7 +56,9 @@ it('runs as root only when explicitly requested', function () {
     ])->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', '--env', 'HOME=/root', '--user', 'root', '--workdir', '/app',
+        'container', 'exec', '--env', 'HOME=/root',
+        '--env', 'COMPOSER_CACHE_DIR=/root/.composer/cache', '--env', 'NPM_CONFIG_CACHE=/root/.npm',
+        '--user', 'root', '--workdir', '/app',
         'feature-x-app', 'apt-get', 'update',
     ]);
 });

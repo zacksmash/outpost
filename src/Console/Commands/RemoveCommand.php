@@ -13,6 +13,7 @@ use Zacksmash\Outpost\Console\Concerns\FlushesDnsCaches;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Git;
+use Zacksmash\Outpost\LifecycleHooks;
 use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Outposts;
 
@@ -47,8 +48,12 @@ class RemoveCommand extends Command
     /**
      * Execute the console command.
      */
-    public function handle(Outposts $outposts, RuntimeDriver $runtime, Git $git): int
-    {
+    public function handle(
+        Outposts $outposts,
+        RuntimeDriver $runtime,
+        Git $git,
+        LifecycleHooks $hooks,
+    ): int {
         if (($name = $this->instanceName($outposts)) === null) {
             return self::FAILURE;
         }
@@ -88,10 +93,28 @@ class RemoveCommand extends Command
 
         try {
             if ($forget) {
+                warning('Skipped configured teardown hooks because --forget bypasses hook parsing and the container runtime.');
                 warning("Skipped container [{$manifest->container}].");
                 warning("Remove it later with [container delete --force {$manifest->container}].");
             } else {
-                $this->removeContainer($runtime, $manifest);
+                $runtimeState = $runtime->state($manifest->container);
+
+                if ($runtimeState === 'running' && $manifest->status === 'ready') {
+                    if ($hooks->commands(LifecycleHooks::TEARDOWN, $manifest->php) !== []) {
+                        $hooks->run(
+                            LifecycleHooks::TEARDOWN,
+                            $manifest,
+                            fn (string $step) => info($step),
+                        );
+                    }
+                } elseif ($hooks->configured(LifecycleHooks::TEARDOWN)) {
+                    $reason = $runtimeState !== 'running'
+                        ? 'container state is ['.($runtimeState ?? 'missing').']'
+                        : "provisioning status is [{$manifest->status}]";
+                    warning("Skipped configured teardown hooks because {$reason}.");
+                }
+
+                $this->removeContainer($runtime, $manifest, $runtimeState);
             }
 
             $this->removeWorktree($outposts, $git, $manifest->name);
@@ -118,20 +141,22 @@ class RemoveCommand extends Command
      * A failed stop is tolerated — the intent of remove is "make this go
      * away" — but the container is then deleted by force.
      */
-    protected function removeContainer(RuntimeDriver $runtime, Manifest $manifest): void
+    protected function removeContainer(RuntimeDriver $runtime, Manifest $manifest, ?string $state): void
     {
-        if (! $runtime->exists($manifest->container)) {
+        if ($state === null) {
             return;
         }
 
         $force = false;
 
-        try {
-            $runtime->stop($manifest->container);
-        } catch (RuntimeException $e) {
-            warning($e->getMessage());
+        if ($state === 'running') {
+            try {
+                $runtime->stop($manifest->container);
+            } catch (RuntimeException $e) {
+                warning($e->getMessage());
 
-            $force = true;
+                $force = true;
+            }
         }
 
         spin(fn () => $runtime->delete($manifest->container, $force), 'Deleting the container');

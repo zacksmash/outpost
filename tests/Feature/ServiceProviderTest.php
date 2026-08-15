@@ -5,15 +5,19 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\ServiceProvider;
 use Zacksmash\Outpost\Certificates;
+use Zacksmash\Outpost\CommandConfiguration;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
+use Zacksmash\Outpost\DependencyCaches;
 use Zacksmash\Outpost\Detector;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Endpoints;
 use Zacksmash\Outpost\Git;
+use Zacksmash\Outpost\LifecycleHooks;
 use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\OutpostServiceProvider;
 use Zacksmash\Outpost\Processes;
 use Zacksmash\Outpost\Runtime;
+use Zacksmash\Outpost\VerificationChecks;
 
 it('merges the package config', function () {
     expect(config('outpost'))->toBeArray();
@@ -28,8 +32,16 @@ it('binds the certificate manager as a singleton', function () {
     expect(app(Certificates::class))->toBe(app(Certificates::class));
 });
 
+it('binds shell-free command configuration as a singleton', function () {
+    expect(app(CommandConfiguration::class))->toBe(app(CommandConfiguration::class));
+});
+
 it('binds the detector as a singleton', function () {
     expect(app(Detector::class))->toBe(app(Detector::class));
+});
+
+it('binds the dependency caches as a singleton', function () {
+    expect(app(DependencyCaches::class))->toBe(app(DependencyCaches::class));
 });
 
 it('binds the endpoint resolver as a singleton', function () {
@@ -46,6 +58,14 @@ it('binds the git manager as a singleton', function () {
 
 it('binds the process configuration as a singleton', function () {
     expect(app(Processes::class))->toBe(app(Processes::class));
+});
+
+it('binds the verification check configuration as a singleton', function () {
+    expect(app(VerificationChecks::class))->toBe(app(VerificationChecks::class));
+});
+
+it('binds lifecycle hooks as a singleton', function () {
+    expect(app(LifecycleHooks::class))->toBe(app(LifecycleHooks::class));
 });
 
 it('binds the runtime contract to the apple container driver', function () {
@@ -75,6 +95,8 @@ it('publishes the package config', function () {
 
 it('registers the focused command surface', function () {
     expect(Artisan::all())
+        ->toHaveKey('outpost:process')
         ->toHaveKey('outpost:upgrade')
+        ->toHaveKey('outpost:verify')
         ->not->toHaveKey('outpost:reload');
 });

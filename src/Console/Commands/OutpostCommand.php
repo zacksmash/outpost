@@ -14,10 +14,12 @@ use Zacksmash\Outpost\Certificates;
 use Zacksmash\Outpost\Console\Concerns\FlushesDnsCaches;
 use Zacksmash\Outpost\Console\Concerns\ResolvesPathRepositoryMounts;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
+use Zacksmash\Outpost\DependencyCaches;
 use Zacksmash\Outpost\Detector;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Host;
+use Zacksmash\Outpost\LifecycleHooks;
 use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Nginx;
 use Zacksmash\Outpost\Outposts;
@@ -69,9 +71,11 @@ class OutpostCommand extends Command
         Certificates $certificates,
         Detector $detector,
         Outposts $outposts,
+        DependencyCaches $dependencyCaches,
         PathRepositories $pathRepositories,
         Provisioner $provisioner,
         Processes $processes,
+        LifecycleHooks $hooks,
         Nginx $nginx,
         Supervisord $supervisord,
     ): int {
@@ -207,6 +211,7 @@ class OutpostCommand extends Command
             $secure = $certificates->enabled();
             $url = ($secure ? 'https' : 'http')."://{$container}.{$domain}";
             $commands = $processes->commands($detection->php);
+            $hooks->commands(LifecycleHooks::SETUP, $detection->php);
 
             info(sprintf(
                 'PHP %s (PHP-FPM) · Resources: %d CPU / %s · Frontend: %s · Services: %s · Processes: %s',
@@ -260,6 +265,7 @@ class OutpostCommand extends Command
                 $this->laravel->basePath(),
                 (bool) $this->option('mount-path-repos'),
             );
+            $dependencyCacheMounts = $dependencyCaches->mounts();
             $gitDirectory = $git->commonDirectory();
 
             $outposts->writeRuntime($name, [
@@ -287,12 +293,14 @@ class OutpostCommand extends Command
                         $outposts->worktreePath($name).':/app',
                         $outposts->runtimePath($name).':/etc/outpost:ro',
                         "{$gitDirectory}:{$gitDirectory}:ro",
+                        ...$dependencyCacheMounts,
                         ...$mounts,
                     ],
                     cpus: $resources['cpus'],
                     memory: $resources['memory'],
                     uid: $uid,
                     gid: $gid,
+                    environment: $dependencyCaches->environment(),
                 ),
                 'Booting the instance',
             );

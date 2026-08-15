@@ -258,3 +258,19 @@ it('reads a worktree porcelain status without a shell', function () {
 
     expect($this->git->worktreeStatus('/tmp/wt'))->toBe(" M app/Test.php\n?? notes.txt");
 });
+
+it('reads the exact commit checked out by a worktree', function () {
+    Process::fake([
+        processPattern('git', '-C', '/tmp/wt', 'rev-parse', 'HEAD') => Process::result("0123456789abcdef0123456789abcdef01234567\n"),
+    ]);
+
+    expect($this->git->worktreeHead('/tmp/wt'))->toBe('0123456789abcdef0123456789abcdef01234567');
+});
+
+it('rejects an invalid worktree commit', function () {
+    Process::fake([
+        processPattern('git', '-C', '/tmp/wt', 'rev-parse', 'HEAD') => Process::result("not-a-commit\n"),
+    ]);
+
+    $this->git->worktreeHead('/tmp/wt');
+})->throws(RuntimeException::class, 'returned an invalid Git commit');

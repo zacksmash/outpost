@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Process\PendingProcess;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
@@ -67,6 +68,155 @@ it('removes the container, worktree, and instance directory when confirmed', fun
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'git', 'worktree', 'remove', '--force', '--', $this->root.'/feature-x/app',
     ]);
+});
+
+it('runs repository-owned teardown hooks before destroying the instance', function () {
+    File::ensureDirectoryExists($this->root.'/feature-x/app');
+    config(['outpost.hooks.teardown' => [
+        'cleanup' => ['@php', 'artisan', 'outpost:cleanup'],
+    ]]);
+    $hookRan = false;
+
+    fakeRemoval([
+        processPattern('container', 'exec').' *'.processPattern('feature-x-app', 'php8.4', 'artisan', 'outpost:cleanup') => function () use (&$hookRan) {
+            $hookRan = true;
+
+            return Process::result('clean');
+        },
+        processPattern('container', 'stop', 'feature-x-app') => function () use (&$hookRan) {
+            expect($hookRan)->toBeTrue();
+
+            return Process::result('');
+        },
+    ]);
+
+    $this->artisan('outpost:remove', ['name' => 'feature-x', '--force' => true])
+        ->expectsOutputToContain('Running teardown hook [cleanup]')
+        ->assertSuccessful();
+});
+
+it('keeps the complete instance when a teardown hook fails', function () {
+    File::ensureDirectoryExists($this->root.'/feature-x/app');
+    config(['outpost.hooks.teardown' => [
+        'cleanup' => ['@php', 'artisan', 'outpost:cleanup'],
+    ]]);
+
+    fakeRemoval([
+        processPattern('container', 'exec').' *'.processPattern('feature-x-app', 'php8.4', 'artisan', 'outpost:cleanup') => Process::result('', 'cleanup failed', 1),
+    ]);
+
+    $exit = Artisan::call('outpost:remove', ['name' => 'feature-x', '--force' => true]);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('Running teardown hook [cleanup] failed')
+        ->and($output)->toContain('cleanup failed');
+
+    expect(File::isDirectory($this->root.'/feature-x'))->toBeTrue();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'stop');
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'delete');
+    Process::assertDidntRun(fn (PendingProcess $process) => array_slice($process->command, 1, 2) === ['worktree', 'remove']);
+});
+
+it('does not treat files written by a successful teardown hook as new user work', function () {
+    File::ensureDirectoryExists($this->root.'/feature-x/app');
+    config(['outpost.hooks.teardown' => [
+        'cleanup' => ['@php', 'artisan', 'outpost:cleanup'],
+    ]]);
+
+    fakeRemoval([
+        processPattern('git', '-C', $this->root.'/feature-x/app', 'status', '--short') => Process::sequence()
+            ->push(Process::result(''))
+            ->push(Process::result("?? cleanup.log\n")),
+        processPattern('container', 'exec').' *'.processPattern('feature-x-app', 'php8.4', 'artisan', 'outpost:cleanup') => Process::result('clean'),
+    ]);
+
+    $this->artisan('outpost:remove', ['name' => 'feature-x', '--force' => true])
+        ->assertSuccessful();
+
+    expect(File::isDirectory($this->root.'/feature-x'))->toBeFalse();
+
+    Process::assertRan(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'stop');
+});
+
+it('skips teardown hooks and directly deletes a stopped container', function () {
+    File::ensureDirectoryExists($this->root.'/feature-x/app');
+    config(['outpost.hooks.teardown' => [
+        'cleanup' => ['@php', 'artisan', 'outpost:cleanup'],
+    ]]);
+
+    fakeRemoval([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'stopped']],
+        ], JSON_THROW_ON_ERROR)),
+    ]);
+
+    $this->artisan('outpost:remove', ['name' => 'feature-x', '--force' => true])
+        ->expectsOutputToContain('Skipped configured teardown hooks')
+        ->assertSuccessful();
+
+    expect(File::isDirectory($this->root.'/feature-x'))->toBeFalse();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'stop');
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'exec');
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'delete', 'feature-x-app',
+    ]);
+});
+
+it('skips teardown hooks while provisioning is incomplete', function () {
+    File::ensureDirectoryExists($this->root.'/feature-x/app');
+    app(Outposts::class)->save(fakeManifest('feature-x', status: 'failed'));
+    config(['outpost.hooks.teardown' => [
+        'cleanup' => ['@php', 'artisan', 'outpost:cleanup'],
+    ]]);
+
+    fakeRemoval();
+
+    $this->artisan('outpost:remove', ['name' => 'feature-x', '--force' => true])
+        ->expectsOutputToContain('provisioning status is [failed]')
+        ->assertSuccessful();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'exec');
+});
+
+it('explicitly skips teardown hooks when forgetting local state', function () {
+    File::ensureDirectoryExists($this->root.'/feature-x/app');
+    config(['outpost.hooks.teardown' => [
+        'cleanup' => ['@php', 'artisan', 'outpost:cleanup'],
+    ]]);
+
+    fakeRemoval();
+
+    $this->artisan('outpost:remove', [
+        'name' => 'feature-x',
+        '--force' => true,
+        '--forget' => true,
+    ])
+        ->expectsOutputToContain('Skipped configured teardown hooks')
+        ->assertSuccessful();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[0] ?? null) === 'container');
+});
+
+it('does not parse malformed hooks when forgetting local state', function () {
+    File::ensureDirectoryExists($this->root.'/feature-x/app');
+    config(['outpost.hooks' => [
+        'teardwon' => ['cleanup' => 'php artisan cleanup'],
+    ]]);
+
+    fakeRemoval();
+
+    $this->artisan('outpost:remove', [
+        'name' => 'feature-x',
+        '--force' => true,
+        '--forget' => true,
+    ])
+        ->expectsOutputToContain('Removed [feature-x]')
+        ->assertSuccessful();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[0] ?? null) === 'container');
 });
 
 it('skips every confirmation when forced', function () {

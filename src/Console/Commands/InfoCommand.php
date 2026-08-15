@@ -44,18 +44,23 @@ class InfoCommand extends Command
         }
 
         try {
-            $state = $runtime->instanceState($manifest);
+            $runtimeState = $runtime->state($manifest->container) ?? 'missing';
+            $state = $runtime->instanceState($manifest, $runtimeState);
+            $status = $runtime->instanceStatus($manifest, $runtimeState);
             $resolvedEndpoints = $endpoints->all($manifest);
             $configuredImage = config()->string('outpost.image');
             $configuredImageDigest = $runtime->imageMetadata($configuredImage)['digest'] ?? null;
             $outdated = $manifest->imageOutdated($configuredImage, $configuredImageDigest);
+            $processStates = $this->option('json')
+                ? $this->processStates($manifest, $runtime, $runtimeState)
+                : [];
             $details = [
                 'name' => $manifest->name,
                 'container' => $manifest->container,
                 'runtime' => $manifest->runtime,
                 'branch' => $manifest->branch,
                 'state' => $state,
-                'status' => $runtime->instanceStatus($manifest, $state),
+                'status' => $status,
                 'image' => $manifest->image,
                 'image_digest' => $manifest->imageDigest,
                 'configured_image' => $configuredImage,
@@ -65,6 +70,7 @@ class InfoCommand extends Command
                 'frontend' => $manifest->frontend,
                 'services' => $manifest->services,
                 'processes' => $manifest->processes,
+                'process_states' => $processStates,
                 'resources' => [
                     'cpus' => $manifest->cpus,
                     'memory' => $manifest->memory,
@@ -96,6 +102,41 @@ class InfoCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Resolve truthful process states without executing in a stopped container.
+     *
+     * @return array<string, string>
+     */
+    protected function processStates(Manifest $manifest, RuntimeDriver $runtime, string $runtimeState): array
+    {
+        if ($manifest->processes === []) {
+            return [];
+        }
+
+        if ($runtimeState !== 'running') {
+            return array_fill_keys($manifest->processes, 'unavailable');
+        }
+
+        if ($manifest->status !== 'ready') {
+            return array_fill_keys($manifest->processes, 'waiting');
+        }
+
+        $states = [];
+
+        foreach ($manifest->processes as $process) {
+            try {
+                $states[$process] = $runtime->processStates(
+                    $manifest->container,
+                    [$process],
+                )[$process]['state'];
+            } catch (RuntimeException) {
+                $states[$process] = 'unknown';
+            }
+        }
+
+        return $states;
     }
 
     /**
@@ -137,6 +178,12 @@ class InfoCommand extends Command
 
             if (is_string($url)) {
                 $rows[] = [ucfirst($name), $url];
+            }
+
+            $note = $endpoint['note'] ?? null;
+
+            if (is_string($note)) {
+                $rows[] = [ucfirst($name).' note', $note];
             }
 
             $smtpHost = $endpoint['smtp_host'] ?? null;

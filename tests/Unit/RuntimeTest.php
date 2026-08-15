@@ -152,10 +152,10 @@ it('falls back to the apple image id when descriptor metadata is absent', functi
 it('pulls an image from an oci registry', function () {
     Process::fake();
 
-    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.2.1');
+    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.3.0');
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.2.1',
+        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.3.0',
     ]);
 });
 
@@ -164,8 +164,8 @@ it('surfaces the real error when an image pull fails', function () {
         processPattern('container', 'image', 'pull').' *' => Process::result('', 'denied', 1),
     ]);
 
-    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.2.1');
-})->throws(RuntimeException::class, 'Unable to pull the [ghcr.io/zacksmash/outpost:0.2.1] image: denied');
+    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.3.0');
+})->throws(RuntimeException::class, 'Unable to pull the [ghcr.io/zacksmash/outpost:0.3.0] image: denied');
 
 it('builds an image with dns, tag, and build arguments', function () {
     Process::fake();
@@ -193,16 +193,35 @@ it('boots a detached container with volumes and dns', function () {
     $this->runtime->boot('feature-x-app', 'outpost-base', '1.1.1.1', [
         '/host/app:/app',
         '/host/runtime:/etc/outpost:ro',
-    ], uid: 501, gid: 20);
+    ], uid: 501, gid: 20, environment: [
+        'COMPOSER_CACHE_DIR' => '/var/cache/outpost/composer',
+        'NPM_CONFIG_CACHE' => '/var/cache/outpost/npm',
+    ]);
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'run', '--detach', '--name', 'feature-x-app', '--dns', '1.1.1.1',
         '--cpus', '4', '--memory', '2G',
         '--env', 'OUTPOST_UID=501', '--env', 'OUTPOST_GID=20',
+        '--env', 'COMPOSER_CACHE_DIR=/var/cache/outpost/composer',
+        '--env', 'NPM_CONFIG_CACHE=/var/cache/outpost/npm',
         '--volume', '/host/app:/app',
         '--volume', '/host/runtime:/etc/outpost:ro',
         'outpost-base',
     ] && $process->timeout === 600);
+});
+
+it('rejects malformed container environment names', function () {
+    Process::fake();
+
+    expect(fn () => $this->runtime->boot(
+        'feature-x-app',
+        'outpost-base',
+        '1.1.1.1',
+        [],
+        environment: ['INVALID-NAME' => 'value'],
+    ))->toThrow(RuntimeException::class, 'container environment variable name [INVALID-NAME] is invalid');
+
+    Process::assertNothingRan();
 });
 
 it('boots a container with configured resource limits', function () {
@@ -261,10 +280,82 @@ it('releases application processes after provisioning', function () {
     $this->runtime->releaseProcesses('billing-app');
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', '--env', 'HOME=/root', '--user', 'root', '--workdir', '/app',
+        'container', 'exec', '--env', 'HOME=/root',
+        '--env', 'COMPOSER_CACHE_DIR=/root/.composer/cache', '--env', 'NPM_CONFIG_CACHE=/root/.npm',
+        '--user', 'root', '--workdir', '/app',
         'billing-app', 'touch', '/var/lib/outpost/ready',
     ]);
 });
+
+it('reads normalized application process states from supervisor', function () {
+    Process::fake([
+        processPattern('container', 'exec').' *'.processPattern('billing-app', 'supervisorctl', 'status', 'outpost-queue') => Process::result('outpost-queue RUNNING pid 41, uptime 0:02:10'),
+        processPattern('container', 'exec').' *'.processPattern('billing-app', 'supervisorctl', 'status', 'outpost-scheduler') => Process::result('outpost-scheduler FATAL Exited too quickly', '', 3),
+    ]);
+
+    expect($this->runtime->processStates('billing-app', ['queue', 'scheduler']))->toBe([
+        'queue' => ['state' => 'running', 'details' => 'pid 41, uptime 0:02:10'],
+        'scheduler' => ['state' => 'fatal', 'details' => 'Exited too quickly'],
+    ]);
+});
+
+it('reports a supervised application process missing from the container', function () {
+    Process::fake([
+        processPattern('container', 'exec').' *'.processPattern('billing-app', 'supervisorctl', 'status', 'outpost-queue') => Process::result('outpost-queue: ERROR (no such process)', '', 3),
+    ]);
+
+    expect($this->runtime->processStates('billing-app', ['queue']))->toBe([
+        'queue' => ['state' => 'missing', 'details' => 'Supervisor has no such process.'],
+    ]);
+});
+
+it('rejects malformed supervisor process state output', function () {
+    Process::fake([
+        processPattern('container', 'exec').' *'.processPattern('billing-app', 'supervisorctl', 'status', 'outpost-queue') => Process::result('unexpected status output'),
+    ]);
+
+    $this->runtime->processStates('billing-app', ['queue']);
+})->throws(RuntimeException::class, 'Unable to parse the [queue] process state');
+
+it('rejects invalid application process names before invoking supervisor', function () {
+    Process::fake();
+
+    $this->runtime->restartProcess('billing-app', "queue\nnginx");
+})->throws(RuntimeException::class, 'process name is invalid');
+
+it('restarts an application process through supervisor as root', function () {
+    Process::fake([
+        processPattern('container', 'exec').' *'.processPattern('billing-app', 'supervisorctl', 'restart', 'outpost-queue') => Process::result("outpost-queue: stopped\noutpost-queue: started"),
+    ]);
+
+    $this->runtime->restartProcess('billing-app', 'queue');
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', '--env', 'HOME=/root',
+        '--env', 'COMPOSER_CACHE_DIR=/root/.composer/cache', '--env', 'NPM_CONFIG_CACHE=/root/.npm',
+        '--user', 'root', '--workdir', '/app',
+        'billing-app', 'supervisorctl', 'restart', 'outpost-queue',
+    ]);
+});
+
+it('rejects a supervisor restart error even when supervisorctl exits successfully', function () {
+    Process::fake([
+        processPattern('container', 'exec').' *'.processPattern('billing-app', 'supervisorctl', 'restart', 'outpost-queue') => Process::result('outpost-queue: ERROR (spawn error)'),
+    ]);
+
+    $this->runtime->restartProcess('billing-app', 'queue');
+})->throws(RuntimeException::class, 'ERROR (spawn error)');
+
+it('surfaces supervisor state and restart failures', function (string $method, array $arguments) {
+    Process::fake([
+        processPattern('container', 'exec').' *' => Process::result('', 'supervisor refused connection', 1),
+    ]);
+
+    $this->runtime->{$method}(...$arguments);
+})->with([
+    'state' => ['processStates', ['billing-app', ['queue']]],
+    'restart' => ['restartProcess', ['billing-app', 'queue']],
+])->throws(RuntimeException::class, 'supervisor refused connection');
 
 it('bounds container inventory calls with the lifecycle timeout', function () {
     config(['outpost.lifecycle_timeout' => 17]);
@@ -347,7 +438,9 @@ it('can execute explicitly as root', function () {
     $this->runtime->run('feature-x-app', ['apt-get', 'update'], root: true);
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', '--env', 'HOME=/root', '--user', 'root', '--workdir', '/app',
+        'container', 'exec', '--env', 'HOME=/root',
+        '--env', 'COMPOSER_CACHE_DIR=/root/.composer/cache', '--env', 'NPM_CONFIG_CACHE=/root/.npm',
+        '--user', 'root', '--workdir', '/app',
         'feature-x-app', 'apt-get', 'update',
     ]);
 });

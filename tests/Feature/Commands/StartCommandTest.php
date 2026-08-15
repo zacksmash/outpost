@@ -124,9 +124,13 @@ it('recreates a missing container without replacing the surviving worktree', fun
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'run', '--detach', '--name', 'feature-x-app', '--dns', '1.1.1.1',
         '--cpus', '4', '--memory', '2G', '--env', 'OUTPOST_UID=501', '--env', 'OUTPOST_GID=20',
+        '--env', 'COMPOSER_CACHE_DIR=/var/cache/outpost/composer',
+        '--env', 'NPM_CONFIG_CACHE=/var/cache/outpost/npm',
         '--volume', $worktree.':/app',
         '--volume', $runtime.':/etc/outpost:ro',
         '--volume', "{$git}:{$git}:ro",
+        '--volume', $this->root.'/.cache/composer:/var/cache/outpost/composer',
+        '--volume', $this->root.'/.cache/npm:/var/cache/outpost/npm',
         '--volume', sys_get_temp_dir().':'.sys_get_temp_dir().':ro',
         Runtime::PUBLISHED_IMAGE,
     ]);

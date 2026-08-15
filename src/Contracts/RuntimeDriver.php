@@ -53,6 +53,7 @@ interface RuntimeDriver
 
     /**
      * @param  list<string>  $volumes
+     * @param  array<string, string>  $environment
      */
     public function boot(
         string $container,
@@ -63,6 +64,7 @@ interface RuntimeDriver
         string $memory = '2G',
         ?int $uid = null,
         ?int $gid = null,
+        array $environment = [],
     ): void;
 
     /**
@@ -73,6 +75,16 @@ interface RuntimeDriver
     public function start(string $container): void;
 
     public function releaseProcesses(string $container): void;
+
+    /**
+     * Read the state of named application processes managed by the runtime.
+     *
+     * @param  list<string>  $processes
+     * @return array<string, array{state: string, details: string}>
+     */
+    public function processStates(string $container, array $processes): array;
+
+    public function restartProcess(string $container, string $process): void;
 
     public function stop(string $container): void;
 

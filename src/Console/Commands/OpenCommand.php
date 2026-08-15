@@ -26,7 +26,7 @@ class OpenCommand extends Command
      */
     protected $signature = 'outpost:open
         {name? : The name of the instance}
-        {endpoint=app : Browser endpoint: app or mailpit}';
+        {endpoint=app : Browser endpoint: app, mailpit, or a configured preview}';
 
     /**
      * The command description.

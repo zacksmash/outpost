@@ -25,7 +25,7 @@ class Runtime implements RuntimeDriver
     /**
      * The exact shared image shipped for this package contract.
      */
-    public const string PUBLISHED_IMAGE = 'ghcr.io/zacksmash/outpost:0.2.1';
+    public const string PUBLISHED_IMAGE = 'ghcr.io/zacksmash/outpost:0.3.0';
 
     /**
      * The OCI label used to advertise the image's runtime mount contract.
@@ -278,6 +278,7 @@ class Runtime implements RuntimeDriver
      * Boot a new detached container.
      *
      * @param  list<string>  $volumes
+     * @param  array<string, string>  $environment
      */
     public function boot(
         string $container,
@@ -288,6 +289,7 @@ class Runtime implements RuntimeDriver
         string $memory = '2G',
         ?int $uid = null,
         ?int $gid = null,
+        array $environment = [],
     ): void {
         $this->validatedResources($cpus, $memory);
 
@@ -307,6 +309,15 @@ class Runtime implements RuntimeDriver
                 '--env', "OUTPOST_UID={$uid}",
                 '--env', "OUTPOST_GID={$gid}",
             );
+        }
+
+        foreach ($environment as $name => $value) {
+            if (preg_match('/^[A-Z_][A-Z0-9_]*$/D', $name) !== 1) {
+                throw new RuntimeException("The container environment variable name [{$name}] is invalid.");
+            }
+
+            $command[] = '--env';
+            $command[] = "{$name}={$value}";
         }
 
         foreach ($volumes as $volume) {
@@ -360,7 +371,80 @@ class Runtime implements RuntimeDriver
 
         if (! $result->successful()) {
             throw new RuntimeException(
-                "Unable to release the application processes in [{$container}]: ".$this->output($result),
+                "Unable to release the application processes in [{$container}]: ".ProcessOutput::combined($result),
+            );
+        }
+    }
+
+    /**
+     * Read normalized application process states from Supervisor.
+     *
+     * @param  list<string>  $processes
+     * @return array<string, array{state: string, details: string}>
+     */
+    public function processStates(string $container, array $processes): array
+    {
+        $states = [];
+
+        foreach ($processes as $process) {
+            $program = $this->supervisorProcess($process);
+            $result = $this->exec(
+                $container,
+                ['supervisorctl', 'status', $program],
+                root: true,
+            );
+            $output = ProcessOutput::combined($result);
+
+            if (preg_match('/\bERROR \(no such process\)/i', $output) === 1) {
+                $states[$process] = [
+                    'state' => 'missing',
+                    'details' => 'Supervisor has no such process.',
+                ];
+
+                continue;
+            }
+
+            if (preg_match(
+                '/^'.preg_quote($program, '/').'\s+(?<state>[A-Z]+)(?:\s+(?<details>.*))?$/D',
+                trim($result->output()),
+                $matches,
+            ) !== 1) {
+                if ($result->successful()) {
+                    throw new RuntimeException(
+                        "Unable to parse the [{$process}] process state reported by Supervisor.",
+                    );
+                }
+
+                throw new RuntimeException(
+                    "Unable to inspect the [{$process}] process in [{$container}]: {$output}",
+                );
+            }
+
+            $states[$process] = [
+                'state' => strtolower($matches['state']),
+                'details' => trim($matches['details'] ?? ''),
+            ];
+        }
+
+        return $states;
+    }
+
+    /**
+     * Restart one named application process through Supervisor.
+     */
+    public function restartProcess(string $container, string $process): void
+    {
+        $result = $this->exec(
+            $container,
+            ['supervisorctl', 'restart', $this->supervisorProcess($process)],
+            root: true,
+        );
+
+        $output = ProcessOutput::combined($result);
+
+        if (! $result->successful() || preg_match('/^.*\bERROR\b.*$/mi', $output) === 1) {
+            throw new RuntimeException(
+                "Unable to restart the [{$process}] process in [{$container}]: {$output}",
             );
         }
     }
@@ -629,9 +713,21 @@ class Runtime implements RuntimeDriver
         $user = $root ? 'root' : 'outpost';
         $home = $root ? '/root' : '/home/outpost';
 
+        $environment = ['--env', "HOME={$home}"];
+
+        // A root command must not leave root-owned files in the shared host
+        // caches used by normal provisioning commands.
+        if ($root) {
+            array_push(
+                $environment,
+                '--env', 'COMPOSER_CACHE_DIR=/root/.composer/cache',
+                '--env', 'NPM_CONFIG_CACHE=/root/.npm',
+            );
+        }
+
         return [
             'container', 'exec',
-            '--env', "HOME={$home}",
+            ...$environment,
             '--user', $user,
             '--workdir', '/app',
             $container,
@@ -640,14 +736,15 @@ class Runtime implements RuntimeDriver
     }
 
     /**
-     * Combine both output streams so a warning never hides the real failure.
+     * Resolve a repository process name to its private Supervisor program.
      */
-    protected function output(ProcessResult $result): string
+    protected function supervisorProcess(string $process): string
     {
-        return trim(implode("\n", array_filter([
-            trim($result->output()),
-            trim($result->errorOutput()),
-        ], fn (string $output): bool => $output !== '')));
+        if (preg_match('/^[a-z][a-z0-9_-]*$/D', $process) !== 1) {
+            throw new RuntimeException("The [{$process}] process name is invalid.");
+        }
+
+        return "outpost-{$process}";
     }
 
     /**

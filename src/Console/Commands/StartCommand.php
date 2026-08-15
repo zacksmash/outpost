@@ -11,9 +11,11 @@ use Zacksmash\Outpost\Console\Concerns\RebuildsInstanceContainers;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Console\Concerns\ResolvesPathRepositoryMounts;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
+use Zacksmash\Outpost\DependencyCaches;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Host;
+use Zacksmash\Outpost\LifecycleHooks;
 use Zacksmash\Outpost\Nginx;
 use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\PathRepositories;
@@ -55,11 +57,13 @@ class StartCommand extends Command
         Doctor $doctor,
         Git $git,
         Host $host,
+        DependencyCaches $dependencyCaches,
         PathRepositories $pathRepositories,
         Provisioner $provisioner,
         Nginx $nginx,
         Processes $processes,
         Supervisord $supervisord,
+        LifecycleHooks $hooks,
     ): int {
         if (($manifest = $this->instance($outposts)) === null) {
             return self::FAILURE;
@@ -77,6 +81,8 @@ class StartCommand extends Command
             }
 
             if ($state === null) {
+                $hooks->commands(LifecycleHooks::SETUP, $manifest->php);
+
                 if ($this->hasUnsafeWorktree([$manifest], $outposts, $git)) {
                     return self::FAILURE;
                 }
@@ -95,6 +101,7 @@ class StartCommand extends Command
                     $runtime,
                     $git,
                     $host,
+                    $dependencyCaches,
                     $provisioner,
                     $nginx,
                     $processes,

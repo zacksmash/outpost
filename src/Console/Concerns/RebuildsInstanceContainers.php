@@ -7,6 +7,7 @@ namespace Zacksmash\Outpost\Console\Concerns;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
+use Zacksmash\Outpost\DependencyCaches;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Host;
@@ -135,6 +136,7 @@ trait RebuildsInstanceContainers
         RuntimeDriver $runtime,
         Git $git,
         Host $host,
+        DependencyCaches $dependencyCaches,
         Provisioner $provisioner,
         Nginx $nginx,
         Processes $processes,
@@ -148,6 +150,7 @@ trait RebuildsInstanceContainers
 
         $worktree = $outposts->worktreePath($manifest->name);
         $runtimePath = $outposts->runtimePath($manifest->name);
+        $dependencyCacheMounts = $dependencyCaches->mounts();
         $gitDirectory = $git->commonDirectory();
         $resources = $runtime->validatedResources(
             $manifest->cpus ?? config()->integer('outpost.resources.cpus'),
@@ -200,12 +203,14 @@ trait RebuildsInstanceContainers
                         $worktree.':/app',
                         $runtimePath.':/etc/outpost:ro',
                         "{$gitDirectory}:{$gitDirectory}:ro",
+                        ...$dependencyCacheMounts,
                         ...$mounts,
                     ],
                     cpus: $resources['cpus'],
                     memory: $resources['memory'],
                     uid: $host->userId(),
                     gid: $host->groupId(),
+                    environment: $dependencyCaches->environment(),
                 ),
                 "Rebuilding [{$manifest->name}]",
             );

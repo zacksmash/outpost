@@ -84,6 +84,8 @@ php artisan outpost --pr=482 --name=pr-482 --open
 
 Outpost creates a worktree under `.outpost/<name>/app`, detects the application runtime and services, boots the VM, prepares `.env` from `.env.example`, installs dependencies, builds the front end, migrates the database, and waits for a real application response.
 
+Composer and npm downloads are cached once per repository under `.outpost/.cache` and reused by new or rebuilt instances. Installed `vendor` and `node_modules` directories remain private to each worktree, so branches never share executable dependencies. The cache survives instance removal and is disposable.
+
 | Option | Description |
 | --- | --- |
 | `branch` | Existing local or remote branch, or a new local branch. |
@@ -124,6 +126,19 @@ php artisan outpost:open billing
 
 For an iterative front-end session, `npm run build -- --watch` can rebuild in place; refresh the browser to see each build. Always complete one successful production build before declaring agent work ready. Set `frontend` to `none` to skip Node entirely.
 
+### Review links
+
+Give reviewers named links to the exact screens that matter:
+
+```php
+'previews' => [
+    'posts' => ['path' => '/acme/posts', 'note' => 'Review CRUD behavior'],
+    'telescope' => ['path' => '/telescope'],
+],
+```
+
+Run `php artisan outpost:open billing posts`, or discover every resolved URL and note through `outpost:info billing --json`. Paths stay on the instance origin and remain available when direct backing-service access is disabled. Invalid custom preview entries are omitted from discovery; opening one explicitly reports the configuration error without hiding the application endpoint or other valid previews.
+
 ### Application processes
 
 Run queue workers, the scheduler, Horizon, or other long-lived commands under Supervisor with shell-free argument lists:
@@ -137,19 +152,45 @@ Run queue workers, the scheduler, Horizon, or other long-lived commands under Su
 
 `@php` resolves to the selected PHP version. Processes start after provisioning, restart with the instance, and write to `outpost:logs`.
 
+Inspect every configured process or restart one after changing long-lived PHP code:
+
+```bash
+php artisan outpost:process billing                 # --json available
+php artisan outpost:process billing queue --restart
+```
+
+Only configured application processes are controllable; Outpost keeps nginx, PHP-FPM, and backing services private. `outpost:info --json` preserves its `processes` name list and adds a keyed `process_states` map. Stopped containers report `unavailable`, incomplete provisioning reports `waiting`, and a failed live-state probe reports `unknown` for only the affected process. Table output does not probe Supervisor.
+
+### Lifecycle hooks
+
+Add repository-specific setup without replacing Outpost's built-in provisioning:
+
+```php
+'hooks' => [
+    'setup' => ['search' => ['@php', 'artisan', 'scout:sync-index-settings']],
+    'verify' => ['generate' => ['npm', 'run', 'generate']],
+    'teardown' => ['cleanup' => ['@php', 'artisan', 'app:cleanup']],
+],
+```
+
+Hooks are named shell-free commands read from the host checkout's `config/outpost.php`, so an instance branch cannot inject them. `setup` runs after new and rebuilt containers are provisioned, `verify` runs before handoff checks, and `teardown` runs before removal. A failure stops the lifecycle operation and preserves the instance for diagnosis. Teardown runs only for a fully provisioned instance whose container is running; stopped, missing, and incomplete instances skip it with a warning. Emergency `--forget` removal bypasses hook parsing and execution entirely. `@php` selects the instance PHP version.
+
 ## Manage Instances
 
 ```bash
 php artisan outpost:list                         # inventory; --json available
 php artisan outpost:info billing                 # URLs and credentials; --json available
 php artisan outpost:open billing                 # start if needed, then open
-php artisan outpost:open billing mailpit         # endpoints: app or mailpit
+php artisan outpost:open billing posts           # app, mailpit, or a configured review link
 php artisan outpost:start billing
 php artisan outpost:upgrade billing               # replace only the container; preserves a clean worktree
 php artisan outpost:upgrade --all                 # upgrade every outdated or missing instance
 php artisan outpost:pull                         # pull or refresh the shared base image
 php artisan outpost:stop billing                 # preserves worktree and data
 php artisan outpost:exec billing -- php artisan test
+php artisan outpost:process billing                 # inspect managed processes; --json available
+php artisan outpost:process billing queue --restart
+php artisan outpost:verify billing               # handoff report; --json available
 php artisan outpost:shell billing
 php artisan outpost:logs billing --follow
 php artisan outpost:remove billing               # destroys the VM and its data
@@ -157,7 +198,18 @@ php artisan outpost:remove billing               # destroys the VM and its data
 
 `outpost:exec` passes every token after `--` directly to the command without a shell, streams output, and preserves its exit code. It and `outpost:shell` run as a host-ID-mapped non-root user; use `--root` only when elevation is required.
 
-`outpost:upgrade` pulls a missing configured image, verifies its runtime contract, and preflights every selected worktree before deleting any container. Dirty worktrees are always refused. The command keeps source and branches, resets container-local databases and services, then refreshes Composer, front-end builds, and migrations. Add `--mount-path-repos` for non-interactive external repository mounts.
+`outpost:verify` runs configured `verify` hooks, checks the runtime, container, exact image, final Git state, and application response, and creates a fresh production build when front-end management is enabled and `package.json` defines a `build` script. API-only applications skip that row just as provisioning skips front-end work. Every named `checks` command then runs without a shell. A dirty worktree is a non-blocking warning; a skipped `Configured checks` row means no project-specific test or lint command ran:
+
+```php
+'checks' => [
+    'tests' => ['@php', 'artisan', 'test'],
+    'lint' => ['composer', 'lint'],
+],
+```
+
+Use `outpost:verify <name> --json` for a stable agent-readable report. The command exits unsuccessfully when any required check fails and includes bounded command output for diagnosis.
+
+`outpost:upgrade` pulls a missing configured image, verifies its runtime contract, and preflights every selected worktree before deleting any container. Dirty worktrees are always refused. The command keeps source and branches, resets container-local databases and services, then refreshes Composer, front-end builds, migrations, and `setup` hooks. Rebuilt containers also pick up the repository's shared download caches. Add `--mount-path-repos` for non-interactive external repository mounts.
 
 If macOS blocks direct browser or CLI access, allow the calling application under **System Settings → Privacy & Security → Local Network**, then restart it. An agent can probe from inside the instance:
 
@@ -178,7 +230,7 @@ git -C .outpost/billing/app status --short
 git -C .outpost/billing/app commit -am "Finish billing"
 ```
 
-Removal refuses a dirty worktree, even with `--force`. Preserve the work or use `--discard-changes` to explicitly destroy it. `--force` skips prompts and retains the branch. To recreate an instance from another base, remove it and then delete or rename the retained branch yourself.
+Removal refuses a dirty worktree, even with `--force`, before running any `teardown` hook. Preserve the work or use `--discard-changes` to explicitly destroy it. Files intentionally written by a successful teardown do not trigger a second refusal or cause the hook to run again on retry. `--force` skips prompts and retains the branch. To recreate an instance from another base, remove it and then delete or rename the retained branch yourself.
 
 If the manifest and worktree survive but Apple container no longer has the container, run `outpost:start <name>` or `outpost:upgrade <name>`. Both recreate the container automatically, refuse dirty worktrees, preserve the worktree and application key, remount approved path repositories, and refresh Composer, front-end builds, and migrations. The missing container's writable service data is already gone and cannot be recovered; SQLite data inside the worktree survives.
 
@@ -195,7 +247,7 @@ Publish configuration with `php artisan vendor:publish --tag="outpost-config"`.
 | Key | Default | Description |
 | --- | --- | --- |
 | `domain` | `outpost` | Local publication domain. |
-| `image` | `ghcr.io/zacksmash/outpost:0.2.1` | Exact OCI image used by instances. |
+| `image` | `ghcr.io/zacksmash/outpost:0.3.0` | Exact OCI image used by instances. |
 | `dns` | `1.1.1.1` | Nameserver injected into builds and instances. |
 | `path` | `.outpost` | Project-relative instance directory. |
 | `resources.cpus` | `4` | Virtual CPUs per instance. |
@@ -206,7 +258,10 @@ Publish configuration with `php artisan vendor:publish --tag="outpost-config"`.
 | `tls.path` | `.outpost/tls` | Project-relative trusted HTTPS state directory. |
 | `services` | `null` | Explicit service list; `null` enables detection. |
 | `expose_services` | `true` | Expose detected services on the instance IP. |
+| `previews` | `[]` | Named same-origin review paths with optional notes. |
 | `processes` | `[]` | Named supervised argument lists. |
+| `checks` | `[]` | Named shell-free commands run by `outpost:verify`. |
+| `hooks` | `setup`, `verify`, and `teardown`: `[]` | Host-owned shell-free lifecycle commands. |
 | `database` | `outpost` / `outpost` / `password` | Sandbox credentials. |
 | `lifecycle_timeout` | `30` | Timeout for quick VM lifecycle operations. |
 | `timeout` | `60` | Timeout for the application readiness check. |

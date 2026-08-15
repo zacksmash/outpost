@@ -6,10 +6,10 @@ namespace Zacksmash\Outpost;
 
 use Illuminate\Contracts\Config\Repository;
 
-class Processes
+class VerificationChecks
 {
     /**
-     * Create an application process configuration reader.
+     * Create a project verification-check reader.
      */
     public function __construct(
         protected readonly Repository $config,
@@ -17,20 +17,17 @@ class Processes
     ) {}
 
     /**
-     * Resolve every configured process command for an instance PHP version.
+     * Resolve every configured check for an instance PHP version.
      *
      * @return array<string, list<string>>
      */
     public function commands(string $php): array
     {
         return $this->commands->resolve(
-            $this->config->get('outpost.processes', []),
-            'outpost.processes',
-            'process',
+            $this->config->get('outpost.checks', []),
+            'outpost.checks',
+            'check',
             $php,
-            // Supervisor parses semicolons as configuration comments; hooks
-            // and checks execute token arrays directly and do not need this.
-            rejectSemicolons: true,
         );
     }
 }

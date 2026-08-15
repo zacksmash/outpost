@@ -52,6 +52,18 @@ class Outposts
     }
 
     /**
+     * Get a repository-scoped package-manager cache path.
+     */
+    public function dependencyCachePath(string $manager): string
+    {
+        if (! in_array($manager, ['composer', 'npm'], true)) {
+            throw new InvalidArgumentException("The dependency cache [{$manager}] is not supported.");
+        }
+
+        return $this->path.'/.cache/'.$manager;
+    }
+
+    /**
      * Determine if an instance with the given name exists.
      */
     public function exists(string $name): bool

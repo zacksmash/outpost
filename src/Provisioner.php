@@ -19,6 +19,7 @@ class Provisioner
         protected readonly RuntimeDriver $runtime,
         protected readonly Outposts $outposts,
         protected readonly Repository $config,
+        protected readonly LifecycleHooks $hooks,
     ) {}
 
     /**
@@ -56,6 +57,8 @@ class Provisioner
             $this->step($onStep, 'Seeding the database',
                 fn () => $this->artisan($manifest, ['db:seed', '--force']));
         }
+
+        $this->hooks->run(LifecycleHooks::SETUP, $manifest, $onStep);
     }
 
     /**
@@ -83,6 +86,8 @@ class Provisioner
 
         $this->step($onStep, 'Running the database migrations',
             fn () => $this->artisan($manifest, ['migrate', '--force']));
+
+        $this->hooks->run(LifecycleHooks::SETUP, $manifest, $onStep);
     }
 
     /**
@@ -90,7 +95,7 @@ class Provisioner
      *
      * An app with a build script serves errors until it runs.
      */
-    protected function buildsFrontend(Manifest $manifest): bool
+    public function buildsFrontend(Manifest $manifest): bool
     {
         return $manifest->frontend === 'build'
             && $this->hasFrontendScript($manifest, 'build');
@@ -285,16 +290,11 @@ class Provisioner
         $result = $this->runtime->exec($manifest->container, $command);
 
         if (! $result->successful()) {
-            $output = trim(implode("\n", array_filter([
-                trim($result->output()),
-                trim($result->errorOutput()),
-            ], fn (string $output): bool => $output !== '')));
-
             throw new RuntimeException(sprintf(
                 'The command [%s] exited with code %d: %s',
                 implode(' ', $command),
                 $result->exitCode() ?? 1,
-                $output,
+                ProcessOutput::combined($result),
             ));
         }
     }

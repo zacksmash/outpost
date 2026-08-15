@@ -7,7 +7,7 @@ use Zacksmash\Outpost\Runtime;
 it('exposes sensible defaults', function () {
     expect(config('outpost.domain'))->toBe('outpost')
         ->and(config('outpost.image'))->toBe(Runtime::PUBLISHED_IMAGE)
-        ->and(Runtime::PUBLISHED_IMAGE)->toBe('ghcr.io/zacksmash/outpost:0.2.1')
+        ->and(Runtime::PUBLISHED_IMAGE)->toBe('ghcr.io/zacksmash/outpost:0.3.0')
         ->and(config('outpost.dns'))->toBe('1.1.1.1')
         ->and(config('outpost.path'))->toBe('.outpost')
         ->and(config('outpost.resources'))->toBe(['cpus' => 4, 'memory' => '2G'])
@@ -16,7 +16,14 @@ it('exposes sensible defaults', function () {
         ->and(config('outpost.https'))->toBeFalse()
         ->and(config('outpost.tls'))->toBe(['path' => '.outpost/tls'])
         ->and(config('outpost.expose_services'))->toBeTrue()
+        ->and(config('outpost.previews'))->toBe([])
         ->and(config('outpost.processes'))->toBe([])
+        ->and(config('outpost.checks'))->toBe([])
+        ->and(config('outpost.hooks'))->toBe([
+            'setup' => [],
+            'verify' => [],
+            'teardown' => [],
+        ])
         ->and(config('outpost.lifecycle_timeout'))->toBe(30)
         ->and(config('outpost.timeout'))->toBe(60);
 });

@@ -91,9 +91,13 @@ it('upgrades only the container while preserving and reprovisioning the worktree
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'run', '--detach', '--name', 'feature-x-app', '--dns', '1.1.1.1',
         '--cpus', '4', '--memory', '2G', '--env', 'OUTPOST_UID=501', '--env', 'OUTPOST_GID=20',
+        '--env', 'COMPOSER_CACHE_DIR=/var/cache/outpost/composer',
+        '--env', 'NPM_CONFIG_CACHE=/var/cache/outpost/npm',
         '--volume', $this->worktree.':/app',
         '--volume', $this->runtime.':/etc/outpost:ro',
         '--volume', $this->git.':'.$this->git.':ro',
+        '--volume', $this->root.'/.cache/composer:/var/cache/outpost/composer',
+        '--volume', $this->root.'/.cache/npm:/var/cache/outpost/npm',
         Runtime::PUBLISHED_IMAGE,
     ]);
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
@@ -105,6 +109,37 @@ it('upgrades only the container while preserving and reprovisioning the worktree
         'feature-x-app', 'npm', 'run', 'build',
     ]);
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('key:generate', $process->command, true));
+});
+
+it('reruns repository-owned setup hooks after rebuilding a container', function () {
+    config(['outpost.hooks.setup' => [
+        'search' => ['@php', 'artisan', 'scout:sync-index-settings'],
+    ]]);
+
+    fakeUpgradeProcesses($this->root, $this->currentDigest);
+
+    $this->artisan('outpost:upgrade', ['name' => 'feature-x'])
+        ->expectsOutputToContain('Running setup hook [search]')
+        ->assertSuccessful();
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'php8.4', 'artisan', 'scout:sync-index-settings',
+    ]);
+});
+
+it('rejects malformed setup hooks before deleting an existing container', function () {
+    config(['outpost.hooks.setup' => [
+        'search' => 'php artisan scout:sync-index-settings',
+    ]]);
+
+    fakeUpgradeProcesses($this->root, $this->currentDigest);
+
+    $this->artisan('outpost:upgrade', ['name' => 'feature-x'])
+        ->expectsOutputToContain('outpost.hooks.setup.search')
+        ->assertFailed();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => in_array($process->command[1] ?? null, ['stop', 'delete', 'run'], true));
 });
 
 it('refuses a dirty worktree before deleting its container', function () {

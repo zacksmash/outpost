@@ -7,6 +7,7 @@ use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
+use Zacksmash\Outpost\LifecycleHooks;
 use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\Provisioner;
@@ -17,7 +18,7 @@ beforeEach(function () {
 
     $this->root = sys_get_temp_dir().'/outpost-provision-'.Str::random(10);
     $this->outposts = new Outposts($this->root);
-    $this->provisioner = new Provisioner(new Runtime, $this->outposts, app('config'));
+    $this->provisioner = new Provisioner(new Runtime, $this->outposts, app('config'), app(LifecycleHooks::class));
 
     File::ensureDirectoryExists($this->root.'/feature-x/app');
     File::put($this->root.'/feature-x/app/.env.example', implode("\n", [

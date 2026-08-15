@@ -196,6 +196,23 @@ class Git
     }
 
     /**
+     * Get the exact commit checked out by a worktree.
+     */
+    public function worktreeHead(string $path): string
+    {
+        $head = trim($this->runOrFail(
+            ['git', '-C', $path, 'rev-parse', 'HEAD'],
+            "Unable to inspect the commit at [{$path}]",
+        )->output());
+
+        if (preg_match('/^[a-f0-9]{40,64}$/D', $head) !== 1) {
+            throw new RuntimeException("The worktree at [{$path}] returned an invalid Git commit.");
+        }
+
+        return $head;
+    }
+
+    /**
      * Add a worktree for a local, remote, or new branch reference.
      */
     public function addWorktree(string $path, string $reference): void
