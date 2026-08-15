@@ -1,6 +1,6 @@
-<div align="center">
-    <h1>Outpost</h1>
-</div>
+<p align="center">
+    <img src="https://raw.githubusercontent.com/zacksmash/outpost/main/art/outpost.png" width="640" alt="Outpost — A Laravel Package">
+</p>
 
 <p align="center">
     <a href="https://packagist.org/packages/zacksmash/outpost"><img src="https://img.shields.io/packagist/v/zacksmash/outpost.svg?style=flat-square" alt="Packagist"></a>
