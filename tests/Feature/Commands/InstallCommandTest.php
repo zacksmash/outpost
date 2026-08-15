@@ -6,7 +6,6 @@ use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
-use Zacksmash\Outpost\ApplicationHttps;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\DoctorCheck;
 use Zacksmash\Outpost\Runtime;
@@ -19,13 +18,9 @@ beforeEach(function () {
 
     config([
         'outpost.domain' => 'outpost',
-        'outpost.https' => 'auto',
+        'outpost.https' => false,
         'outpost.tls.path' => $this->root.'/tls',
     ]);
-
-    $this->applicationHttps = Mockery::mock(ApplicationHttps::class);
-    $this->applicationHttps->shouldReceive('detected')->byDefault()->andReturnTrue();
-    app()->instance(ApplicationHttps::class, $this->applicationHttps);
 });
 
 afterEach(function () {
@@ -37,7 +32,7 @@ it('finishes immediately when outpost is already ready', function () {
     $doctor->shouldReceive('inspect')->once()->andReturn([
         DoctorCheck::pass('Platform', 'macOS 27.0 on arm64'),
         DoctorCheck::pass('Runtime', 'The Apple container system is running.'),
-        DoctorCheck::pass('Base image', 'The [ghcr.io/zacksmash/outpost:0.1.2] image is available.'),
+        DoctorCheck::pass('Base image', 'The [ghcr.io/zacksmash/outpost:0.2.0] image is available.'),
     ]);
 
     app()->instance(Doctor::class, $doctor);
@@ -116,8 +111,8 @@ it('offers to pull a missing base image and verifies the result', function () {
     app()->instance(Doctor::class, $doctor);
 
     Process::fake([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.2') => Process::result('', 'not found', 1),
-        processPattern('container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.1.2') => Process::result('pulled'),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.0') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.2.0') => Process::result('pulled'),
     ]);
 
     $this->artisan('outpost:install')
@@ -138,7 +133,7 @@ it('builds the base image locally when requested', function () {
     app()->instance(Doctor::class, $doctor);
 
     Process::fake([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.2') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.0') => Process::result('', 'not found', 1),
         processPattern('container', 'build').' *' => Process::result('built'),
     ]);
 
@@ -227,6 +222,8 @@ it('configures the publication domain and restarts the runtime', function () {
 });
 
 it('uses one confirmation for networking https and the shared image', function () {
+    config(['outpost.https' => true]);
+
     $doctor = Mockery::mock(Doctor::class);
     $doctor->shouldReceive('inspect')->times(3)->andReturn(
         [
@@ -253,7 +250,7 @@ it('uses one confirmation for networking https and the shared image', function (
     $runtime->shouldReceive('stopSystem')->once();
     $runtime->shouldReceive('startSystem')->once();
     $runtime->shouldReceive('registerDomain')->once()->with('outpost');
-    $runtime->shouldReceive('pull')->once()->with('ghcr.io/zacksmash/outpost:0.1.2', Mockery::type('callable'));
+    $runtime->shouldReceive('pull')->once()->with('ghcr.io/zacksmash/outpost:0.2.0', Mockery::type('callable'));
 
     $configuration = Mockery::mock(RuntimeConfiguration::class);
     $configuration->shouldReceive('setDomain')->once()->with('outpost');
@@ -307,6 +304,8 @@ it('applies safe setup steps without prompting when forced', function () {
 });
 
 it('offers to prepare trusted https when setup is missing', function () {
+    config(['outpost.https' => true]);
+
     $doctor = Mockery::mock(Doctor::class);
     $doctor->shouldReceive('inspect')->twice()->andReturn(
         [DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS falls back to HTTP.', 'Run outpost:certify')],
@@ -323,50 +322,6 @@ it('offers to prepare trusted https when setup is missing', function () {
         ->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === ['mkcert', '-install']);
-});
-
-it('does not prepare trusted https in auto mode when the primary application uses http', function () {
-    $doctor = Mockery::mock(Doctor::class);
-    $doctor->shouldReceive('inspect')->once()->andReturn([
-        DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS is not prepared.', 'Prepare it.'),
-    ]);
-    $this->applicationHttps->shouldReceive('detected')->once()->andReturnFalse();
-
-    app()->instance(Doctor::class, $doctor);
-    Process::fake();
-
-    $this->artisan('outpost:install')
-        ->doesntExpectOutputToContain('Prepare trusted local HTTPS')
-        ->assertSuccessful();
-
-    Process::assertNothingRan();
-});
-
-it('keeps https optional in auto mode when mkcert is not installed', function () {
-    $doctor = Mockery::mock(Doctor::class);
-    $doctor->shouldReceive('inspect')->twice()->andReturn(
-        [
-            DoctorCheck::failure(Doctor::BASE_IMAGE_CHECK, 'Image missing.', 'Pull it.'),
-            DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS not prepared.', 'Install mkcert.'),
-        ],
-        [
-            DoctorCheck::pass(Doctor::BASE_IMAGE_CHECK, 'Image available.'),
-            DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS not prepared.', 'Install mkcert.'),
-        ],
-    );
-
-    app()->instance(Doctor::class, $doctor);
-
-    Process::fake([
-        processPattern('mkcert', '-version') => Process::result('', 'not found', 127),
-        processPattern('container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.1.2') => Process::result('pulled'),
-    ]);
-
-    $this->artisan('outpost:install')
-        ->expectsConfirmation('Prepare Outpost now?', 'yes')
-        ->assertSuccessful();
-
-    Process::assertDidntRun(fn (PendingProcess $process) => $process->command === ['mkcert', '-install']);
 });
 
 it('does not modify the trust store during forced setup unless https is explicit', function () {

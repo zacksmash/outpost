@@ -16,16 +16,11 @@ class OutpostServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/outpost.php', 'outpost');
 
-        $this->app->singleton(ApplicationHttps::class, function (Application $app) {
-            return new ApplicationHttps($app->make('url'));
-        });
-
         $this->app->singleton(Certificates::class, function (Application $app) {
             return new Certificates(
                 $app->make('files'),
                 $app->make('config'),
                 $app->basePath(),
-                $app->make(ApplicationHttps::class),
             );
         });
 
@@ -106,11 +101,11 @@ class OutpostServiceProvider extends ServiceProvider
             Console\Commands\OpenCommand::class,
             Console\Commands\OutpostCommand::class,
             Console\Commands\PullCommand::class,
-            Console\Commands\ReloadCommand::class,
             Console\Commands\RemoveCommand::class,
             Console\Commands\ShellCommand::class,
             Console\Commands\StartCommand::class,
             Console\Commands\StopCommand::class,
+            Console\Commands\UpgradeCommand::class,
         ]);
     }
 }

@@ -10,15 +10,11 @@ class Detection
      * Create a new detection result.
      *
      * @param  list<string>  $services
-     * @param  list<string>  $deferred
      */
     public function __construct(
         public readonly array $services,
-        public readonly array $deferred,
         public readonly ?string $database,
         public readonly string $php,
-        public readonly string $server,
         public readonly string $frontend,
-        public readonly ?string $octaneServer = null,
     ) {}
 }

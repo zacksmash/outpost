@@ -43,35 +43,65 @@ it('loads old manifests without a processes field', function () {
     expect(Manifest::fromArray($data)->processes)->toBe([]);
 });
 
-it('loads old octane manifests with the original swoole default', function () {
-    $data = fakeManifest(server: 'octane', octaneServer: 'frankenphp')->toArray();
+it('normalizes legacy octane and vite manifests to the standard runtime', function () {
+    $data = [
+        ...fakeManifest()->toArray(),
+        'server' => 'octane',
+        'octane_server' => 'frankenphp',
+        'frontend' => 'vite',
+        'deferred' => ['horizon'],
+    ];
 
-    unset($data['octane_server']);
+    $manifest = Manifest::fromArray($data);
 
-    expect(Manifest::fromArray($data)->octaneServer)->toBe('swoole');
+    expect($manifest->frontend)->toBe('build')
+        ->and($manifest->toArray())->not->toHaveKeys(['server', 'octane_server', 'deferred']);
 });
 
-it('loads old manifests with the original web and frontend defaults', function () {
-    $data = fakeManifest(server: 'octane', frontend: 'vite')->toArray();
+it('loads old manifests with the original frontend and lifecycle defaults', function () {
+    $data = fakeManifest()->toArray();
 
     unset(
-        $data['server'],
-        $data['octane_server'],
         $data['frontend'],
         $data['expose_services'],
         $data['cpus'],
         $data['memory'],
         $data['status'],
+        $data['image'],
+        $data['image_digest'],
     );
 
     $manifest = Manifest::fromArray($data);
 
-    expect($manifest->server)->toBe('fpm')
-        ->and($manifest->frontend)->toBe('build')
+    expect($manifest->frontend)->toBe('build')
         ->and($manifest->exposeServices)->toBeFalse()
         ->and($manifest->cpus)->toBeNull()
         ->and($manifest->memory)->toBeNull()
-        ->and($manifest->status)->toBe('ready');
+        ->and($manifest->status)->toBe('ready')
+        ->and($manifest->image)->toBeNull()
+        ->and($manifest->imageDigest)->toBeNull();
+});
+
+it('detects image reference and digest upgrades while keeping legacy state unknown', function () {
+    $current = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    $new = 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+
+    expect(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.2.0', $current))->toBeFalse()
+        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.2.1', $current))->toBeTrue()
+        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.2.0', $new))->toBeTrue()
+        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.2.0', null))->toBeNull()
+        ->and(fakeManifest(image: null, imageDigest: null)
+            ->imageOutdated('ghcr.io/zacksmash/outpost:0.2.0', $current))->toBeNull();
+});
+
+it('updates image identity without changing instance metadata', function () {
+    $digest = 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    $manifest = fakeManifest(status: 'provisioning')->withImage('outpost:next', $digest);
+
+    expect($manifest->image)->toBe('outpost:next')
+        ->and($manifest->imageDigest)->toBe($digest)
+        ->and($manifest->name)->toBe('feature-billing')
+        ->and($manifest->status)->toBe('provisioning');
 });
 
 it('can transition provisioning state without changing instance metadata', function () {
@@ -79,6 +109,13 @@ it('can transition provisioning state without changing instance metadata', funct
 
     expect($manifest->withStatus('failed')->status)->toBe('failed')
         ->and($manifest->withStatus('failed')->name)->toBe($manifest->name);
+});
+
+it('updates configured processes without changing instance metadata', function () {
+    $manifest = fakeManifest(processes: ['old'])->withProcesses(['queue']);
+
+    expect($manifest->processes)->toBe(['queue'])
+        ->and($manifest->name)->toBe('feature-billing');
 });
 
 it('rejects invalid lifecycle metadata', function (string $key, mixed $value) {
@@ -96,13 +133,14 @@ it('rejects invalid resource metadata', function (string $key, mixed $value) {
     'integer memory' => ['memory', 2048],
 ])->throws(InvalidArgumentException::class);
 
-it('rejects invalid octane server metadata', function (array $values) {
+it('rejects invalid image metadata', function (array $values) {
     Manifest::fromArray([...fakeManifest()->toArray(), ...$values]);
 })->with([
-    'unsupported server' => [['server' => 'octane', 'octane_server' => 'hyper']],
-    'server on fpm instance' => [['server' => 'fpm', 'octane_server' => 'swoole']],
-    'non-string server' => [['server' => 'octane', 'octane_server' => 1]],
-])->throws(InvalidArgumentException::class, 'manifest [octane_server]');
+    'empty image' => [['image' => '']],
+    'missing digest' => [['image_digest' => null]],
+    'digest without image' => [['image' => null]],
+    'malformed digest' => [['image_digest' => 'latest']],
+])->throws(InvalidArgumentException::class);
 
 it('rejects a non-boolean service exposure value', function () {
     Manifest::fromArray([...fakeManifest()->toArray(), 'expose_services' => 'yes']);
@@ -112,13 +150,11 @@ it('rejects processes that are not a list of strings', function () {
     Manifest::fromArray([...fakeManifest()->toArray(), 'processes' => ['queue', 1]]);
 })->throws(InvalidArgumentException::class, 'The manifest [processes] value must only contain strings.');
 
-it('rejects unsupported web and frontend modes', function (string $key, mixed $value) {
-    Manifest::fromArray([...fakeManifest()->toArray(), $key => $value]);
+it('rejects unsupported frontend modes', function (mixed $value) {
+    Manifest::fromArray([...fakeManifest()->toArray(), 'frontend' => $value]);
 })->with([
-    'web server' => ['server', 'apache'],
-    'null web server' => ['server', null],
-    'frontend' => ['frontend', 'webpack'],
-    'non-string frontend' => ['frontend', 1],
+    'frontend' => ['webpack'],
+    'non-string frontend' => [1],
 ])->throws(InvalidArgumentException::class);
 
 it('rejects a missing name', function () {

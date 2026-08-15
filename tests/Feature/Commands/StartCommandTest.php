@@ -76,20 +76,6 @@ it('points at the logs when the instance starts but never answers', function () 
         ->assertFailed();
 });
 
-it('points a missing container at the explicit recreation path', function () {
-    Process::fake([
-        processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
-    ]);
-
-    $this->artisan('outpost:start', ['name' => 'feature-x'])
-        ->expectsOutputToContain('container is missing')
-        ->expectsOutputToContain('php artisan outpost:start feature-x --recreate')
-        ->assertFailed();
-
-    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'start');
-    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'run');
-});
-
 it('recreates a missing container without replacing the surviving worktree', function () {
     $worktree = $this->root.'/feature-x/app';
     $runtime = $this->root.'/feature-x/runtime';
@@ -104,16 +90,13 @@ it('recreates a missing container without replacing the surviving worktree', fun
     ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
     File::put($runtime.'/nginx.conf', 'nginx');
     File::put($runtime.'/supervisord.conf', 'supervisor');
+    File::put($runtime.'/octane-watch', 'legacy watcher');
 
     Process::fake([
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
         processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::sequence()
             ->push(Process::result('', 'not found', 1))
-            ->push(Process::result(json_encode([
-                ['variants' => [['config' => ['config' => ['Labels' => [
-                    Runtime::IMAGE_RUNTIME_PATH_LABEL => Runtime::IMAGE_RUNTIME_PATH,
-                ]]]]]],
-            ], JSON_THROW_ON_ERROR))),
+            ->push(Process::result(fakeImageInspect())),
         processPattern('container', 'image', 'pull', Runtime::PUBLISHED_IMAGE) => Process::result('pulled'),
         processPattern('git', 'rev-parse', '--path-format=absolute', '--git-common-dir') => Process::result($git."\n"),
         processPattern('id', '-u') => Process::result("501\n"),
@@ -125,7 +108,6 @@ it('recreates a missing container without replacing the surviving worktree', fun
 
     $this->artisan('outpost:start', [
         'name' => 'feature-x',
-        '--recreate' => true,
         '--mount-path-repos' => true,
     ])
         ->expectsOutputToContain('Recreated: http://feature-x-app.outpost')
@@ -133,6 +115,9 @@ it('recreates a missing container without replacing the surviving worktree', fun
 
     expect(File::get($worktree.'/.env'))->toContain('APP_KEY=base64:existing')
         ->and(app(Outposts::class)->find('feature-x')?->status)->toBe('ready')
+        ->and(File::get($runtime.'/nginx.conf'))->toContain('fastcgi_pass unix:/run/php/php8.4-fpm.sock;')
+        ->and(File::get($runtime.'/supervisord.conf'))->toContain('[program:php-fpm]')
+        ->and(File::exists($runtime.'/octane-watch'))->toBeFalse()
         ->and(is_link($this->root.'/feature-x'.sys_get_temp_dir()))->toBeTrue();
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [

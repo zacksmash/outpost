@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
 use Zacksmash\Outpost\Outposts;
+use Zacksmash\Outpost\Runtime;
 
 beforeEach(function () {
     Process::preventStrayProcesses();
@@ -46,6 +47,7 @@ it('lists every instance with its live state', function () {
     app(Outposts::class)->save(fakeManifest('feature-y'));
 
     Process::fake([
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
             ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
         ], JSON_THROW_ON_ERROR)),
@@ -59,16 +61,21 @@ it('lists every instance with its live state', function () {
         ->and($output)->toContain('running')
         ->and($output)->toContain('missing')
         ->and($output)->toContain('http://feature-x-app.outpost')
-        ->and($output)->toContain('8.4 / fpm')
+        ->and($output)->toContain('8.4')
         ->and($output)->toContain('mysql, redis')
         ->and($output)->toContain('queue');
 });
 
 it('emits machine-readable instance state', function () {
     app(Outposts::class)->save(fakeManifest('feature-x', processes: ['queue']));
-    app(Outposts::class)->save(fakeManifest('feature-y'));
+    app(Outposts::class)->save(fakeManifest(
+        'feature-y',
+        image: 'ghcr.io/zacksmash/outpost:0.1.1',
+        imageDigest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    ));
 
     Process::fake([
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
             ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
         ], JSON_THROW_ON_ERROR)),
@@ -84,20 +91,24 @@ it('emits machine-readable instance state', function () {
             'container' => 'feature-x-app',
             'url' => 'http://feature-x-app.outpost',
             'php' => '8.4',
-            'server' => 'fpm',
             'frontend' => 'build',
             'services' => ['mysql', 'redis'],
             'processes' => ['queue'],
             'state' => 'running',
+            'image' => Runtime::PUBLISHED_IMAGE,
+            'configured_image' => Runtime::PUBLISHED_IMAGE,
+            'outdated' => false,
         ])
         ->and($instances[1]['state'])->toBe('missing')
-        ->and($instances[1]['status'])->toBe('degraded');
+        ->and($instances[1]['status'])->toBe('degraded')
+        ->and($instances[1]['outdated'])->toBeTrue();
 });
 
 it('reports a running instance that failed provisioning as degraded', function () {
     app(Outposts::class)->save(fakeManifest('failed', status: 'failed'));
 
     Process::fake([
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
             ['id' => 'failed-app', 'status' => ['state' => 'running']],
         ], JSON_THROW_ON_ERROR)),

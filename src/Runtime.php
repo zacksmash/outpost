@@ -16,7 +16,7 @@ class Runtime
     /**
      * The exact shared image shipped for this package contract.
      */
-    public const string PUBLISHED_IMAGE = 'ghcr.io/zacksmash/outpost:0.1.2';
+    public const string PUBLISHED_IMAGE = 'ghcr.io/zacksmash/outpost:0.2.0';
 
     /**
      * The OCI label used to advertise the image's runtime mount contract.
@@ -165,7 +165,7 @@ class Runtime
     /**
      * Read the compatibility metadata exposed by Apple container for an image.
      *
-     * @return array{labels: array<string, string>}|null
+     * @return array{digest: string|null, labels: array<string, string>}|null
      */
     public function imageMetadata(string $image): ?array
     {
@@ -187,7 +187,17 @@ class Runtime
             $labels = [];
         }
 
+        $digest = data_get($images, '0.configuration.descriptor.digest');
+
+        if (! is_string($digest) || preg_match('/^[a-z0-9]+:[a-f0-9]{32,}$/D', $digest) !== 1) {
+            $id = data_get($images, '0.id');
+            $digest = is_string($id) && preg_match('/^[a-f0-9]{64}$/D', $id) === 1
+                ? 'sha256:'.$id
+                : null;
+        }
+
         return [
+            'digest' => $digest,
             'labels' => array_filter(
                 $labels,
                 fn (mixed $value, mixed $key): bool => is_string($key) && is_string($value),

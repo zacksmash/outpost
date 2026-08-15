@@ -50,13 +50,11 @@ class Supervisord
             $programs[] = $this->program('redis', $command, 15);
         }
 
-        if ($manifest->server === 'fpm') {
-            $programs[] = $this->program(
-                'php-fpm',
-                "/usr/sbin/php-fpm{$manifest->php} --nodaemonize --fpm-config /etc/php/{$manifest->php}/fpm/php-fpm.conf",
-                20,
-            );
-        }
+        $programs[] = $this->program(
+            'php-fpm',
+            "/usr/sbin/php-fpm{$manifest->php} --nodaemonize --fpm-config /etc/php/{$manifest->php}/fpm/php-fpm.conf",
+            20,
+        );
 
         if ($manifest->uses('mailpit')) {
             $smtp = $manifest->exposeServices ? '0.0.0.0:1025' : '127.0.0.1:1025';

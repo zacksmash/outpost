@@ -92,11 +92,9 @@ it('writes values containing regex replacement characters literally', function (
         url: 'http://feature-x-app.out$1post\\box',
         branch: 'feature/x',
         php: '8.4',
-        server: 'fpm',
         frontend: 'build',
         exposeServices: false,
         services: [],
-        deferred: [],
         processes: [],
         database: 'sqlite',
         createdAt: CarbonImmutable::parse('2026-08-14T09:00:00+00:00'),
@@ -198,7 +196,7 @@ it('runs the container steps in order, pinned to the instance php version', func
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('db:seed', $process->command, true));
 });
 
-it('recovers a surviving worktree without replacing its key or rebuilding assets', function () {
+it('recovers a surviving worktree without replacing its key and refreshes runtime-dependent assets', function () {
     File::put($this->root.'/feature-x/app/.env', "APP_KEY=base64:existing\nAPP_URL=http://localhost\n");
     File::put($this->root.'/feature-x/app/package.json', json_encode([
         'scripts' => ['build' => 'vite build'],
@@ -217,6 +215,8 @@ it('recovers a surviving worktree without replacing its key or rebuilding assets
     expect($steps)->toBe([
         'Refreshing the environment configuration',
         'Installing composer dependencies',
+        'Installing npm dependencies',
+        'Building the front-end assets',
         'Running the database migrations',
     ])->and(File::get($this->root.'/feature-x/app/.env'))->toContain('APP_KEY=base64:existing');
 
@@ -225,7 +225,14 @@ it('recovers a surviving worktree without replacing its key or rebuilding assets
         'feature-x-app', 'php8.5', 'artisan', 'migrate', '--force',
     ]);
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('key:generate', $process->command, true));
-    Process::assertDidntRun(fn (PendingProcess $process) => in_array('npm', $process->command, true));
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'npm', 'install', '--no-fund', '--no-audit',
+    ]);
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'npm', 'run', 'build',
+    ]);
 });
 
 it('installs npm dependencies and builds assets when the app has a build script', function () {
@@ -280,6 +287,20 @@ it('uses npm ci when the application has a lock file', function () {
     ]);
 });
 
+it('removes a stale vite hot file before building assets', function () {
+    Process::fake();
+
+    File::ensureDirectoryExists($this->root.'/feature-x/app/public');
+    File::put($this->root.'/feature-x/app/public/hot', 'http://localhost:5173');
+    File::put($this->root.'/feature-x/app/package.json', json_encode([
+        'scripts' => ['build' => 'vite build'],
+    ], JSON_THROW_ON_ERROR));
+
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []));
+
+    expect(File::exists($this->root.'/feature-x/app/public/hot'))->toBeFalse();
+});
+
 it('skips the front-end build without a build script', function () {
     Process::fake();
 
@@ -290,30 +311,6 @@ it('skips the front-end build without a build script', function () {
     $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []));
 
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('npm', $process->command, true));
-});
-
-it('installs frontend dependencies without building in vite mode', function () {
-    Process::fake();
-
-    File::put($this->root.'/feature-x/app/package.json', json_encode([
-        'scripts' => ['dev' => 'vite', 'build' => 'vite build'],
-    ], JSON_THROW_ON_ERROR));
-
-    $this->provisioner->provision(fakeManifest(
-        name: 'feature-x',
-        database: 'sqlite',
-        services: [],
-        frontend: 'vite',
-    ));
-
-    Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
-        'feature-x-app', 'npm', 'install', '--no-fund', '--no-audit',
-    ]);
-    Process::assertDidntRun(fn (PendingProcess $process) => $process->command === [
-        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
-        'feature-x-app', 'npm', 'run', 'build',
-    ]);
 });
 
 it('skips frontend installation when frontend support is disabled', function () {

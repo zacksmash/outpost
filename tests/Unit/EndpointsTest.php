@@ -8,16 +8,14 @@ beforeEach(function () {
     $this->endpoints = new Endpoints(app('config'));
 });
 
-it('describes application and vite endpoints', function () {
+it('describes the application endpoint', function () {
     $endpoints = $this->endpoints->all(fakeManifest(
-        frontend: 'vite',
         services: [],
         url: 'https://billing-app.outpost',
     ));
 
     expect($endpoints)->toBe([
         'application' => ['url' => 'https://billing-app.outpost'],
-        'vite' => ['url' => 'https://billing-app.outpost:5173'],
     ]);
 });
 
@@ -59,13 +57,11 @@ it('keeps service endpoints private when exposure is disabled', function () {
 
 it('resolves browser endpoints by name', function () {
     $manifest = fakeManifest(
-        frontend: 'vite',
         services: ['mailpit'],
         exposeServices: true,
     );
 
     expect($this->endpoints->browser($manifest, 'app'))->toBe($manifest->url)
-        ->and($this->endpoints->browser($manifest, 'vite'))->toBe('http://feature-billing-app.outpost:5173')
         ->and($this->endpoints->browser($manifest, 'mailpit'))->toBe('http://feature-billing-app.outpost:8025');
 });
 

@@ -110,6 +110,9 @@ it('reads labels from apple container image metadata', function () {
     Process::fake([
         processPattern('container', 'image', 'inspect', 'outpost-base') => Process::result(json_encode([
             [
+                'configuration' => ['descriptor' => [
+                    'digest' => 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                ]],
                 'variants' => [[
                     'config' => [
                         'config' => [
@@ -126,6 +129,7 @@ it('reads labels from apple container image metadata', function () {
     ]);
 
     expect($this->runtime->imageMetadata('outpost-base'))->toBe([
+        'digest' => 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         'labels' => [
             Runtime::IMAGE_RUNTIME_PATH_LABEL => '/etc/outpost',
             'org.opencontainers.image.version' => '0.1.0',
@@ -133,13 +137,25 @@ it('reads labels from apple container image metadata', function () {
     ])->and($this->runtime->imageMetadata('missing'))->toBeNull();
 });
 
+it('falls back to the apple image id when descriptor metadata is absent', function () {
+    Process::fake([
+        processPattern('container', 'image', 'inspect', 'outpost-base') => Process::result(json_encode([[
+            'id' => 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+            'variants' => [],
+        ]], JSON_THROW_ON_ERROR)),
+    ]);
+
+    expect($this->runtime->imageMetadata('outpost-base')['digest'])
+        ->toBe('sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
+});
+
 it('pulls an image from an oci registry', function () {
     Process::fake();
 
-    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.1.2');
+    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.2.0');
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.1.2',
+        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.2.0',
     ]);
 });
 
@@ -148,8 +164,8 @@ it('surfaces the real error when an image pull fails', function () {
         processPattern('container', 'image', 'pull').' *' => Process::result('', 'denied', 1),
     ]);
 
-    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.1.2');
-})->throws(RuntimeException::class, 'Unable to pull the [ghcr.io/zacksmash/outpost:0.1.2] image: denied');
+    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.2.0');
+})->throws(RuntimeException::class, 'Unable to pull the [ghcr.io/zacksmash/outpost:0.2.0] image: denied');
 
 it('builds an image with dns, tag, and build arguments', function () {
     Process::fake();

@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\ServiceProvider;
-use Zacksmash\Outpost\ApplicationHttps;
 use Zacksmash\Outpost\Certificates;
 use Zacksmash\Outpost\Detector;
 use Zacksmash\Outpost\Doctor;
@@ -24,10 +24,6 @@ it('binds the instance store as a singleton rooted at the configured path', func
 
 it('binds the certificate manager as a singleton', function () {
     expect(app(Certificates::class))->toBe(app(Certificates::class));
-});
-
-it('binds the primary application https detector as a singleton', function () {
-    expect(app(ApplicationHttps::class))->toBe(app(ApplicationHttps::class));
 });
 
 it('binds the detector as a singleton', function () {
@@ -55,4 +51,10 @@ it('publishes the package config', function () {
 
     expect($paths)->toHaveCount(1)
         ->and(array_values($paths))->toBe([config_path('outpost.php')]);
+});
+
+it('registers the focused command surface', function () {
+    expect(Artisan::all())
+        ->toHaveKey('outpost:upgrade')
+        ->not->toHaveKey('outpost:reload');
 });

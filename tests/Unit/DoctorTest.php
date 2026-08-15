@@ -6,7 +6,6 @@ use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
-use Zacksmash\Outpost\ApplicationHttps;
 use Zacksmash\Outpost\Certificates;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\DoctorCheck;
@@ -27,13 +26,10 @@ beforeEach(function () {
     File::put($this->root.'/.outpost/tls/key.pem', 'key');
     File::put($this->root.'/.outpost/tls/domain', "outpost\n");
 
-    $this->applicationHttps = Mockery::mock(ApplicationHttps::class);
-    $this->applicationHttps->shouldReceive('detected')->byDefault()->andReturnTrue();
     $certificates = new Certificates(
         new Filesystem,
         app('config'),
         $this->root,
-        $this->applicationHttps,
     );
 
     $this->doctor = new Doctor(
@@ -61,11 +57,7 @@ function fakeHealthyDoctor(array $overrides = []): void
         processPattern('container', 'system', 'status', '--format', 'json') => Process::result('{"status":"running"}'),
         processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result('{"dns":{"domain":"outpost"}}'),
         processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\noutpost\n"),
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.2') => Process::result(json_encode([
-            ['variants' => [['config' => ['config' => ['Labels' => [
-                Runtime::IMAGE_RUNTIME_PATH_LABEL => Runtime::IMAGE_RUNTIME_PATH,
-            ]]]]]],
-        ], JSON_THROW_ON_ERROR)),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.0') => Process::result(fakeImageInspect()),
         processPattern('git', 'rev-parse', 'HEAD') => Process::result("abc123\n"),
     ]);
 }
@@ -80,14 +72,30 @@ it('passes a healthy supported environment', function () {
         ->and($checks['Platform']->detail)->toBe('macOS 27.0 on arm64')
         ->and($checks['Runtime version']->detail)->toContain('1.2.2')
         ->and($checks['Publication domain']->detail)->toContain('[outpost]')
-        ->and($checks['Base image']->detail)->toContain('[ghcr.io/zacksmash/outpost:0.1.2]');
+        ->and($checks['Base image']->detail)->toContain('[ghcr.io/zacksmash/outpost:0.2.0]');
+});
+
+it('rejects an image whose immutable identity cannot be recorded', function () {
+    fakeHealthyDoctor([
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.0') => Process::result(json_encode([
+            ['variants' => [['config' => ['config' => ['Labels' => [
+                Runtime::IMAGE_RUNTIME_PATH_LABEL => Runtime::IMAGE_RUNTIME_PATH,
+            ]]]]]],
+        ], JSON_THROW_ON_ERROR)),
+    ]);
+
+    $check = collect($this->doctor->inspect())->keyBy('name')[Doctor::BASE_IMAGE_CHECK];
+
+    expect($check->status)->toBe(DoctorCheck::FAIL)
+        ->and($check->detail)->toContain('immutable digest')
+        ->and($check->remedy)->toContain('outpost:pull --force');
 });
 
 it('rejects an installed image without the required runtime path contract', function (?string $runtimePath) {
     $labels = $runtimePath === null ? [] : [Runtime::IMAGE_RUNTIME_PATH_LABEL => $runtimePath];
 
     fakeHealthyDoctor([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.2') => Process::result(json_encode([
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.0') => Process::result(json_encode([
             ['variants' => [['config' => ['config' => ['Labels' => $labels]]]]],
         ], JSON_THROW_ON_ERROR)),
     ]);
@@ -114,21 +122,14 @@ it('points an incompatible custom image configuration at the current shared imag
     $check = collect($this->doctor->inspect())->keyBy('name')[Doctor::BASE_IMAGE_CHECK];
 
     expect($check->status)->toBe(DoctorCheck::FAIL)
-        ->and($check->remedy)->toContain('ghcr.io/zacksmash/outpost:0.1.2')
+        ->and($check->remedy)->toContain('ghcr.io/zacksmash/outpost:0.2.0')
         ->and($check->remedy)->toContain('outpost:build --force');
 });
 
 it('identifies machine setup required before instance creation', function () {
-    Process::fake([
-        processPattern('mkcert', '-version') => Process::result('v1.4.4'),
-    ]);
-
     expect($this->doctor->requiresSetup([
         DoctorCheck::failure(Doctor::BASE_IMAGE_CHECK, 'Missing.', 'Pull it.'),
     ]))->toBeTrue()
-        ->and($this->doctor->requiresSetup([
-            DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS falls back to HTTP.'),
-        ]))->toBeTrue()
         ->and($this->doctor->requiresSetup([
             DoctorCheck::warning('Composer lock', 'Dependencies may drift.'),
         ]))->toBeFalse();
@@ -139,47 +140,21 @@ it('identifies machine setup required before instance creation', function () {
         DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS is disabled.'),
     ]))->toBeFalse();
 
-    config(['outpost.https' => 'auto']);
-    Process::fake([
-        processPattern('mkcert', '-version') => Process::result('', 'not found', 127),
-    ]);
+    config(['outpost.https' => true]);
 
     expect($this->doctor->requiresSetup([
-        DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS falls back to HTTP.'),
-    ]))->toBeFalse();
+        DoctorCheck::failure(Doctor::TLS_CHECK, 'HTTPS is not prepared.', 'Prepare it.'),
+    ]))->toBeTrue();
 });
 
-it('warns when auto https has not been certified yet', function () {
+it('passes the local https check when https is disabled', function () {
     File::deleteDirectory($this->root.'/.outpost/tls');
-    fakeHealthyDoctor();
-
-    $checks = collect($this->doctor->inspect())->keyBy('name');
-
-    expect($checks[Doctor::TLS_CHECK]->status)->toBe(DoctorCheck::WARNING)
-        ->and($checks[Doctor::TLS_CHECK]->detail)->toContain('fall back to HTTP')
-        ->and($checks[Doctor::TLS_CHECK]->remedy)->toContain('outpost:certify');
-});
-
-it('passes the local https check when automatic mode detects an http primary application', function () {
-    File::deleteDirectory($this->root.'/.outpost/tls');
-    $this->applicationHttps->shouldReceive('detected')->once()->andReturnFalse();
     fakeHealthyDoctor();
 
     $checks = collect($this->doctor->inspect())->keyBy('name');
 
     expect($checks[Doctor::TLS_CHECK]->status)->toBe(DoctorCheck::PASS)
-        ->and($checks[Doctor::TLS_CHECK]->detail)->toContain('primary application uses HTTP');
-});
-
-it('does not request https setup when automatic mode detects an http primary application', function () {
-    $this->applicationHttps->shouldReceive('detected')->once()->andReturnFalse();
-    Process::fake([
-        processPattern('mkcert', '-version') => Process::result('v1.4.4'),
-    ]);
-
-    expect($this->doctor->requiresSetup([
-        DoctorCheck::warning(Doctor::TLS_CHECK, 'HTTPS falls back to HTTP.'),
-    ]))->toBeFalse();
+        ->and($checks[Doctor::TLS_CHECK]->detail)->toContain('HTTPS is disabled');
 });
 
 it('fails when required trusted https setup is missing', function () {
@@ -251,7 +226,7 @@ it('reports domain, resolver, image, and project problems with fixes', function 
     fakeHealthyDoctor([
         processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result('{"dns":{"domain":"box"}}'),
         processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\nbox\n"),
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.2') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.0') => Process::result('', 'not found', 1),
         processPattern('git', 'rev-parse', 'HEAD') => Process::result('', 'unknown revision', 128),
     ]);
 

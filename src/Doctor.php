@@ -123,17 +123,7 @@ class Doctor
 
             if ($check->name === self::TLS_CHECK
                 && $check->status !== DoctorCheck::PASS) {
-                $mode = $this->config->get('outpost.https', 'auto');
-
-                if ($mode === false) {
-                    return false;
-                }
-
-                if ($mode === 'auto') {
-                    return $this->certificates->wantsHttps() && $this->certificates->available();
-                }
-
-                return true;
+                return $this->certificates->wantsHttps();
             }
         }
 
@@ -297,6 +287,14 @@ class Doctor
             );
         }
 
+        if ($metadata['digest'] === null) {
+            return DoctorCheck::failure(
+                self::BASE_IMAGE_CHECK,
+                "The [{$image}] image has no immutable digest, so instance upgrades cannot be tracked.",
+                $this->imageRemedy($image, force: true),
+            );
+        }
+
         return DoctorCheck::pass(
             self::BASE_IMAGE_CHECK,
             "The [{$image}] image is available and matches runtime-path contract [".Runtime::IMAGE_RUNTIME_PATH.'].',
@@ -306,7 +304,7 @@ class Doctor
     /**
      * Describe how to acquire a compatible shared or customized image.
      */
-    protected function imageRemedy(string $image, bool $force = false): string
+    public function imageRemedy(string $image, bool $force = false): string
     {
         $build = 'outpost:build'.($force ? ' --force' : '');
 
@@ -359,25 +357,15 @@ class Doctor
      */
     protected function https(): DoctorCheck
     {
-        $mode = $this->config->get('outpost.https', 'auto');
-
         try {
-            $wanted = $this->certificates->wantsHttps();
-
-            if (! $wanted) {
-                return $mode === false
-                    ? DoctorCheck::warning(
-                        self::TLS_CHECK,
-                        'HTTPS is disabled; new instances use HTTP.',
-                        'Set OUTPOST_HTTPS=auto to mirror the primary application, or true to require HTTPS.',
-                    )
-                    : DoctorCheck::pass(
-                        self::TLS_CHECK,
-                        'The primary application uses HTTP; automatic mode creates HTTP instances.',
-                    );
+            if (! $this->certificates->wantsHttps()) {
+                return DoctorCheck::pass(
+                    self::TLS_CHECK,
+                    'HTTPS is disabled; new instances use HTTP.',
+                );
             }
 
-            $enabled = $this->certificates->enabled();
+            $this->certificates->enabled();
         } catch (RuntimeException $e) {
             return DoctorCheck::failure(
                 self::TLS_CHECK,
@@ -386,16 +374,6 @@ class Doctor
             );
         }
 
-        if ($enabled) {
-            return DoctorCheck::pass(self::TLS_CHECK, 'Trusted HTTPS is ready; each new instance receives an exact hostname certificate.');
-        }
-
-        return DoctorCheck::warning(
-            self::TLS_CHECK,
-            $mode === 'auto'
-                ? 'The primary application uses HTTPS, but trusted Outpost HTTPS is not prepared; new instances fall back to HTTP.'
-                : 'No trusted certificate exists yet; new instances cannot use HTTPS.',
-            'Run: brew install mkcert && php artisan outpost:certify',
-        );
+        return DoctorCheck::pass(self::TLS_CHECK, 'Trusted HTTPS is ready; each new instance receives an exact hostname certificate.');
     }
 }

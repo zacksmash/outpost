@@ -18,7 +18,6 @@ class Manifest implements Arrayable
      * Create a new manifest instance.
      *
      * @param  list<string>  $services
-     * @param  list<string>  $deferred
      * @param  list<string>  $processes
      */
     public function __construct(
@@ -27,22 +26,24 @@ class Manifest implements Arrayable
         public readonly string $url,
         public readonly string $branch,
         public readonly string $php,
-        public readonly string $server,
         public readonly string $frontend,
         public readonly bool $exposeServices,
         public readonly array $services,
-        public readonly array $deferred,
         public readonly array $processes,
         public readonly ?string $database,
         public readonly CarbonImmutable $createdAt,
         public readonly ?int $cpus = null,
         public readonly ?string $memory = null,
-        public readonly ?string $octaneServer = null,
         public readonly string $status = 'ready',
+        public readonly ?string $image = null,
+        public readonly ?string $imageDigest = null,
     ) {}
 
     /**
      * Create a manifest from its array representation.
+     *
+     * Legacy Octane and Vite fields are deliberately ignored. Rebuilt
+     * instances use Outpost's standard PHP-FPM and asset-build runtime.
      *
      * @param  array<string, mixed>  $data
      */
@@ -58,26 +59,14 @@ class Manifest implements Arrayable
             throw new InvalidArgumentException('The manifest [database] value must be a string or null.');
         }
 
-        if (array_key_exists('server', $data)
-            && (! is_string($data['server']) || ! in_array($data['server'], ['fpm', 'octane'], true))) {
-            throw new InvalidArgumentException('The manifest [server] value must be fpm or octane.');
+        $frontend = $data['frontend'] ?? 'build';
+
+        if (! is_string($frontend) || ! in_array($frontend, ['build', 'vite', 'none'], true)) {
+            throw new InvalidArgumentException('The manifest [frontend] value must be build or none.');
         }
 
-        $server = $data['server'] ?? 'fpm';
-
-        if (array_key_exists('octane_server', $data)
-            && ($server === 'octane'
-                ? ! is_string($data['octane_server'])
-                    || ! in_array($data['octane_server'], ['swoole', 'roadrunner', 'frankenphp'], true)
-                : $data['octane_server'] !== null)) {
-            throw new InvalidArgumentException(
-                'The manifest [octane_server] value must be swoole, roadrunner, or frankenphp for an Octane instance, and null otherwise.',
-            );
-        }
-
-        if (array_key_exists('frontend', $data)
-            && (! is_string($data['frontend']) || ! in_array($data['frontend'], ['build', 'vite', 'none'], true))) {
-            throw new InvalidArgumentException('The manifest [frontend] value must be build, vite, or none.');
+        if ($frontend === 'vite') {
+            $frontend = 'build';
         }
 
         if (array_key_exists('expose_services', $data) && ! is_bool($data['expose_services'])) {
@@ -102,6 +91,23 @@ class Manifest implements Arrayable
             throw new InvalidArgumentException('The manifest [status] value must be provisioning, ready, or failed.');
         }
 
+        $image = $data['image'] ?? null;
+        $imageDigest = $data['image_digest'] ?? null;
+
+        if (($image === null) !== ($imageDigest === null)) {
+            throw new InvalidArgumentException('The manifest [image] and [image_digest] values must either both be present or both be null.');
+        }
+
+        if ($image !== null
+            && (! is_string($image) || $image === '' || trim($image) !== $image || preg_match('/\s/', $image) === 1)) {
+            throw new InvalidArgumentException('The manifest [image] value must be a non-empty OCI image reference or null.');
+        }
+
+        if ($imageDigest !== null
+            && (! is_string($imageDigest) || preg_match('/^[a-z0-9]+:[a-f0-9]{32,}$/D', $imageDigest) !== 1)) {
+            throw new InvalidArgumentException('The manifest [image_digest] value must be an OCI digest or null.');
+        }
+
         if (! isset($data['created_at']) || ! is_string($data['created_at'])) {
             throw new InvalidArgumentException('The manifest [created_at] value must be a string.');
         }
@@ -122,11 +128,9 @@ class Manifest implements Arrayable
             url: $data['url'],
             branch: $data['branch'],
             php: $data['php'],
-            server: $server,
-            frontend: $data['frontend'] ?? 'build',
+            frontend: $frontend,
             exposeServices: $data['expose_services'] ?? false,
             services: static::stringList($data, 'services'),
-            deferred: static::stringList($data, 'deferred'),
             processes: array_key_exists('processes', $data)
                 ? static::stringList($data, 'processes')
                 : [],
@@ -134,8 +138,9 @@ class Manifest implements Arrayable
             createdAt: $createdAt,
             cpus: $data['cpus'] ?? null,
             memory: $data['memory'] ?? null,
-            octaneServer: $server === 'octane' ? ($data['octane_server'] ?? 'swoole') : null,
             status: $data['status'] ?? 'ready',
+            image: $image,
+            imageDigest: $imageDigest,
         );
     }
 
@@ -148,25 +153,56 @@ class Manifest implements Arrayable
             throw new InvalidArgumentException('The manifest status must be provisioning, ready, or failed.');
         }
 
-        return new self(
-            name: $this->name,
-            container: $this->container,
-            url: $this->url,
-            branch: $this->branch,
-            php: $this->php,
-            server: $this->server,
-            frontend: $this->frontend,
-            exposeServices: $this->exposeServices,
-            services: $this->services,
-            deferred: $this->deferred,
+        return $this->copy(
             processes: $this->processes,
-            database: $this->database,
-            createdAt: $this->createdAt,
-            cpus: $this->cpus,
-            memory: $this->memory,
-            octaneServer: $this->octaneServer,
             status: $status,
+            image: $this->image,
+            imageDigest: $this->imageDigest,
         );
+    }
+
+    /**
+     * Return a copy that records the exact image used by its container.
+     */
+    public function withImage(string $image, string $digest): self
+    {
+        return $this->copy(
+            processes: $this->processes,
+            status: $this->status,
+            image: $image,
+            imageDigest: $digest,
+        );
+    }
+
+    /**
+     * Return a copy with the application processes configured for a rebuild.
+     *
+     * @param  list<string>  $processes
+     */
+    public function withProcesses(array $processes): self
+    {
+        return $this->copy(
+            processes: $processes,
+            status: $this->status,
+            image: $this->image,
+            imageDigest: $this->imageDigest,
+        );
+    }
+
+    /**
+     * Compare the recorded image with the configured image available now.
+     */
+    public function imageOutdated(string $configuredImage, ?string $configuredDigest): ?bool
+    {
+        if ($this->image === null || $this->imageDigest === null) {
+            return null;
+        }
+
+        if ($this->image !== $configuredImage) {
+            return true;
+        }
+
+        return $configuredDigest === null ? null : $this->imageDigest !== $configuredDigest;
     }
 
     /**
@@ -198,19 +234,49 @@ class Manifest implements Arrayable
             'url' => $this->url,
             'branch' => $this->branch,
             'php' => $this->php,
-            'server' => $this->server,
-            'octane_server' => $this->octaneServer,
             'frontend' => $this->frontend,
             'expose_services' => $this->exposeServices,
             'services' => $this->services,
-            'deferred' => $this->deferred,
             'processes' => $this->processes,
             'database' => $this->database,
             'created_at' => $this->createdAt->toIso8601String(),
             'cpus' => $this->cpus,
             'memory' => $this->memory,
             'status' => $this->status,
+            'image' => $this->image,
+            'image_digest' => $this->imageDigest,
         ];
+    }
+
+    /**
+     * Copy immutable instance metadata with updated lifecycle fields.
+     *
+     * @param  list<string>  $processes
+     */
+    protected function copy(
+        array $processes,
+        string $status,
+        ?string $image,
+        ?string $imageDigest,
+    ): self {
+        return new self(
+            name: $this->name,
+            container: $this->container,
+            url: $this->url,
+            branch: $this->branch,
+            php: $this->php,
+            frontend: $this->frontend,
+            exposeServices: $this->exposeServices,
+            services: $this->services,
+            processes: $processes,
+            database: $this->database,
+            createdAt: $this->createdAt,
+            cpus: $this->cpus,
+            memory: $this->memory,
+            status: $status,
+            image: $image,
+            imageDigest: $imageDigest,
+        );
     }
 
     /**

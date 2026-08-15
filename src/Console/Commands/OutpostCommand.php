@@ -138,9 +138,18 @@ class OutpostCommand extends Command
                 return self::FAILURE;
             }
 
-            if (! $runtime->hasImage($image)) {
+            $imageMetadata = $runtime->imageMetadata($image);
+
+            if ($imageMetadata === null) {
                 error("The [{$image}] base image is not installed locally.");
                 note("Install it once, then try again:\n\n  php artisan outpost:pull\n\nFor a customized local build, use [php artisan outpost:build].");
+
+                return self::FAILURE;
+            }
+
+            if ($imageMetadata['digest'] === null) {
+                error("The [{$image}] base image has no immutable digest, so Outpost cannot track instance upgrades.");
+                note('Run [php artisan outpost:doctor] for the exact repair.');
 
                 return self::FAILURE;
             }
@@ -187,30 +196,17 @@ class OutpostCommand extends Command
             $detection = $detector->detect();
             $secure = $certificates->enabled();
             $url = ($secure ? 'https' : 'http')."://{$container}.{$domain}";
-            $commands = $processes->commands(
-                php: $detection->php,
-                server: $detection->server,
-                frontend: $detection->frontend,
-                url: $url,
-                octaneServer: $detection->octaneServer,
-            );
+            $commands = $processes->commands($detection->php);
 
             info(sprintf(
-                'PHP %s (%s) · Resources: %d CPU / %s · Frontend: %s · Services: %s · Processes: %s',
+                'PHP %s (PHP-FPM) · Resources: %d CPU / %s · Frontend: %s · Services: %s · Processes: %s',
                 $detection->php,
-                $detection->server === 'octane'
-                    ? 'Octane / '.$detection->octaneServer
-                    : 'PHP-FPM',
                 $resources['cpus'],
                 $resources['memory'],
-                $detection->frontend === 'vite' ? 'Vite' : ucfirst($detection->frontend),
+                ucfirst($detection->frontend),
                 $detection->services === [] ? 'none' : implode(', ', $detection->services),
                 $commands === [] ? 'none' : implode(', ', array_keys($commands)),
             ));
-
-            if ($detection->deferred !== []) {
-                warning('Detected but not run inside instances: '.implode(', ', $detection->deferred).'.');
-            }
 
             $manifest = new Manifest(
                 name: $name,
@@ -218,18 +214,17 @@ class OutpostCommand extends Command
                 url: $url,
                 branch: $branch,
                 php: $detection->php,
-                server: $detection->server,
                 frontend: $detection->frontend,
                 exposeServices: config()->boolean('outpost.expose_services'),
                 services: $detection->services,
-                deferred: $detection->deferred,
                 processes: array_keys($commands),
                 database: $detection->database,
                 createdAt: CarbonImmutable::now(),
                 cpus: $resources['cpus'],
                 memory: $resources['memory'],
-                octaneServer: $detection->octaneServer,
                 status: 'provisioning',
+                image: $image,
+                imageDigest: $imageMetadata['digest'],
             );
 
             $outposts->save($manifest);
@@ -256,16 +251,10 @@ class OutpostCommand extends Command
             );
             $gitDirectory = $git->commonDirectory();
 
-            $runtimeFiles = [
+            $outposts->writeRuntime($name, [
                 'nginx.conf' => $nginx->generate($manifest),
                 'supervisord.conf' => $supervisord->generate($manifest, $commands),
-            ];
-
-            if ($manifest->server === 'octane') {
-                $runtimeFiles['octane-watch'] = File::get(dirname(__DIR__, 3).'/stubs/octane-watch.sh');
-            }
-
-            $outposts->writeRuntime($name, $runtimeFiles);
+            ]);
 
             $tlsDirectory = $outposts->runtimePath($name).'/tls';
 
@@ -337,10 +326,6 @@ class OutpostCommand extends Command
 
         if ($manifest->services !== []) {
             note("Inspect service URLs and credentials with:\n\n  php artisan outpost:info {$manifest->name}");
-        }
-
-        if ($manifest->server === 'octane') {
-            note("PHP changes are watched with polling. Force an immediate worker reload with:\n\n  php artisan outpost:reload {$manifest->name}");
         }
 
         outro("The instance is ready: {$manifest->url}");

@@ -58,6 +58,17 @@ class ListCommand extends Command
                 );
             }
 
+            $configuredImage = config()->string('outpost.image');
+            $configuredImageDigest = $runtime->imageMetadata($configuredImage)['digest'] ?? null;
+            $outdated = [];
+
+            foreach ($manifests as $manifest) {
+                $outdated[$manifest->name] = $manifest->imageOutdated(
+                    $configuredImage,
+                    $configuredImageDigest,
+                );
+            }
+
             if ($this->option('json')) {
                 $this->line(json_encode(array_map(
                     fn (Manifest $manifest): array => [
@@ -67,6 +78,9 @@ class ListCommand extends Command
                             $manifest,
                             $instanceStates[$manifest->name],
                         ),
+                        'configured_image' => $configuredImage,
+                        'configured_image_digest' => $configuredImageDigest,
+                        'outdated' => $outdated[$manifest->name],
                     ],
                     $manifests,
                 ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
@@ -80,18 +94,20 @@ class ListCommand extends Command
         }
 
         table(
-            ['Name', 'Branch', 'PHP', 'Services', 'Processes', 'State', 'URL'],
+            ['Name', 'Branch', 'PHP', 'Services', 'Processes', 'State', 'Image', 'Upgrade', 'URL'],
             array_map(fn (Manifest $manifest): array => [
                 $manifest->name,
                 $manifest->branch,
-                implode(' / ', array_filter([
-                    $manifest->php,
-                    $manifest->server,
-                    $manifest->octaneServer,
-                ])),
+                $manifest->php,
                 $manifest->services === [] ? '—' : implode(', ', $manifest->services),
                 $manifest->processes === [] ? '—' : implode(', ', $manifest->processes),
                 $instanceStates[$manifest->name],
+                $manifest->image ?? 'unknown',
+                match ($outdated[$manifest->name]) {
+                    true => 'outdated',
+                    false => 'current',
+                    null => 'unknown',
+                },
                 $manifest->url,
             ], $manifests),
         );

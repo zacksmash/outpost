@@ -8,9 +8,6 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
-use Zacksmash\Outpost\ApplicationHttps;
-use Zacksmash\Outpost\Detection;
-use Zacksmash\Outpost\Detector;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\DoctorCheck;
 
@@ -46,7 +43,7 @@ function fakeCreation(array $overrides = []): void
         processPattern('git', 'rev-parse', 'HEAD') => Process::result('abc123'),
         processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\noutpost\n"),
         processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result('{"dns":{"domain":"outpost"}}'),
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.2') => Process::result('[]'),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.0') => Process::result(fakeImageInspect()),
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
         processPattern('git', 'branch', '--show-current') => Process::result("main\n"),
         processPattern('git', 'branch', '--format=%(refname:short)') => Process::result("main\nfeature-x\n"),
@@ -74,7 +71,7 @@ it('prepares missing prerequisites and continues creating the instance', functio
     app()->instance(Doctor::class, $doctor);
 
     fakeCreation([
-        processPattern('container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.1.2') => Process::result('pulled'),
+        processPattern('container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.2.0') => Process::result('pulled'),
     ]);
 
     $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
@@ -83,7 +80,7 @@ it('prepares missing prerequisites and continues creating the instance', functio
         ->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.1.2',
+        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.2.0',
     ]);
 });
 
@@ -142,7 +139,9 @@ it('creates a fully provisioned instance', function () {
         ->and($manifest['memory'])->toBe('2G')
         ->and($manifest['expose_services'])->toBeTrue()
         ->and($manifest['database'])->toBe('sqlite')
-        ->and($manifest['status'])->toBe('ready');
+        ->and($manifest['status'])->toBe('ready')
+        ->and($manifest['image'])->toBe('ghcr.io/zacksmash/outpost:0.2.0')
+        ->and($manifest['image_digest'])->toBe('sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
 
     expect(File::exists($this->root.'/feature-x/runtime/nginx.conf'))->toBeTrue()
         ->and(File::exists($this->root.'/feature-x/runtime/supervisord.conf'))->toBeTrue()
@@ -155,7 +154,7 @@ it('creates a fully provisioned instance', function () {
         '--volume', $this->root.'/feature-x/app:/app',
         '--volume', $this->root.'/feature-x/runtime:/etc/outpost:ro',
         '--volume', '/projects/app/.git:/projects/app/.git:ro',
-        'ghcr.io/zacksmash/outpost:0.1.2',
+        'ghcr.io/zacksmash/outpost:0.2.0',
     ]);
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === ['dscacheutil', '-flushcache']);
@@ -202,58 +201,6 @@ it('configures and releases application processes after provisioning', function 
     ]);
 });
 
-it('runs detected octane and vite development servers', function () {
-    config([
-        'octane' => [
-            'server' => 'swoole',
-            'watch' => ['app', 'routes'],
-        ],
-        'outpost.frontend' => 'vite',
-    ]);
-
-    File::put($this->root.'/feature-x/app/package.json', json_encode([
-        'scripts' => ['dev' => 'vite', 'build' => 'vite build'],
-    ], JSON_THROW_ON_ERROR));
-
-    $detector = Mockery::mock(Detector::class);
-    $detector->shouldReceive('detect')->once()->andReturn(new Detection(
-        services: [],
-        deferred: [],
-        database: 'sqlite',
-        php: '8.5',
-        server: 'octane',
-        octaneServer: 'frankenphp',
-        frontend: 'vite',
-    ));
-    app()->instance(Detector::class, $detector);
-
-    fakeCreation();
-
-    $exit = Artisan::call('outpost', ['branch' => 'feature-x', '--name' => 'feature-x']);
-
-    expect($exit)->toBe(0);
-
-    $manifest = json_decode(File::get($this->root.'/feature-x/outpost.json'), true);
-    $nginx = File::get($this->root.'/feature-x/runtime/nginx.conf');
-    $supervisor = File::get($this->root.'/feature-x/runtime/supervisord.conf');
-    $watcher = File::get($this->root.'/feature-x/runtime/octane-watch');
-
-    expect($manifest['server'])->toBe('octane')
-        ->and($manifest['octane_server'])->toBe('frankenphp')
-        ->and($manifest['frontend'])->toBe('vite')
-        ->and($manifest['processes'])->toBe(['octane', 'vite'])
-        ->and($nginx)->toContain('location @octane')
-        ->and($supervisor)->toContain('[program:outpost-octane]')
-        ->and($supervisor)->toContain('/etc/outpost/octane-watch')
-        ->and($supervisor)->toContain('--server=frankenphp')
-        ->and($supervisor)->toContain('[program:outpost-vite]')
-        ->and($supervisor)->not->toContain('[program:php-fpm]')
-        ->and($watcher)->toContain('file-watcher.cjs')
-        ->and($watcher)->toContain('artisan octane:reload');
-
-    expect(Artisan::output())->toContain('php artisan outpost:reload feature-x');
-});
-
 it('boots a trusted https instance with its certificate mounted read only', function () {
     $tls = $this->root.'/tls';
     File::ensureDirectoryExists($tls);
@@ -295,35 +242,8 @@ it('boots a trusted https instance with its certificate mounted read only', func
         '--volume', $this->root.'/feature-x/app:/app',
         '--volume', $this->root.'/feature-x/runtime:/etc/outpost:ro',
         '--volume', '/projects/app/.git:/projects/app/.git:ro',
-        'ghcr.io/zacksmash/outpost:0.1.2',
+        'ghcr.io/zacksmash/outpost:0.2.0',
     ]);
-});
-
-it('automatically boots an https instance when the primary application uses https', function () {
-    $tls = $this->root.'/tls';
-    File::ensureDirectoryExists($tls);
-    File::put($tls.'/domain', "outpost\n");
-    File::put($tls.'/trusted', "mkcert\n");
-    config([
-        'outpost.https' => 'auto',
-        'outpost.tls.path' => $tls,
-    ]);
-
-    $applicationHttps = Mockery::mock(ApplicationHttps::class);
-    $applicationHttps->shouldReceive('detected')->once()->andReturnTrue();
-    app()->instance(ApplicationHttps::class, $applicationHttps);
-
-    fakeCreation([
-        processPattern('mkcert', '-cert-file').' *' => Process::result('created'),
-    ]);
-
-    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
-        ->expectsOutputToContain('https://feature-x-laravel.outpost')
-        ->assertSuccessful();
-
-    $manifest = json_decode(File::get($this->root.'/feature-x/outpost.json'), true);
-
-    expect($manifest['url'])->toBe('https://feature-x-laravel.outpost');
 });
 
 it('rejects malformed application process configuration before creating state', function () {
@@ -511,7 +431,7 @@ it('provisions the application before checking its final HTTP response', functio
 
 it('requires the base image to be built first', function () {
     fakeCreation([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.1.2') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.2.0') => Process::result('', 'not found', 1),
     ]);
 
     $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])

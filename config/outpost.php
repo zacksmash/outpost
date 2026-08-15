@@ -34,7 +34,7 @@ return [
     |
     */
 
-    'image' => env('OUTPOST_IMAGE', 'ghcr.io/zacksmash/outpost:0.1.2'),
+    'image' => env('OUTPOST_IMAGE', 'ghcr.io/zacksmash/outpost:0.2.0'),
 
     /*
     |--------------------------------------------------------------------------
@@ -71,7 +71,7 @@ return [
     |
     | Apple's runtime otherwise inherits a machine-wide default that may be as
     | low as 1 GB. Outpost applies predictable per-instance limits with enough
-    | room for Composer, Laravel, Octane, Vite, and detected services together.
+    | room for Composer, Laravel, front-end builds, and detected services.
     |
     */
 
@@ -96,64 +96,28 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Web Server
-    |--------------------------------------------------------------------------
-    |
-    | "auto" runs Laravel Octane when the application exposes its config and
-    | otherwise uses PHP-FPM. Set "fpm" to keep an Octane application on
-    | the traditional request model, or "octane" to require Octane.
-    |
-    */
-
-    'server' => env('OUTPOST_SERVER', 'auto'),
-
-    /*
-    |--------------------------------------------------------------------------
-    | Octane Server
-    |--------------------------------------------------------------------------
-    |
-    | "auto" mirrors the application's OCTANE_SERVER setting. Outpost's base
-    | image includes Swoole, RoadRunner, and FrankenPHP, so an override only
-    | needs to be set when an outpost should differ from the primary app.
-    |
-    */
-
-    'octane' => [
-        'server' => env('OUTPOST_OCTANE_SERVER', 'auto'),
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
     | Frontend Development
     |--------------------------------------------------------------------------
     |
     | "build" installs dependencies and builds production assets once.
-    | "vite" keeps the dev server and HMR running with the instance.
-    | "none" skips npm entirely. Vite uses the conventional hot file by
-    | default; customize it here when the application does the same.
+    | "none" skips Node entirely. Run other front-end workflows explicitly
+    | with outpost:exec when a task needs them.
     |
     */
 
     'frontend' => env('OUTPOST_FRONTEND', 'build'),
-
-    'vite' => [
-        'port' => (int) env('OUTPOST_VITE_PORT', 5173),
-        'hot_file' => 'public/hot',
-    ],
 
     /*
     |--------------------------------------------------------------------------
     | Local HTTPS
     |--------------------------------------------------------------------------
     |
-    | "auto" mirrors the primary application's local URL scheme, including
-    | trusted HTTPS listeners that sit in front of an APP_URL using http.
-    | Each secure instance receives an exact-host certificate. Set true to
-    | require HTTPS or false to always use HTTP.
+    | HTTPS is explicit. Set OUTPOST_HTTPS=true and run outpost:certify to
+    | issue exact-host certificates for new instances. HTTP is the default.
     |
     */
 
-    'https' => env('OUTPOST_HTTPS', 'auto'),
+    'https' => env('OUTPOST_HTTPS', false),
 
     'tls' => [
         'path' => env('OUTPOST_TLS_PATH', '.outpost/tls'),

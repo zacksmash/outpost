@@ -2,6 +2,23 @@
 
 ## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.2...HEAD)
 
+### Added
+
+- Added `php artisan outpost:upgrade <name>` and `outpost:upgrade --all` to replace outdated or missing containers while preserving clean worktrees and branches. Upgrade verifies or pulls the configured image, preflights the full selection before deletion, supports reviewed path repositories, and reports exactly what was kept and reset.
+- Instance manifests now record the OCI image reference and immutable digest used at creation. `outpost:list` and `outpost:info --json` expose the recorded and configured identities with a tri-state `outdated` flag, including backward-compatible `null` state for legacy manifests.
+
+### Changed
+
+- Container recovery and upgrades now share one rebuild path that regenerates owned runtime configuration, preserves the application key, and refreshes Composer dependencies, configured front-end builds, and migrations. Missing containers are recreated automatically by `outpost:start`; the existing `--recreate` option remains as a deprecated compatibility no-op.
+- Instances now use one predictable PHP-FPM runtime and either build front-end assets once or skip Node. Trusted HTTPS is an explicit opt-in through `OUTPOST_HTTPS=true` instead of being inferred from the primary application. Doctor also requires an immutable image digest before reporting the base image ready.
+- The package now defaults to the exact `ghcr.io/zacksmash/outpost:0.2.0` image.
+
+### Removed
+
+- Removed automatic Octane runtime mirroring, Swoole, RoadRunner, FrankenPHP, the polling worker watcher, and `outpost:reload`.
+- Removed managed Vite/HMR mode and its image-level watcher dependency. Use the default reproducible asset build or run additional commands explicitly with `outpost:exec`.
+- Removed detected-but-deferred Horizon, Scout, Octane, and unsupported-database reporting. Outpost now reports only the services and processes it actually runs.
+
 ## [v0.1.2](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.1...v0.1.2) - 2026-08-15
 
 ### Added

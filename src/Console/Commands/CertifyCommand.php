@@ -50,7 +50,7 @@ class CertifyCommand extends Command
             return self::FAILURE;
         }
 
-        outro('Trusted Outpost HTTPS is ready. Automatic mode will use it whenever the primary application uses HTTPS.');
+        outro('Trusted Outpost HTTPS is ready. Set OUTPOST_HTTPS=true for new instances.');
 
         return self::SUCCESS;
     }

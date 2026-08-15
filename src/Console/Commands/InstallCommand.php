@@ -302,11 +302,9 @@ class InstallCommand extends Command
             return false;
         }
 
-        $mode = config('outpost.https');
-
         foreach ($checks as $check) {
             if ($check->name === Doctor::TLS_CHECK && $check->status !== DoctorCheck::PASS) {
-                return $mode !== 'auto' || $certificates->available();
+                return true;
             }
         }
 

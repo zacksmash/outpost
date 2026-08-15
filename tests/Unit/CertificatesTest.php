@@ -7,25 +7,21 @@ use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
-use Zacksmash\Outpost\ApplicationHttps;
 use Zacksmash\Outpost\Certificates;
 
 beforeEach(function () {
     Process::preventStrayProcesses();
 
     $this->root = sys_get_temp_dir().'/outpost-certificates-'.Str::random(10);
-    $this->applicationHttps = Mockery::mock(ApplicationHttps::class);
-    $this->applicationHttps->shouldReceive('detected')->byDefault()->andReturnTrue();
     $this->certificates = new Certificates(
         new Filesystem,
         app('config'),
         $this->root,
-        $this->applicationHttps,
     );
 
     config([
         'outpost.domain' => 'outpost',
-        'outpost.https' => 'auto',
+        'outpost.https' => false,
         'outpost.tls.path' => '.outpost/tls',
     ]);
 });
@@ -42,14 +38,17 @@ it('detects whether mkcert is installed', function (bool $successful) {
     expect($this->certificates->available())->toBe($successful);
 })->with([true, false]);
 
-it('falls back to http in auto mode until trusted https is prepared', function () {
-    expect($this->certificates->enabled())->toBeFalse();
+it('uses http by default and requires an explicit https opt in', function () {
+    expect($this->certificates->wantsHttps())->toBeFalse()
+        ->and($this->certificates->enabled())->toBeFalse();
 
     File::ensureDirectoryExists($this->root.'/.outpost/tls');
     File::put($this->root.'/.outpost/tls/domain', "outpost\n");
     File::put($this->root.'/.outpost/tls/trusted', "mkcert\n");
+    config(['outpost.https' => true]);
 
-    expect($this->certificates->enabled())->toBeTrue()
+    expect($this->certificates->wantsHttps())->toBeTrue()
+        ->and($this->certificates->enabled())->toBeTrue()
         ->and($this->certificates->directory())->toBe($this->root.'/.outpost/tls')
         ->and($this->certificates->domainPath())->toBe($this->root.'/.outpost/tls/domain')
         ->and($this->certificates->trustedPath())->toBe($this->root.'/.outpost/tls/trusted');
@@ -61,26 +60,7 @@ it('falls back to http after the configured domain changes', function () {
     File::put($this->root.'/.outpost/tls/trusted', "mkcert\n");
     config(['outpost.domain' => 'box']);
 
-    expect($this->certificates->enabled())->toBeFalse();
-});
-
-it('uses http in auto mode when the primary application is not served over https', function () {
-    File::ensureDirectoryExists($this->root.'/.outpost/tls');
-    File::put($this->root.'/.outpost/tls/domain', "outpost\n");
-    File::put($this->root.'/.outpost/tls/trusted', "mkcert\n");
-    $this->applicationHttps->shouldReceive('detected')->twice()->andReturnFalse();
-
-    expect($this->certificates->wantsHttps())->toBeFalse()
-        ->and($this->certificates->enabled())->toBeFalse();
-});
-
-it('uses https in auto mode when the primary application is served over https', function () {
-    File::ensureDirectoryExists($this->root.'/.outpost/tls');
-    File::put($this->root.'/.outpost/tls/domain', "outpost\n");
-    File::put($this->root.'/.outpost/tls/trusted', "mkcert\n");
-
-    expect($this->certificates->wantsHttps())->toBeTrue()
-        ->and($this->certificates->enabled())->toBeTrue();
+    expect($this->certificates->exists())->toBeFalse();
 });
 
 it('recognizes a legacy shared certificate as prepared setup', function () {
@@ -88,6 +68,7 @@ it('recognizes a legacy shared certificate as prepared setup', function () {
     File::put($this->root.'/.outpost/tls/domain', "outpost\n");
     File::put($this->root.'/.outpost/tls/certificate.pem', 'legacy certificate');
     File::put($this->root.'/.outpost/tls/key.pem', 'legacy key');
+    config(['outpost.https' => true]);
 
     expect($this->certificates->enabled())->toBeTrue();
 });

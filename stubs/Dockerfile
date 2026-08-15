@@ -14,10 +14,6 @@ ARG DB_PASSWORD=password
 ARG PHP_VERSIONS="8.4 8.5"
 ARG MAILPIT_VERSION=v1.30.7
 ARG MAILPIT_SHA256=12c736a73d122c55d3531ac2fc92cad96dbde283af661b6701fe32892bd438c5
-ARG FRANKENPHP_VERSION=v1.12.7
-ARG FRANKENPHP_SHA256=b94f5eda1ded6c891294cb479358f31043a379e10ab79f3687e9683ac247c2a6
-ARG ROADRUNNER_VERSION=2025.1.15
-ARG ROADRUNNER_SHA256=f384d14b8687520816fc7ec204bb78f2fa54aba4da5336adef91d298fd6420d1
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
@@ -42,7 +38,7 @@ RUN add-apt-repository -y ppa:ondrej/php \
         apt-get install -y --no-install-recommends \
             php$v-cli php$v-fpm php$v-bcmath php$v-curl php$v-gd php$v-intl \
             php$v-mbstring php$v-mysql php$v-pgsql php$v-redis php$v-sqlite3 \
-            php$v-swoole php$v-xml php$v-zip; \
+            php$v-xml php$v-zip; \
     done \
     && rm -rf /var/lib/apt/lists/*
 
@@ -57,31 +53,14 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
         > /etc/apt/sources.list.d/nodesource.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends nodejs \
-    && npm install --prefix /opt/outpost --no-audit --no-fund chokidar@4.0.3 \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
-
-ENV NODE_PATH=/opt/outpost/node_modules
 
 RUN curl -fsSL "https://github.com/axllent/mailpit/releases/download/${MAILPIT_VERSION}/mailpit-linux-arm64.tar.gz" \
         -o /tmp/mailpit.tar.gz \
     && echo "${MAILPIT_SHA256}  /tmp/mailpit.tar.gz" | sha256sum -c - \
     && tar -xzf /tmp/mailpit.tar.gz -C /usr/local/bin mailpit \
     && rm /tmp/mailpit.tar.gz
-
-# Octane server binaries are image-level tooling. Projects still provide
-# Laravel Octane itself and RoadRunner's Composer packages when selected.
-RUN curl -fsSL "https://github.com/php/frankenphp/releases/download/${FRANKENPHP_VERSION}/frankenphp-linux-aarch64-gnu" \
-        -o /tmp/frankenphp \
-    && echo "${FRANKENPHP_SHA256}  /tmp/frankenphp" | sha256sum -c - \
-    && install -m 0755 /tmp/frankenphp /usr/local/bin/frankenphp \
-    && rm /tmp/frankenphp \
-    && curl -fsSL "https://github.com/roadrunner-server/roadrunner/releases/download/v${ROADRUNNER_VERSION}/roadrunner-${ROADRUNNER_VERSION}-linux-arm64.tar.gz" \
-        -o /tmp/roadrunner.tar.gz \
-    && echo "${ROADRUNNER_SHA256}  /tmp/roadrunner.tar.gz" | sha256sum -c - \
-    && tar -xzf /tmp/roadrunner.tar.gz -C /tmp \
-    && install -m 0755 "/tmp/roadrunner-${ROADRUNNER_VERSION}-linux-arm64/rr" /usr/local/bin/rr \
-    && rm -r /tmp/roadrunner.tar.gz "/tmp/roadrunner-${ROADRUNNER_VERSION}-linux-arm64"
 
 # Sandbox-friendly PHP settings for every version and SAPI.
 COPY php.ini /tmp/outpost-php.ini
@@ -105,11 +84,10 @@ RUN bash /usr/local/share/outpost/setup-mysql.sh "$DB_DATABASE" "$DB_USERNAME" "
 
 COPY entrypoint.sh /usr/local/bin/outpost-entrypoint
 COPY wait-for-app.sh /usr/local/bin/outpost-wait
-COPY vite.sh /usr/local/bin/outpost-vite
-RUN chmod +x /usr/local/bin/outpost-entrypoint /usr/local/bin/outpost-wait /usr/local/bin/outpost-vite
+RUN chmod +x /usr/local/bin/outpost-entrypoint /usr/local/bin/outpost-wait
 
 WORKDIR /app
-EXPOSE 80 443 1025 3306 5173 5432 6379 8025
+EXPOSE 80 443 1025 3306 5432 6379 8025
 
 ENTRYPOINT ["/usr/local/bin/outpost-entrypoint"]
 CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf", "-n"]

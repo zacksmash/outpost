@@ -14,7 +14,7 @@ beforeEach(function () {
 
     config([
         'outpost.domain' => 'outpost',
-        'outpost.https' => 'auto',
+        'outpost.https' => false,
         'outpost.tls.path' => $this->root.'/tls',
     ]);
 });

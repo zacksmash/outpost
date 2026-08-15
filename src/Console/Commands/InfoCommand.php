@@ -44,15 +44,21 @@ class InfoCommand extends Command
         try {
             $state = $runtime->instanceState($manifest);
             $resolvedEndpoints = $endpoints->all($manifest);
+            $configuredImage = config()->string('outpost.image');
+            $configuredImageDigest = $runtime->imageMetadata($configuredImage)['digest'] ?? null;
+            $outdated = $manifest->imageOutdated($configuredImage, $configuredImageDigest);
             $details = [
                 'name' => $manifest->name,
                 'container' => $manifest->container,
                 'branch' => $manifest->branch,
                 'state' => $state,
                 'status' => $runtime->instanceStatus($manifest, $state),
+                'image' => $manifest->image,
+                'image_digest' => $manifest->imageDigest,
+                'configured_image' => $configuredImage,
+                'configured_image_digest' => $configuredImageDigest,
+                'outdated' => $outdated,
                 'php' => $manifest->php,
-                'server' => $manifest->server,
-                'octane_server' => $manifest->octaneServer,
                 'frontend' => $manifest->frontend,
                 'services' => $manifest->services,
                 'processes' => $manifest->processes,
@@ -73,7 +79,13 @@ class InfoCommand extends Command
                 return self::SUCCESS;
             }
 
-            table(['Detail', 'Value'], $this->rows($manifest, $state, $resolvedEndpoints));
+            table(['Detail', 'Value'], $this->rows(
+                $manifest,
+                $state,
+                $resolvedEndpoints,
+                $configuredImage,
+                $outdated,
+            ));
         } catch (JsonException|RuntimeException $e) {
             error($e->getMessage());
 
@@ -89,17 +101,24 @@ class InfoCommand extends Command
      * @param  array<string, array<string, int|string>>  $endpoints
      * @return list<array{string, string}>
      */
-    protected function rows(Manifest $manifest, string $state, array $endpoints): array
-    {
+    protected function rows(
+        Manifest $manifest,
+        string $state,
+        array $endpoints,
+        string $configuredImage,
+        ?bool $outdated,
+    ): array {
         $rows = [
             ['Name', $manifest->name],
             ['Branch', $manifest->branch],
             ['State', $state],
-            ['Runtime', implode(' / ', array_filter([
-                "PHP {$manifest->php}",
-                $manifest->server,
-                $manifest->octaneServer,
-            ]))],
+            ['Image', $manifest->image ?? 'unknown (legacy manifest)'],
+            ['Image status', match ($outdated) {
+                true => "outdated; configured image is {$configuredImage}",
+                false => 'current',
+                null => 'unknown',
+            }],
+            ['Runtime', "PHP {$manifest->php} / PHP-FPM"],
             ['Frontend', $manifest->frontend],
             ['Services', $manifest->services === [] ? 'none' : implode(', ', $manifest->services)],
             ['Processes', $manifest->processes === [] ? 'none' : implode(', ', $manifest->processes)],

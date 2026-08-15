@@ -47,7 +47,7 @@ class Provisioner
 
         if ($this->buildsFrontend($manifest)) {
             $this->step($onStep, 'Building the front-end assets',
-                fn () => $this->exec($manifest, ['npm', 'run', 'build']));
+                fn () => $this->buildFrontend($manifest));
         }
 
         $this->step($onStep, 'Running the database migrations',
@@ -62,8 +62,9 @@ class Provisioner
     /**
      * Prepare a fresh container around an existing worktree.
      *
-     * The application key, installed front-end assets, and other worktree
-     * state survive with the checkout and must not be regenerated here.
+     * The application key and other worktree state survive with the checkout
+     * and must not be regenerated here. Runtime-dependent dependencies and
+     * built assets are refreshed against the replacement image.
      */
     public function recover(Manifest $manifest, ?Closure $onStep = null): void
     {
@@ -73,6 +74,16 @@ class Provisioner
         $this->step($onStep, 'Installing composer dependencies',
             fn () => $this->php($manifest, ['/usr/local/bin/composer', 'install', '--no-interaction', '--prefer-dist']));
 
+        if ($this->installsFrontend($manifest)) {
+            $this->step($onStep, 'Installing npm dependencies',
+                fn () => $this->exec($manifest, $this->npmInstallCommand($manifest)));
+        }
+
+        if ($this->buildsFrontend($manifest)) {
+            $this->step($onStep, 'Building the front-end assets',
+                fn () => $this->buildFrontend($manifest));
+        }
+
         $this->step($onStep, 'Running the database migrations',
             fn () => $this->artisan($manifest, ['migrate', '--force']));
     }
@@ -80,8 +91,7 @@ class Provisioner
     /**
      * Determine if the application builds front-end assets.
      *
-     * Vite manifests are gitignored, so a fresh worktree never has one;
-     * an app with a build script serves errors until it runs.
+     * An app with a build script serves errors until it runs.
      */
     protected function buildsFrontend(Manifest $manifest): bool
     {
@@ -94,11 +104,17 @@ class Provisioner
      */
     protected function installsFrontend(Manifest $manifest): bool
     {
-        return match ($manifest->frontend) {
-            'build' => $this->hasFrontendScript($manifest, 'build'),
-            'vite' => $this->hasFrontendScript($manifest, 'dev'),
-            default => false,
-        };
+        return $manifest->frontend === 'build'
+            && $this->hasFrontendScript($manifest, 'build');
+    }
+
+    /**
+     * Remove Laravel's conventional dev-server marker before building assets.
+     */
+    protected function buildFrontend(Manifest $manifest): void
+    {
+        File::delete($this->outposts->worktreePath($manifest->name).'/public/hot');
+        $this->exec($manifest, ['npm', 'run', 'build']);
     }
 
     /**

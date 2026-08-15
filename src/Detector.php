@@ -14,18 +14,6 @@ use UnexpectedValueException;
 class Detector
 {
     /**
-     * The database drivers instances know how to run.
-     *
-     * @var list<string>
-     */
-    protected const array DATABASE_DRIVERS = ['sqlite', 'mysql', 'mariadb', 'pgsql'];
-
-    /**
-     * The PHP version embedded in the pinned FrankenPHP base-image binary.
-     */
-    protected const string FRANKENPHP_PHP_VERSION = '8.5';
-
-    /**
      * Create a new detector instance.
      */
     public function __construct(
@@ -39,32 +27,12 @@ class Detector
     public function detect(): Detection
     {
         $database = $this->database();
-        $server = $this->server();
-        $octaneServer = $server === 'octane' ? $this->octaneServer() : null;
-        $php = $this->php();
-
-        if ($octaneServer === 'frankenphp' && $php !== self::FRANKENPHP_PHP_VERSION) {
-            throw new RuntimeException(sprintf(
-                'Outpost FrankenPHP uses PHP %s, but this application selected PHP %s. Allow PHP %1$s or choose Swoole or RoadRunner.',
-                self::FRANKENPHP_PHP_VERSION,
-                $php,
-            ));
-        }
-
-        if ($octaneServer === 'roadrunner' && ! $this->hasLockedComposerPackage('spiral/roadrunner-http')) {
-            throw new RuntimeException(
-                'The RoadRunner Octane server requires spiral/roadrunner-http. Run [composer require spiral/roadrunner-http:^3.3 --with-all-dependencies] first.',
-            );
-        }
 
         return new Detection(
             services: $this->services($database),
-            deferred: $this->deferred($database, $server),
             database: $database,
-            php: $php,
-            server: $server,
+            php: $this->php(),
             frontend: $this->frontend(),
-            octaneServer: $octaneServer,
         );
     }
 
@@ -109,117 +77,17 @@ class Detector
     }
 
     /**
-     * Determine which detected capabilities an instance will not run.
-     *
-     * @return list<string>
-     */
-    protected function deferred(?string $database, string $server): array
-    {
-        $deferred = [];
-
-        $processes = $this->config->get('outpost.processes', []);
-
-        if ($this->config->has('horizon')
-            && (! is_array($processes) || ! array_key_exists('horizon', $processes))) {
-            $deferred[] = 'horizon';
-        }
-
-        if ($this->config->has('octane') && $server !== 'octane') {
-            $deferred[] = 'octane';
-        }
-
-        $scout = $this->config->get('scout.driver');
-
-        if (in_array($scout, ['algolia', 'meilisearch', 'typesense'], true)) {
-            $deferred[] = $scout;
-        }
-
-        if ($database !== null && ! in_array($database, self::DATABASE_DRIVERS, true)) {
-            $deferred[] = $database;
-        }
-
-        return $deferred;
-    }
-
-    /**
-     * Determine which web server should run the application.
-     */
-    protected function server(): string
-    {
-        $server = $this->config->get('outpost.server', 'auto');
-
-        if (! is_string($server) || ! in_array($server, ['auto', 'fpm', 'octane'], true)) {
-            throw new RuntimeException('The [outpost.server] value must be one of: auto, fpm, octane.');
-        }
-
-        if ($server === 'auto') {
-            return $this->config->has('octane') ? 'octane' : 'fpm';
-        }
-
-        if ($server === 'octane' && ! $this->config->has('octane')) {
-            throw new RuntimeException(
-                'The [outpost.server] value is octane, but this application does not expose an Octane configuration.',
-            );
-        }
-
-        return $server;
-    }
-
-    /**
-     * Determine which application server should power Octane.
-     */
-    protected function octaneServer(): string
-    {
-        $server = $this->config->get('outpost.octane.server', 'auto');
-
-        if (! is_string($server) || ! in_array($server, ['auto', 'swoole', 'roadrunner', 'frankenphp'], true)) {
-            throw new RuntimeException(
-                'The [outpost.octane.server] Octane server must be one of: auto, swoole, roadrunner, frankenphp.',
-            );
-        }
-
-        if ($server === 'auto') {
-            $server = $this->config->get('octane.server', 'swoole');
-        }
-
-        if (! is_string($server) || ! in_array($server, ['swoole', 'roadrunner', 'frankenphp'], true)) {
-            throw new RuntimeException(
-                'The application Octane server must be one of: swoole, roadrunner, frankenphp.',
-            );
-        }
-
-        return $server;
-    }
-
-    /**
      * Determine how frontend assets should be prepared.
      */
     protected function frontend(): string
     {
         $frontend = $this->config->get('outpost.frontend', 'build');
 
-        if (! is_string($frontend) || ! in_array($frontend, ['build', 'vite', 'none'], true)) {
-            throw new RuntimeException('The [outpost.frontend] value must be one of: build, vite, none.');
-        }
-
-        if ($frontend === 'vite' && ! $this->hasPackageScript('dev')) {
-            throw new RuntimeException(
-                'The [outpost.frontend] vite mode requires a package.json dev script.',
-            );
+        if (! is_string($frontend) || ! in_array($frontend, ['build', 'none'], true)) {
+            throw new RuntimeException('The [outpost.frontend] value must be build or none.');
         }
 
         return $frontend;
-    }
-
-    /**
-     * Determine whether package.json defines the given script.
-     */
-    protected function hasPackageScript(string $script): bool
-    {
-        $path = $this->basePath.'/package.json';
-
-        return File::exists($path)
-            && is_string(data_get(File::json($path), "scripts.{$script}"));
     }
 
     /**
@@ -303,30 +171,6 @@ class Detector
         $constraint = data_get(File::json($path), 'require.php');
 
         return is_string($constraint) ? $constraint : null;
-    }
-
-    /**
-     * Determine whether the application's lock file contains a package.
-     */
-    protected function hasLockedComposerPackage(string $name): bool
-    {
-        $path = $this->basePath.'/composer.lock';
-
-        if (! File::exists($path)) {
-            return false;
-        }
-
-        $lock = File::json($path);
-
-        foreach (['packages', 'packages-dev'] as $group) {
-            foreach ((array) ($lock[$group] ?? []) as $package) {
-                if (is_array($package) && ($package['name'] ?? null) === $name) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     /**

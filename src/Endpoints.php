@@ -27,11 +27,6 @@ class Endpoints
             'application' => ['url' => $manifest->url],
         ];
 
-        if ($manifest->frontend === 'vite') {
-            $port = $this->vitePort();
-            $endpoints['vite'] = ['url' => "{$scheme}://{$host}:{$port}"];
-        }
-
         if (! $manifest->exposeServices) {
             return $endpoints;
         }
@@ -142,19 +137,5 @@ class Endpoints
         }
 
         return $value;
-    }
-
-    /**
-     * Read the public Vite port.
-     */
-    protected function vitePort(): int
-    {
-        $port = $this->config->get('outpost.vite.port', 5173);
-
-        if (! is_int($port) || $port < 1 || $port > 65535) {
-            throw new RuntimeException('The [outpost.vite.port] value must be an integer between 1 and 65535.');
-        }
-
-        return $port;
     }
 }
