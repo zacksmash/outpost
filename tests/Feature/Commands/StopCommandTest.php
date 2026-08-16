@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use Zacksmash\Outpost\Outposts;
 
@@ -110,5 +111,25 @@ it('surfaces the real error when stopping fails', function () {
 
     $this->artisan('outpost:stop', ['name' => 'feature-x'])
         ->expectsOutputToContain('daemon unavailable')
+        ->assertFailed();
+});
+
+it('explains when Apple container cannot settle a stale exec handle', function () {
+    Sleep::fake();
+
+    app(Outposts::class)->save(fakeManifest('feature-x'));
+
+    $error = 'Error: internalError: "failed to stop container" (cause: "exec 6e35c967-dead-beef does not exist in container feature-x-app")';
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ])),
+        processPattern('container', 'stop', 'feature-x-app') => Process::result('', $error, 1),
+    ]);
+
+    $this->artisan('outpost:stop', ['name' => 'feature-x'])
+        ->expectsOutputToContain('Apple container is still settling a recently completed command')
+        ->doesntExpectOutputToContain('internalError')
         ->assertFailed();
 });

@@ -152,10 +152,10 @@ it('falls back to the apple image id when descriptor metadata is absent', functi
 it('pulls an image from an oci registry', function () {
     Process::fake();
 
-    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.5.5');
+    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.5.6');
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.5.5',
+        'container', 'image', 'pull', 'ghcr.io/zacksmash/outpost:0.5.6',
     ]);
 });
 
@@ -164,8 +164,8 @@ it('surfaces the real error when an image pull fails', function () {
         processPattern('container', 'image', 'pull').' *' => Process::result('', 'denied', 1),
     ]);
 
-    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.5.5');
-})->throws(RuntimeException::class, 'Unable to pull the [ghcr.io/zacksmash/outpost:0.5.5] image: denied');
+    $this->runtime->pull('ghcr.io/zacksmash/outpost:0.5.6');
+})->throws(RuntimeException::class, 'Unable to pull the [ghcr.io/zacksmash/outpost:0.5.6] image: denied');
 
 it('builds an image with dns, tag, and build arguments', function () {
     Process::fake();
@@ -419,6 +419,72 @@ it('surfaces the real error when a lifecycle command fails', function (string $m
     expect(fn () => $this->runtime->{$method}('feature-x-app'))
         ->toThrow(RuntimeException::class, 'went sideways');
 })->with(['start', 'stop', 'delete']);
+
+it('retries a stop while Apple container settles a stale exec handle', function () {
+    Sleep::fake();
+
+    $error = 'Error: internalError: "failed to stop container" (cause: "exec 6e35c967-dead-beef does not exist in container feature-x-app")';
+
+    Process::fake([
+        processPattern('container', 'stop', 'feature-x-app') => Process::sequence()
+            ->push(Process::result('', $error, 1))
+            ->push(Process::result()),
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ])),
+    ]);
+
+    $this->runtime->stop('feature-x-app');
+
+    Process::assertRanTimes(fn (PendingProcess $process) => $process->command === [
+        'container', 'stop', 'feature-x-app',
+    ], times: 2);
+    Sleep::assertSleptTimes(1);
+});
+
+it('accepts a stale exec stop failure when the container stopped anyway', function () {
+    Sleep::fake();
+
+    $error = 'Error: internalError: "failed to stop container" (cause: "exec 6e35c967-dead-beef does not exist in container feature-x-app")';
+
+    Process::fake([
+        processPattern('container', 'stop', 'feature-x-app') => Process::result('', $error, 1),
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'stopped']],
+        ])),
+    ]);
+
+    $this->runtime->stop('feature-x-app');
+
+    Process::assertRanTimes(fn (PendingProcess $process) => $process->command === [
+        'container', 'stop', 'feature-x-app',
+    ], times: 1);
+    Sleep::assertNeverSlept();
+});
+
+it('explains a persistent stale exec stop failure without exposing the raw runtime error', function () {
+    Sleep::fake();
+
+    $error = 'Error: internalError: "failed to stop container" (cause: "exec 6e35c967-dead-beef does not exist in container feature-x-app")';
+
+    Process::fake([
+        processPattern('container', 'stop', 'feature-x-app') => Process::result('', $error, 1),
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ])),
+    ]);
+
+    expect(fn () => $this->runtime->stop('feature-x-app'))
+        ->toThrow(
+            RuntimeException::class,
+            'Apple container is still settling a recently completed command. The container remains running; wait a moment, then retry [php artisan outpost:stop].',
+        );
+
+    Process::assertRanTimes(fn (PendingProcess $process) => $process->command === [
+        'container', 'stop', 'feature-x-app',
+    ], times: 3);
+    Sleep::assertSleptTimes(2);
+});
 
 it('executes commands inside a container and returns the raw result', function () {
     Process::fake([

@@ -25,7 +25,7 @@ class Runtime implements RuntimeDriver
     /**
      * The exact shared image shipped for this package contract.
      */
-    public const string PUBLISHED_IMAGE = 'ghcr.io/zacksmash/outpost:0.5.5';
+    public const string PUBLISHED_IMAGE = 'ghcr.io/zacksmash/outpost:0.5.6';
 
     /**
      * The OCI label used to advertise the image's runtime mount contract.
@@ -46,6 +46,16 @@ class Runtime implements RuntimeDriver
      * The per-probe timeout for a single readiness check, in seconds.
      */
     protected const int READY_TIMEOUT = 5;
+
+    /**
+     * Attempts allowed while Apple container settles a completed exec handle.
+     */
+    protected const int STOP_ATTEMPTS = 3;
+
+    /**
+     * Delay between stale exec stop attempts, in milliseconds.
+     */
+    protected const int STOP_RETRY_DELAY = 500;
 
     /**
      * Get the stable identifier recorded for this runtime driver.
@@ -454,9 +464,37 @@ class Runtime implements RuntimeDriver
      */
     public function stop(string $container): void
     {
-        $this->runOrFail(
-            ['container', 'stop', $container],
-            "Unable to stop the container [{$container}]",
+        $failure = null;
+
+        for ($attempt = 1; $attempt <= self::STOP_ATTEMPTS; $attempt++) {
+            try {
+                $this->runOrFail(
+                    ['container', 'stop', $container],
+                    "Unable to stop the container [{$container}]",
+                );
+
+                return;
+            } catch (RuntimeException $e) {
+                if (! $this->isStaleExecStopFailure($e)) {
+                    throw $e;
+                }
+
+                if ($this->state($container) !== 'running') {
+                    return;
+                }
+
+                $failure = $e;
+
+                if ($attempt < self::STOP_ATTEMPTS) {
+                    Sleep::for(self::STOP_RETRY_DELAY)->milliseconds();
+                }
+            }
+        }
+
+        throw new RuntimeException(
+            "Unable to stop the container [{$container}] because Apple container is still settling a recently completed command. "
+            .'The container remains running; wait a moment, then retry [php artisan outpost:stop].',
+            previous: $failure,
         );
     }
 
@@ -745,6 +783,17 @@ class Runtime implements RuntimeDriver
         }
 
         return "outpost-{$process}";
+    }
+
+    /**
+     * Determine if Apple container rejected a stop while retiring an exec handle.
+     */
+    protected function isStaleExecStopFailure(RuntimeException $exception): bool
+    {
+        return preg_match(
+            '/failed to stop container.*\bexec\s+\S+\s+does not exist in container\b/is',
+            $exception->getMessage(),
+        ) === 1;
     }
 
     /**

@@ -1,6 +1,16 @@
 # Release Notes
 
-## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.5...HEAD)
+## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.6...HEAD)
+
+## [v0.5.6](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.5...v0.5.6) - 2026-08-15
+
+### Fixed
+
+- Container stops now retry Apple container's transient stale-exec race, accept a stop that completed despite the runtime error, and replace a persistent raw `internalError` with actionable wait-and-retry guidance.
+
+### Changed
+
+- Pinned the package and release image together at `ghcr.io/zacksmash/outpost:0.5.6`.
 
 ## [v0.5.5](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.4...v0.5.5) - 2026-08-15
 
