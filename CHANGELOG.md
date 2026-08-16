@@ -1,6 +1,30 @@
 # Release Notes
 
-## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.6...HEAD)
+## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.6.0...HEAD)
+
+## [v0.6.0](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.6...v0.6.0) - 2026-08-16
+
+### Fixed
+
+- Branch names containing `/`, `_`, or `.` no longer lose those characters when they become instance names. The branch `feature/some-bug-to-fix` now creates `feature-some-bug-to-fix` instead of `featuresome-bug-to-fix`.
+- `--name` values are cleaned up and accepted rather than rejected. `--name "Not A Slug"` becomes `not-a-slug` and reports the change.
+- `outpost:info` no longer labels two different things "Runtime" — the container runtime and the PHP version are now distinct rows.
+- `outpost:info` could silently drop a row when a configured preview endpoint shared a name with a built-in field.
+- `outpost:list` no longer reports images as current when their status is actually unknown.
+
+### Changed
+
+- Instance names longer than the DNS label limit are shortened automatically, keeping a readable prefix and appending a short hash of the branch, instead of failing.
+- `outpost <branch> --no-interaction` derives the instance name from the branch. Scripts that relied on the previous slug behavior should pass `--name` explicitly.
+- `outpost:list` shows four columns — name, branch, state, and URL — with a summary of counts and anything needing attention. The remaining detail lives in `outpost:info`.
+- `outpost:doctor` shows troubleshooting guidance only when a check fails or warns, or with `-v`. A healthy run prints the checks and a one-line summary.
+- `outpost:doctor` and `outpost:info` wrap within the terminal instead of overflowing.
+- Pinned the package and release image together at `ghcr.io/zacksmash/outpost:0.6.0`.
+
+### Unchanged
+
+- Existing instances keep their names, hostnames, and URLs. No migration.
+- `--json` output is byte-for-byte identical for every command.
 
 ## [v0.5.6](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.5...v0.5.6) - 2026-08-15
 
@@ -179,6 +203,7 @@ Outpost is now deliberately an isolated Laravel branch sandbox for parallel agen
 ```bash
 composer update zacksmash/outpost --with-all-dependencies
 php artisan outpost:upgrade --all
+
 
 
 ```
