@@ -17,7 +17,7 @@ Outpost turns any branch of your Laravel application into an isolated, reviewabl
 ```shell
 php artisan outpost feature/billing
 
-# Created [feature-billing]: https://feature-billing-app.outpost
+# Created [blissful-lake]: https://blissful-lake.outpost
 ```
 
 Each instance receives its own editable Git worktree, VM, URL, database, and detected services. Outpost doesn't replace your primary development environment — it gives your branches and agents somewhere to build in parallel, so you can preview their actual, compiled output before it ships.
@@ -97,13 +97,15 @@ php artisan outpost:upgrade billing --force
 
 ## Creating Instances
 
-To create an instance, run the `outpost` command. Outpost will prompt you for a branch and an instance name — or you may provide everything up front:
+To create an instance, run the `outpost` command. Outpost will prompt you for a branch and an instance name, pre-filled with a generated, unclaimed name such as `blissful-lake` that you may accept or replace — or you may provide everything up front:
 
 ```shell
 php artisan outpost feature/billing --name=billing --seed
 php artisan outpost origin/review/invoices --name=invoices --open
 php artisan outpost --pr=482 --name=pr-482 --open
 ```
+
+A supplied `--name` is normalized to a URL-friendly slug rather than rejected, so `--name=feature/billing` creates `feature-billing`; Outpost reports the substitution whenever normalization changes what you typed. The instance URL is always `https://<name>.<domain>`, with no project-directory suffix. Instances created before this change keep their existing hostnames — the container name and URL are recorded in the manifest at creation time and are never rewritten.
 
 Outpost creates a Git worktree beneath `.outpost/<name>/app`, detects your application's runtime and services, boots the VM, prepares `.env` from `.env.example`, installs your dependencies, builds the front end, migrates the database, and waits for a real application response.
 
@@ -112,7 +114,7 @@ Composer and npm downloads are cached once per repository beneath `.outpost/.cac
 | Option | Description |
 | --- | --- |
 | `branch` | Existing local or remote branch, or a new local branch. |
-| `--name` | Instance name; defaults to the slugged branch name. |
+| `--name` | Instance name; normalized to a slug, defaulting to a generated, unclaimed name. |
 | `--pr` | GitHub pull request number to fetch into an editable branch. |
 | `--remote` | Git remote used with `--pr`; defaults to `origin`. |
 | `--open` | Open the application after creation. |

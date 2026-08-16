@@ -64,7 +64,8 @@ php artisan outpost:remove billing
 - `outpost` accepts local, remote, new, or GitHub pull-request branches and creates an editable worktree under `.outpost/<name>/app`.
 - New and rebuilt instances reuse repository-local Composer and npm download caches under `.outpost/.cache`; `vendor` and `node_modules` remain private to each worktree.
 - Other creation options are `--name`, `--open`, `--seed`, `--remote`, and `--mount-path-repos`.
-- Commands with an omitted instance name prompt interactively.
+- Commands with an omitted instance name prompt interactively; the instance-name prompt pre-fills a generated, unclaimed name (for example `blissful-lake`) that you may accept or replace.
+- A supplied `--name` is normalized to a URL-friendly slug rather than rejected, so a branch-shaped value like `--name=feature/billing` creates `feature-billing`; pass an explicit `--name` with `--no-interaction` to avoid relying on the generated default. The instance URL is always `https://<name>.<domain>`, with no project-directory suffix.
 - `outpost:exec` passes tokens without a shell, streams output, preserves the inner exit code, and runs as the host-ID-mapped non-root user. Use `--root` only for intentional elevation.
 - `outpost:doctor`, `outpost:list`, `outpost:info`, `outpost:process`, and `outpost:verify` expose stable `--json` reports. Instance-specific JSON commands require an explicit name and never prompt. Pre-report failures return a top-level `error` and an unsuccessful exit code. Missing containers and failed provisioning report degraded state.
 - Repository-configured `outpost.previews` entries resolve same-origin review paths and optional notes for every instance. Open one with `outpost:open <name> <preview>` or read it from `endpoints.<preview>` in info JSON. Invalid custom entries are omitted from discovery; requesting one explicitly reports its configuration error.
