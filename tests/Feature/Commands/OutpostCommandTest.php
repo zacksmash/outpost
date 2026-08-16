@@ -558,7 +558,7 @@ it('refuses a branch that is already checked out elsewhere', function () {
 it('refuses an invalid instance name', function () {
     fakeCreation();
 
-    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'Not A Slug'])
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => '!!!'])
         ->expectsOutputToContain('URL-friendly slug')
         ->assertFailed();
 });
@@ -744,4 +744,63 @@ it('keeps serving instances created before the hostname changed', function () {
 
     expect(app(Outposts::class)->find('feature-billing')?->container)
         ->toBe('feature-billing-app');
+});
+
+it('defaults to a generated name instead of the branch', function () {
+    File::ensureDirectoryExists($this->root.'/blissful-lake/app');
+    File::put($this->root.'/blissful-lake/app/.env.example', "APP_NAME=Example\nDB_CONNECTION=sqlite\n");
+
+    fakeNames('blissful-lake');
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x'])
+        ->expectsQuestion('What should the instance be named?', 'blissful-lake')
+        ->expectsOutputToContain('http://blissful-lake.outpost')
+        ->assertSuccessful();
+
+    expect(app(Outposts::class)->exists('blissful-lake'))->toBeTrue();
+});
+
+it('hyphenates a supplied name that a branch namespace would otherwise mangle', function () {
+    File::ensureDirectoryExists($this->root.'/feature-some-bug-to-fix/app');
+    File::put($this->root.'/feature-some-bug-to-fix/app/.env.example', "APP_NAME=Example\nDB_CONNECTION=sqlite\n");
+
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature/some-bug-to-fix'])
+        ->expectsOutputToContain('http://feature-some-bug-to-fix.outpost')
+        ->expectsOutputToContain('feature-some-bug-to-fix')
+        ->assertSuccessful();
+
+    expect(app(Outposts::class)->exists('feature-some-bug-to-fix'))->toBeTrue()
+        ->and(app(Outposts::class)->exists('featuresome-bug-to-fix'))->toBeFalse();
+});
+
+it('reports when a supplied name was changed to make it URL-friendly', function () {
+    File::ensureDirectoryExists($this->root.'/release-v2-1-0/app');
+    File::put($this->root.'/release-v2-1-0/app/.env.example', "APP_NAME=Example\nDB_CONNECTION=sqlite\n");
+
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'Release/v2.1.0'])
+        ->expectsOutputToContain('Using [release-v2-1-0]')
+        ->assertSuccessful();
+
+    expect(app(Outposts::class)->exists('release-v2-1-0'))->toBeTrue();
+});
+
+it('says nothing about normalization when the supplied name is already a slug', function () {
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->doesntExpectOutputToContain('Using [feature-x]')
+        ->assertSuccessful();
+});
+
+it('rejects a supplied name with no URL-friendly characters', function () {
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => '///'])
+        ->expectsOutputToContain('URL-friendly')
+        ->assertFailed();
 });
