@@ -15,6 +15,46 @@ it('keeps production application servers and watchers out of the sandbox image',
         ->not->toContain('chokidar');
 });
 
+it('provides Playwright Chromium system dependencies without bundling a browser', function () {
+    $dockerfile = File::get(dirname(__DIR__, 2).'/stubs/Dockerfile');
+    $dependencies = [
+        'libfontconfig1',
+        'libfreetype6',
+        'libasound2t64',
+        'libatk-bridge2.0-0t64',
+        'libatk1.0-0t64',
+        'libatspi2.0-0t64',
+        'libcairo2',
+        'libcups2t64',
+        'libdbus-1-3',
+        'libdrm2',
+        'libgbm1',
+        'libglib2.0-0t64',
+        'libnspr4',
+        'libnss3',
+        'libpango-1.0-0',
+        'libx11-6',
+        'libxcb1',
+        'libxcomposite1',
+        'libxdamage1',
+        'libxext6',
+        'libxfixes3',
+        'libxkbcommon0',
+        'libxrandr2',
+    ];
+
+    foreach ($dependencies as $dependency) {
+        expect($dockerfile)->toContain($dependency);
+    }
+
+    expect($dockerfile)
+        ->not->toContain('npx playwright install')
+        ->not->toContain('mcr.microsoft.com/playwright')
+        ->not->toContain('chromium-browser')
+        ->not->toContain('xvfb')
+        ->not->toContain('fonts-noto-color-emoji');
+});
+
 it('prepares a host-mapped non-root application user and collision-free runtime configuration', function () {
     $dockerfile = File::get(dirname(__DIR__, 2).'/stubs/Dockerfile');
     $entrypoint = File::get(dirname(__DIR__, 2).'/stubs/entrypoint.sh');

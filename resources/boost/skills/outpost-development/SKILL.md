@@ -144,13 +144,16 @@ Repository lifecycle hooks supplement built-in provisioning. They are read from 
 
 ```php
 'hooks' => [
-    'setup' => ['search' => ['@php', 'artisan', 'scout:sync-index-settings']],
+    'setup' => [
+        'search' => ['@php', 'artisan', 'scout:sync-index-settings'],
+        'playwright' => ['npx', 'playwright', 'install', 'chromium'],
+    ],
     'verify' => ['generate' => ['npm', 'run', 'generate']],
     'teardown' => ['cleanup' => ['@php', 'artisan', 'app:cleanup']],
 ],
 ```
 
-Hook failure preserves the instance and fails the lifecycle operation. Teardown hooks run only when the manifest is ready and the container is running; stopped, missing, and incomplete instances skip them. `outpost:remove --forget` bypasses even malformed hook configuration when runtime recovery is impossible.
+Hook failure preserves the instance and fails the lifecycle operation. Hooks always run as the non-root application user; there is no privileged hook mode. The base image supplies Playwright's Ubuntu Chromium dependencies but not a browser binary, so a setup hook may safely download the project's matching browser with `npx playwright install chromium`. Teardown hooks run only when the manifest is ready and the container is running; stopped, missing, and incomplete instances skip them. `outpost:remove --forget` bypasses even malformed hook configuration when runtime recovery is impossible.
 
 Important config values are `domain`, `image`, `dns`, `path`, `resources`, `php`, `frontend`, `https`, `tls.path`, `services`, `expose_services`, `previews`, `processes`, `checks`, `hooks`, `database`, `lifecycle_timeout`, and `timeout`. Image-level changes require `outpost:build --force` and instance upgrades.
 

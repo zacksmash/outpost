@@ -200,7 +200,10 @@ Lifecycle hooks let you layer repository-specific setup on top of Outpost's buil
 
 ```php
 'hooks' => [
-    'setup' => ['search' => ['@php', 'artisan', 'scout:sync-index-settings']],
+    'setup' => [
+        'search' => ['@php', 'artisan', 'scout:sync-index-settings'],
+        'playwright' => ['npx', 'playwright', 'install', 'chromium'],
+    ],
     'verify' => ['generate' => ['npm', 'run', 'generate']],
     'teardown' => ['cleanup' => ['@php', 'artisan', 'app:cleanup']],
 ],
@@ -208,7 +211,7 @@ Lifecycle hooks let you layer repository-specific setup on top of Outpost's buil
 
 Hooks are named, shell-free commands read from the host checkout's `config/outpost.php`, so an instance branch can never inject them. `setup` hooks run after new and rebuilt containers are provisioned, `verify` hooks run before handoff checks, and `teardown` hooks run before removal. Within a hook, `@php` resolves to the instance's PHP version.
 
-A failing hook stops the lifecycle operation and preserves the instance for diagnosis. Teardown hooks only run for a fully provisioned instance whose container is running — stopped, missing, and incomplete instances skip them with a warning — and emergency `--forget` removal bypasses hook parsing and execution entirely.
+A failing hook stops the lifecycle operation and preserves the instance for diagnosis. Hooks always run as the non-root application user; Outpost does not expose privileged hooks. The base image includes Playwright's Ubuntu Chromium dependencies, so projects may download their matching browser with `npx playwright install chromium` without requesting system privileges. Teardown hooks only run for a fully provisioned instance whose container is running — stopped, missing, and incomplete instances skip them with a warning — and emergency `--forget` removal bypasses hook parsing and execution entirely.
 
 ## Managing Instances
 
@@ -302,7 +305,7 @@ php artisan vendor:publish --tag="outpost-config"
 | Key | Default | Description |
 | --- | --- | --- |
 | `domain` | `outpost` | Local publication domain. |
-| `image` | `ghcr.io/zacksmash/outpost:0.5.4` | Exact OCI image used by instances. |
+| `image` | `ghcr.io/zacksmash/outpost:0.5.5` | Exact OCI image used by instances. |
 | `dns` | `1.1.1.1` | Nameserver injected into builds and instances. |
 | `path` | `.outpost` | Project-relative instance directory. |
 | `resources.cpus` | `4` | Virtual CPUs per instance. |

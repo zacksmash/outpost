@@ -1,6 +1,16 @@
 # Release Notes
 
-## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.4...HEAD)
+## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.5...HEAD)
+
+## [v0.5.5](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.4...v0.5.5) - 2026-08-15
+
+### Fixed
+
+- The base image now includes Playwright's Ubuntu 24.04 Chromium runtime dependencies, allowing non-root setup hooks to install a project's matching browser without `--with-deps`; Playwright and browser binaries remain project-managed.
+
+### Changed
+
+- Pinned the package and release image together at `ghcr.io/zacksmash/outpost:0.5.5`.
 
 ## [v0.5.4](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.3...v0.5.4) - 2026-08-15
 
