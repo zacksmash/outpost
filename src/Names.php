@@ -6,7 +6,6 @@ namespace Zacksmash\Outpost;
 
 use Illuminate\Support\Str;
 use RuntimeException;
-use Zacksmash\Outpost\Contracts\RuntimeDriver;
 
 class Names
 {
@@ -56,17 +55,19 @@ class Names
     }
 
     /**
-     * Generate a name no manifest and no container on this machine has claimed.
+     * Generate a name no manifest in this application has claimed.
      *
-     * Container names are machine-wide rather than scoped to one application,
-     * so an unclaimed name must clear both the local manifests and the runtime.
+     * The generated name only has to be unique within this application: the
+     * project-directory suffix appended to the container name keeps
+     * container names scoped per project, so two applications drawing the
+     * same instance name cannot collide.
      */
-    public function unique(Outposts $outposts, RuntimeDriver $runtime): string
+    public function unique(Outposts $outposts): string
     {
         for ($attempt = 0; $attempt < self::ATTEMPTS; $attempt++) {
             $name = $this->generate();
 
-            if (! $this->taken($name, $outposts, $runtime)) {
+            if (! $outposts->exists($name)) {
                 return $name;
             }
         }
@@ -74,7 +75,7 @@ class Names
         $base = $this->generate();
 
         for ($suffix = 2; $suffix <= self::ATTEMPTS; $suffix++) {
-            if (! $this->taken("{$base}-{$suffix}", $outposts, $runtime)) {
+            if (! $outposts->exists("{$base}-{$suffix}")) {
                 return "{$base}-{$suffix}";
             }
         }
@@ -92,14 +93,6 @@ class Names
     public function normalize(string $name): string
     {
         return Str::slug((string) preg_replace('/[^\p{L}\p{N}]+/u', '-', $name));
-    }
-
-    /**
-     * Determine whether anything on this machine already uses the given name.
-     */
-    protected function taken(string $name, Outposts $outposts, RuntimeDriver $runtime): bool
-    {
-        return $outposts->exists($name) || $runtime->exists($name);
     }
 
     /**

@@ -2,12 +2,16 @@
 
 declare(strict_types=1);
 
+use Illuminate\Console\OutputStyle;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\BufferedOutput;
+use Symfony\Component\Console\Question\Question;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\DoctorCheck;
 use Zacksmash\Outpost\Outposts;
@@ -722,10 +726,7 @@ it('reports the failing provisioning step and keeps the container', function () 
         ->toBe('failed');
 });
 
-it('uses the generated name when nothing is supplied and nothing is typed', function () {
-    File::ensureDirectoryExists($this->root.'/blissful-lake/app');
-    File::put($this->root.'/blissful-lake/app/.env.example', "APP_NAME=Example\nDB_CONNECTION=sqlite\n");
-
+it('derives the instance name from the branch when nothing is supplied under --no-interaction', function () {
     fakeNames('blissful-lake');
     fakeCreation();
 
@@ -735,7 +736,62 @@ it('uses the generated name when nothing is supplied and nothing is typed', func
     ]);
 
     expect($exit)->toBe(0)
-        ->and(Artisan::output())->toContain('http://blissful-lake-laravel.outpost');
+        ->and(Artisan::output())->toContain('http://feature-x-laravel.outpost');
+
+    expect(app(Outposts::class)->exists('feature-x'))->toBeTrue()
+        ->and(app(Outposts::class)->exists('blissful-lake'))->toBeFalse();
+});
+
+it('hyphenates a branch namespace when deriving the name under --no-interaction', function () {
+    File::ensureDirectoryExists($this->root.'/feature-some-bug-to-fix/app');
+    File::put($this->root.'/feature-some-bug-to-fix/app/.env.example', "APP_NAME=Example\nDB_CONNECTION=sqlite\n");
+
+    fakeCreation([
+        processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/feature/some-bug-to-fix') => Process::result('abc123'),
+    ]);
+
+    $exit = Artisan::call('outpost', [
+        'branch' => 'feature/some-bug-to-fix',
+        '--no-interaction' => true,
+    ]);
+
+    expect($exit)->toBe(0)
+        ->and(Artisan::output())->toContain('http://feature-some-bug-to-fix-laravel.outpost');
+
+    expect(app(Outposts::class)->exists('feature-some-bug-to-fix'))->toBeTrue()
+        ->and(app(Outposts::class)->exists('featuresome-bug-to-fix'))->toBeFalse();
+});
+
+it('offers a generated name as the interactive default when nothing is supplied', function () {
+    File::ensureDirectoryExists($this->root.'/blissful-lake/app');
+    File::put($this->root.'/blissful-lake/app/.env.example', "APP_NAME=Example\nDB_CONNECTION=sqlite\n");
+
+    fakeNames('blissful-lake');
+    fakeCreation();
+
+    $captured = null;
+
+    $mock = Mockery::mock(OutputStyle::class.'[askQuestion]', [
+        new ArrayInput([]), new BufferedOutput,
+    ]);
+
+    $mock->shouldReceive('askQuestion')
+        ->once()
+        ->with(Mockery::on(function (Question $question) use (&$captured) {
+            if ($question->getQuestion() === 'What should the instance be named?') {
+                $captured = $question->getDefault();
+            }
+
+            return true;
+        }))
+        ->andReturnUsing(fn (Question $question) => $question->getDefault());
+
+    app()->bind(OutputStyle::class, fn () => $mock);
+
+    $exit = Artisan::call('outpost', ['branch' => 'feature-x']);
+
+    expect($exit)->toBe(0)
+        ->and($captured)->toBe('blissful-lake');
 
     expect(app(Outposts::class)->exists('blissful-lake'))->toBeTrue();
 });
@@ -782,4 +838,33 @@ it('rejects a supplied name with no URL-friendly characters', function () {
     $this->artisan('outpost', ['branch' => 'feature-x', '--name' => '///'])
         ->expectsOutputToContain('URL-friendly')
         ->assertFailed();
+});
+
+it('rejects a branch that normalizes to empty when deriving the name under --no-interaction', function () {
+    fakeCreation([
+        processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads////') => Process::result('', '', 1),
+        processPattern('git', 'remote') => Process::result(''),
+    ]);
+
+    $exit = Artisan::call('outpost', [
+        'branch' => '///',
+        '--no-interaction' => true,
+    ]);
+
+    expect($exit)->toBe(1)
+        ->and(Artisan::output())->toContain('URL-friendly');
+});
+
+it('rejects a branch-derived name that already exists under --no-interaction', function () {
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])->assertSuccessful();
+
+    $exit = Artisan::call('outpost', [
+        'branch' => 'feature-x',
+        '--no-interaction' => true,
+    ]);
+
+    expect($exit)->toBe(1)
+        ->and(Artisan::output())->toContain('already exists');
 });

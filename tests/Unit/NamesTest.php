@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Str;
-use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Names;
 use Zacksmash\Outpost\Outposts;
 
@@ -12,17 +11,13 @@ function namesWith(array $adjectives = ['blissful'], array $nouns = ['lake']): N
     return new Names($adjectives, $nouns);
 }
 
-function availableStores(array $takenNames = [], array $takenContainers = []): array
+function availableStore(array $takenNames = []): Outposts
 {
     $outposts = Mockery::mock(Outposts::class);
     $outposts->shouldReceive('exists')
         ->andReturnUsing(fn (string $name): bool => in_array($name, $takenNames, true));
 
-    $runtime = Mockery::mock(RuntimeDriver::class);
-    $runtime->shouldReceive('exists')
-        ->andReturnUsing(fn (string $container): bool => in_array($container, $takenContainers, true));
-
-    return [$outposts, $runtime];
+    return $outposts;
 }
 
 it('generates a hyphenated adjective and noun pair', function () {
@@ -63,39 +58,31 @@ it('only ships wordlist entries that survive the slug round trip', function () {
 });
 
 it('returns a generated name when nothing has claimed it', function () {
-    [$outposts, $runtime] = availableStores();
+    $outposts = availableStore();
 
-    expect(namesWith()->unique($outposts, $runtime))->toBe('blissful-lake');
+    expect(namesWith()->unique($outposts))->toBe('blissful-lake');
 });
 
 it('regenerates when this application already has a manifest with the name', function () {
-    [$outposts, $runtime] = availableStores(takenNames: ['blissful-lake']);
+    $outposts = availableStore(takenNames: ['blissful-lake']);
 
     $names = namesWith(['blissful', 'quiet'], ['lake']);
 
-    expect($names->unique($outposts, $runtime))->toBe('quiet-lake');
-});
-
-it('regenerates when another project already has a container with the name', function () {
-    [$outposts, $runtime] = availableStores(takenContainers: ['blissful-lake']);
-
-    $names = namesWith(['blissful', 'quiet'], ['lake']);
-
-    expect($names->unique($outposts, $runtime))->toBe('quiet-lake');
+    expect($names->unique($outposts))->toBe('quiet-lake');
 });
 
 it('falls back to a numeric suffix when every combination is claimed', function () {
-    [$outposts, $runtime] = availableStores(takenNames: ['blissful-lake']);
+    $outposts = availableStore(takenNames: ['blissful-lake']);
 
-    expect(namesWith()->unique($outposts, $runtime))->toBe('blissful-lake-2');
+    expect(namesWith()->unique($outposts))->toBe('blissful-lake-2');
 });
 
 it('increments the numeric suffix past claimed fallbacks', function () {
-    [$outposts, $runtime] = availableStores(
+    $outposts = availableStore(
         takenNames: ['blissful-lake', 'blissful-lake-2', 'blissful-lake-3'],
     );
 
-    expect(namesWith()->unique($outposts, $runtime))->toBe('blissful-lake-4');
+    expect(namesWith()->unique($outposts))->toBe('blissful-lake-4');
 });
 
 it('hyphenates every non-alphanumeric run when normalizing a name', function (string $input, string $expected) {

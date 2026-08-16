@@ -45,12 +45,12 @@ A new `Zacksmash\Outpost\Names` class owns this:
 - `generate(): string` — an adjective-noun pair drawn from a bundled
   wordlist of roughly 128 adjectives and 128 nouns, giving about 16,000
   combinations. The wordlist ships as a package resource.
-- `unique(Outposts $outposts, RuntimeDriver $runtime): string` — regenerates
-  while the candidate exists either as a manifest for this application or as
-  a container on the machine. Both checks are required: container names are
-  machine-wide and the project-directory suffix that used to disambiguate
-  them is being removed. Attempts are capped; on exhaustion the class appends
-  a numeric suffix rather than looping.
+- `unique(Outposts $outposts): string` — regenerates while the candidate
+  exists as a manifest for this application. A runtime check is unnecessary:
+  the project-directory suffix on the container name keeps container names
+  scoped per project, so an instance name only has to be unique within this
+  application. Attempts are capped; on exhaustion the class appends a numeric
+  suffix rather than looping.
 - `normalize(string $name): string` — collapses every run of
   non-alphanumeric characters to a single hyphen before slugging, so
   `feature/some-bug-to-fix` yields `feature-some-bug-to-fix`.
@@ -59,7 +59,10 @@ A new `Zacksmash\Outpost\Names` class owns this:
 
 The generated name becomes the default of the existing `text()` prompt in
 `OutpostCommand::name()`, so pressing enter accepts it and typing replaces it.
-`--name` continues to override and skip the prompt entirely.
+`--name` continues to override and skip the prompt entirely. Under
+`--no-interaction` with no `--name`, there is no terminal to accept or edit a
+generated default, so the name is derived from the branch with `normalize()`
+instead, giving CI scripts a predictable name to compute in advance.
 
 `normalize()` applies to user-supplied names — the `--name` option and typed
 prompt input. This is the path where the original defect is still reachable.
@@ -197,8 +200,8 @@ Test-driven, Pest, behavior observed through public APIs, per the
 
 **`Names` is unit tested directly.** `normalize()` gets a case table covering
 `feature/x`, `release/v2.1.0`, `ZACK_fix.thing`, unicode input, and the empty
-string. Uniqueness is tested against a fake `Outposts` and `RuntimeDriver`
-that report collisions, asserting both regeneration and the numeric-suffix
+string. Uniqueness is tested against a fake `Outposts` that reports
+collisions, asserting both regeneration and the numeric-suffix
 fallback on exhaustion.
 
 **Generated names are made deterministic in feature tests.** A random name

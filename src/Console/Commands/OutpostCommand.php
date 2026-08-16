@@ -190,7 +190,7 @@ class OutpostCommand extends Command
                 return self::FAILURE;
             }
 
-            $name = $this->name($outposts, $names, $runtime);
+            $name = $this->name($outposts, $names, $pullRequest === null ? $branch : "pr-{$pullRequest}");
 
             if (($invalid = $this->invalidName($outposts, $names, $name)) !== null) {
                 error($invalid);
@@ -430,10 +430,12 @@ class OutpostCommand extends Command
      *
      * A supplied name is normalized rather than rejected, so a branch-shaped
      * value like [feature/billing] becomes [feature-billing] instead of
-     * failing validation. The prompt default is generated, because the
-     * branch is no longer part of the instance hostname.
+     * failing validation. Interactively, the prompt default is generated,
+     * because the branch is no longer part of the instance hostname. Without
+     * a terminal there is nobody to accept or edit that default, so the
+     * branch gives a predictable name a script can compute in advance.
      */
-    protected function name(Outposts $outposts, Names $names, RuntimeDriver $runtime): string
+    protected function name(Outposts $outposts, Names $names, string $branch): string
     {
         $supplied = $this->option('name');
 
@@ -447,9 +449,13 @@ class OutpostCommand extends Command
             return $name;
         }
 
+        if (! $this->input->isInteractive()) {
+            return $names->normalize($branch);
+        }
+
         return text(
             label: 'What should the instance be named?',
-            default: $names->unique($outposts, $runtime),
+            default: $names->unique($outposts),
             required: true,
             validate: fn (string $value) => $this->invalidName($outposts, $names, $value),
         );
