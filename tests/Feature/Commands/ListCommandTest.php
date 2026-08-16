@@ -140,6 +140,53 @@ it('reports all images current when nothing is outdated', function () {
         ->and($output)->not->toContain('outdated — run php artisan outpost:upgrade');
 });
 
+it('reports current, outdated, and unknown images without claiming the unknown ones are current', function () {
+    app(Outposts::class)->save(fakeManifest('feature-current'));
+    app(Outposts::class)->save(fakeManifest(
+        'feature-outdated',
+        image: 'ghcr.io/zacksmash/outpost:0.1.1',
+        imageDigest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    ));
+    app(Outposts::class)->save(fakeManifest('feature-unknown', image: null, imageDigest: null));
+
+    Process::fake([
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-current-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+    ]);
+
+    $exit = Artisan::call('outpost:list');
+    $output = Artisan::output();
+
+    expect($exit)->toBe(0)
+        ->and($output)->toContain('1 outdated — run php artisan outpost:upgrade')
+        ->and($output)->not->toContain('All images current')
+        ->and($output)->not->toContain('current, 1 unknown')
+        ->and($output)->not->toContain('1 unknown');
+});
+
+it('reports unknown images without claiming any of them are current', function () {
+    app(Outposts::class)->save(fakeManifest('feature-a', image: null, imageDigest: null));
+    app(Outposts::class)->save(fakeManifest('feature-b', image: null, imageDigest: null));
+
+    Process::fake([
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-a-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+    ]);
+
+    $exit = Artisan::call('outpost:list');
+    $output = Artisan::output();
+
+    expect($exit)->toBe(0)
+        ->and($output)->toContain('2 unknown')
+        ->and($output)->not->toContain('All images current')
+        ->and($output)->not->toContain('outdated — run php artisan outpost:upgrade')
+        ->and($output)->not->toContain('current, 2 unknown');
+});
+
 it('uses singular wording for exactly one instance', function () {
     app(Outposts::class)->save(fakeManifest('feature-x'));
 

@@ -140,10 +140,15 @@ class ListCommand extends Command
         ));
 
         $outdatedCount = count(array_filter($outdated, fn (?bool $isOutdated): bool => $isOutdated === true));
+        $unknownCount = count(array_filter($outdated, fn (?bool $isOutdated): bool => $isOutdated === null));
+        $currentCount = count($outdated) - $outdatedCount - $unknownCount;
 
-        $imageLine = $outdatedCount === 0
-            ? 'All images current'
-            : "{$outdatedCount} outdated — run php artisan outpost:upgrade";
+        $imageLine = match (true) {
+            $outdatedCount > 0 => "{$outdatedCount} outdated — run php artisan outpost:upgrade",
+            $unknownCount === 0 => 'All images current',
+            $currentCount === 0 => "{$unknownCount} unknown",
+            default => "{$currentCount} current, {$unknownCount} unknown",
+        };
 
         $instanceCount = count($manifests);
 
