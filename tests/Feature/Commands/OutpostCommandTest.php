@@ -558,7 +558,8 @@ it('refuses a branch that is already checked out elsewhere', function () {
 it('refuses an invalid instance name', function () {
     fakeCreation();
 
-    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => '!!!'])
+    $this->artisan('outpost', ['branch' => 'feature-x'])
+        ->expectsQuestion('What should the instance be named?', 'Not A Slug')
         ->expectsOutputToContain('URL-friendly slug')
         ->assertFailed();
 });
@@ -746,17 +747,20 @@ it('keeps serving instances created before the hostname changed', function () {
         ->toBe('feature-billing-app');
 });
 
-it('defaults to a generated name instead of the branch', function () {
+it('uses the generated name when nothing is supplied and nothing is typed', function () {
     File::ensureDirectoryExists($this->root.'/blissful-lake/app');
     File::put($this->root.'/blissful-lake/app/.env.example', "APP_NAME=Example\nDB_CONNECTION=sqlite\n");
 
     fakeNames('blissful-lake');
     fakeCreation();
 
-    $this->artisan('outpost', ['branch' => 'feature-x'])
-        ->expectsQuestion('What should the instance be named?', 'blissful-lake')
-        ->expectsOutputToContain('http://blissful-lake.outpost')
-        ->assertSuccessful();
+    $exit = Artisan::call('outpost', [
+        'branch' => 'feature-x',
+        '--no-interaction' => true,
+    ]);
+
+    expect($exit)->toBe(0)
+        ->and(Artisan::output())->toContain('http://blissful-lake.outpost');
 
     expect(app(Outposts::class)->exists('blissful-lake'))->toBeTrue();
 });

@@ -206,7 +206,7 @@ class OutpostCommand extends Command
             }
 
             if ($runtime->exists($container)) {
-                error("A container named [{$container}] already exists. Remove it before reusing the name.");
+                error("A container named [{$container}] already exists on this machine. Instance names are shared across every project, so it may belong to another application. Choose a different --name, or remove that container if it is yours.");
 
                 return self::FAILURE;
             }

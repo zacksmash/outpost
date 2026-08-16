@@ -105,7 +105,7 @@ php artisan outpost origin/review/invoices --name=invoices --open
 php artisan outpost --pr=482 --name=pr-482 --open
 ```
 
-A supplied `--name` is normalized to a URL-friendly slug rather than rejected, so `--name=feature/billing` creates `feature-billing`; Outpost reports the substitution whenever normalization changes what you typed. The instance URL is always `https://<name>.<domain>`, with no project-directory suffix. Instances created before this change keep their existing hostnames — the container name and URL are recorded in the manifest at creation time and are never rewritten.
+A supplied `--name` is normalized to a URL-friendly slug rather than rejected, so `--name=feature/billing` creates `feature-billing`; Outpost reports the substitution whenever normalization changes what you typed. The instance URL is always `https://<name>.<domain>`, with no project-directory suffix. Because the suffix is gone, instance names are shared across every project on the machine rather than scoped to one, so pick a name that is unique across all of them. Instances created before this change keep their existing hostnames — the container name and URL are recorded in the manifest at creation time and are never rewritten.
 
 Outpost creates a Git worktree beneath `.outpost/<name>/app`, detects your application's runtime and services, boots the VM, prepares `.env` from `.env.example`, installs your dependencies, builds the front end, migrates the database, and waits for a real application response.
 
