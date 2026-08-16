@@ -35,7 +35,7 @@ return [
     |
     */
 
-    'image' => env('OUTPOST_IMAGE', 'ghcr.io/zacksmash/outpost:0.5.6'),
+    'image' => env('OUTPOST_IMAGE', 'ghcr.io/zacksmash/outpost:0.6.0'),
 
     /*
     |--------------------------------------------------------------------------
