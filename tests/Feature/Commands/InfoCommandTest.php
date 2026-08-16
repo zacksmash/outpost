@@ -40,15 +40,34 @@ it('shows runtime details and service connection information', function () {
     $output = Artisan::output();
 
     expect($exit)->toBe(0)
+        // The instance name is the callout label, not a "Name" row.
         ->and($output)->toContain('billing')
-        ->and($output)->toContain('apple-container')
+        ->and($output)->not->toContain('Name')
+        ->and($output)->toContain('Branch')
+        ->and($output)->toContain('feature/billing')
+        ->and($output)->toContain('State')
         ->and($output)->toContain('running')
-        ->and($output)->toContain('PHP 8.4 / PHP-FPM')
-        ->and($output)->toContain('App processes')
+        // "Runtime" (container runtime) and "PHP" (language runtime) are distinct labels.
+        ->and($output)->toContain('Runtime')
+        ->and($output)->toContain('apple-container')
+        ->and($output)->toContain('PHP')
+        ->and($output)->toContain('8.4 / PHP-FPM')
+        ->and($output)->toContain('Frontend')
+        ->and($output)->toContain('build')
+        ->and($output)->toContain('Services')
+        ->and($output)->toContain('mysql, redis, mailpit')
+        ->and($output)->toContain('Processes')
+        ->and($output)->not->toContain('App processes')
+        ->and($output)->toContain('Resources')
         ->and($output)->toContain('4 CPU / 2G')
-        ->and($output)->toContain(Runtime::PUBLISHED_IMAGE)
+        ->and($output)->toContain('Image')
+        ->and($output)->toContain(Runtime::PUBLISHED_IMAGE.' (current)')
+        ->and($output)->toContain('Application')
         ->and($output)->toContain('mysql://outpost:password@billing-app.outpost:3306/outpost')
-        ->and($output)->toContain('http://billing-app.outpost:8025');
+        ->and($output)->toContain('Mailpit')
+        ->and($output)->toContain('http://billing-app.outpost:8025')
+        ->and($output)->toContain('SMTP')
+        ->and($output)->toContain('billing-app.outpost:1025');
 });
 
 it('provides structured json for agents and scripts', function () {
@@ -322,4 +341,94 @@ it('reports an instance created from another image as outdated', function () {
     expect($output['outdated'])->toBeTrue()
         ->and($output['image'])->toBe('ghcr.io/zacksmash/outpost:0.1.1')
         ->and($output['configured_image'])->toBe(Runtime::PUBLISHED_IMAGE);
+});
+
+it('merges the outdated image and its status into a single row naming the configured image', function () {
+    app(Outposts::class)->save(fakeManifest(
+        name: 'billing',
+        image: 'ghcr.io/zacksmash/outpost:0.1.1',
+        imageDigest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    ));
+
+    Process::fake([
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'billing-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+    ]);
+
+    $exit = Artisan::call('outpost:info', ['name' => 'billing']);
+    $output = Artisan::output();
+
+    // Assert on the pieces separately rather than one long continuous
+    // string: the combined image/status value is long enough that Laravel
+    // Prompts wraps it across lines inside the callout box at 80 columns.
+    expect($exit)->toBe(0)
+        ->and($output)->toContain('ghcr.io/zacksmash/outpost:0.1.1')
+        ->and($output)->toContain('outdated,')
+        ->and($output)->toContain('configured:')
+        ->and($output)->toContain(Runtime::PUBLISHED_IMAGE);
+});
+
+it('renders a missing image as unknown legacy manifest, distinct from a plain unknown status', function () {
+    app(Outposts::class)->save(fakeManifest(name: 'billing', image: null, imageDigest: null));
+
+    Process::fake([
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'billing-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+    ]);
+
+    $exit = Artisan::call('outpost:info', ['name' => 'billing']);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(0)
+        ->and($output)->toContain('unknown (legacy manifest)');
+});
+
+it('renders a plain unknown image status when the configured digest cannot be resolved', function () {
+    app(Outposts::class)->save(fakeManifest(name: 'billing'));
+
+    Process::fake([
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result('', 'not found', 1),
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'billing-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+    ]);
+
+    $exit = Artisan::call('outpost:info', ['name' => 'billing']);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(0)
+        ->and($output)->toContain(Runtime::PUBLISHED_IMAGE.' (unknown)')
+        ->and($output)->not->toContain('legacy manifest');
+});
+
+it('disambiguates an endpoint label that collides with a fixed field label instead of losing a row', function () {
+    // Preview names are configured by the app repo and are only barred from
+    // matching a handful of built-in endpoint names (app, application,
+    // mysql, pgsql, redis, mailpit) — see Endpoints::RESERVED_NAMES. Nothing
+    // stops a preview named "runtime", which ucfirst()s into the same label
+    // as this command's own container-runtime row.
+    config(['outpost.previews' => [
+        'runtime' => ['path' => '/runtime-report'],
+    ]]);
+
+    app(Outposts::class)->save(fakeManifest(name: 'billing', services: [], exposeServices: false));
+
+    Process::fake([
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
+    ]);
+
+    $exit = Artisan::call('outpost:info', ['name' => 'billing']);
+    $output = Artisan::output();
+
+    expect($exit)->toBe(0)
+        // The container runtime value survives.
+        ->and($output)->toContain('apple-container')
+        // So does the colliding preview endpoint's URL — neither silently
+        // overwrote the other in the key/value map.
+        ->and($output)->toContain('http://billing-app.outpost/runtime-report');
 });

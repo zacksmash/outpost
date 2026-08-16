@@ -80,6 +80,8 @@ class OutpostServiceProvider extends ServiceProvider
 
         $this->app->singleton(VerificationChecks::class);
 
+        $this->app->singleton(Names::class);
+
         $this->app->singleton(Outposts::class, function (Application $app) {
             $path = $app->make('config')->string('outpost.path');
 

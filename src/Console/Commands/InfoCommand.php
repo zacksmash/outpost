@@ -6,6 +6,7 @@ namespace Zacksmash\Outpost\Console\Commands;
 
 use Illuminate\Console\Command;
 use JsonException;
+use Laravel\Prompts\Elements\KeyValueList;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
@@ -13,6 +14,8 @@ use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Endpoints;
 use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Outposts;
+
+use function Laravel\Prompts\callout;
 
 #[AsCommand(name: 'outpost:info')]
 class InfoCommand extends Command
@@ -83,19 +86,18 @@ class InfoCommand extends Command
                 return self::SUCCESS;
             }
 
-            $this->newLine();
-
-            foreach ($this->rows(
-                $manifest,
+            callout(
+                $manifest->name,
+                [new KeyValueList($this->keyValueMap($this->rows(
+                    $manifest,
+                    $state,
+                    $resolvedEndpoints,
+                    $configuredImage,
+                    $outdated,
+                )))],
+                null,
                 $state,
-                $resolvedEndpoints,
-                $configuredImage,
-                $outdated,
-            ) as [$label, $value]) {
-                $this->components->twoColumnDetail($label, $value);
-            }
-
-            $this->newLine();
+            );
         } catch (JsonException|RuntimeException $e) {
             $this->renderError($e->getMessage());
 
@@ -141,7 +143,9 @@ class InfoCommand extends Command
     }
 
     /**
-     * Build human-readable detail rows.
+     * Build human-readable detail rows, identity first, then endpoints, then
+     * the application stack, then the container. The instance name is not
+     * included; it is the callout label.
      *
      * @param  array<string, array<string, int|string>>  $endpoints
      * @return list<array{string, string}>
@@ -154,25 +158,9 @@ class InfoCommand extends Command
         ?bool $outdated,
     ): array {
         $rows = [
-            ['Name', $manifest->name],
             ['Branch', $manifest->branch],
-            ['Container runtime', $manifest->runtime],
             ['State', $state],
-            ['Image', $manifest->image ?? 'unknown (legacy manifest)'],
-            ['Image status', match ($outdated) {
-                true => "outdated; configured image is {$configuredImage}",
-                false => 'current',
-                null => 'unknown',
-            }],
-            ['Runtime', "PHP {$manifest->php} / PHP-FPM"],
-            ['Frontend', $manifest->frontend],
-            ['Services', $manifest->services === [] ? 'none' : implode(', ', $manifest->services)],
-            ['App processes', $manifest->processes === [] ? 'none' : implode(', ', $manifest->processes)],
         ];
-
-        if ($manifest->cpus !== null && $manifest->memory !== null) {
-            $rows[] = ['Resources', "{$manifest->cpus} CPU / {$manifest->memory}"];
-        }
 
         foreach ($endpoints as $name => $endpoint) {
             $url = $endpoint['url'] ?? null;
@@ -195,6 +183,68 @@ class InfoCommand extends Command
             }
         }
 
+        $rows[] = ['PHP', "{$manifest->php} / PHP-FPM"];
+        $rows[] = ['Frontend', $manifest->frontend];
+        $rows[] = ['Services', $manifest->services === [] ? 'none' : implode(', ', $manifest->services)];
+        $rows[] = ['Processes', $manifest->processes === [] ? 'none' : implode(', ', $manifest->processes)];
+
+        if ($manifest->cpus !== null && $manifest->memory !== null) {
+            $rows[] = ['Resources', "{$manifest->cpus} CPU / {$manifest->memory}"];
+        }
+
+        $rows[] = ['Runtime', $manifest->runtime];
+        $rows[] = ['Image', $this->imageSummary($manifest, $configuredImage, $outdated)];
+
         return $rows;
+    }
+
+    /**
+     * Describe the recorded image and how it compares with what's configured now.
+     */
+    private function imageSummary(Manifest $manifest, string $configuredImage, ?bool $outdated): string
+    {
+        if ($manifest->image === null) {
+            return 'unknown (legacy manifest)';
+        }
+
+        return $manifest->image.' ('.match ($outdated) {
+            true => "outdated, configured: {$configuredImage}",
+            false => 'current',
+            null => 'unknown',
+        }.')';
+    }
+
+    /**
+     * Convert row pairs into a duplicate-safe key/value map.
+     *
+     * Endpoint labels are derived from configured preview names (see
+     * Endpoints::all()), which are only barred from matching a handful of
+     * built-in endpoint names (app, application, mysql, pgsql, redis,
+     * mailpit). Nothing stops a preview from being named e.g. "runtime" or
+     * "php", which would ucfirst() into the same label as one of this
+     * command's own fixed rows. KeyValueList takes array<string, string>,
+     * so naively assigning by label would let a collision silently drop a
+     * row. Disambiguate instead.
+     *
+     * @param  list<array{string, string}>  $rows
+     * @return array<string, string>
+     */
+    private function keyValueMap(array $rows): array
+    {
+        $map = [];
+
+        foreach ($rows as [$label, $value]) {
+            $key = $label;
+            $suffix = 2;
+
+            while (array_key_exists($key, $map)) {
+                $key = "{$label} ({$suffix})";
+                $suffix++;
+            }
+
+            $map[$key] = $value;
+        }
+
+        return $map;
     }
 }

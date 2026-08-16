@@ -21,6 +21,7 @@ use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Host;
 use Zacksmash\Outpost\LifecycleHooks;
 use Zacksmash\Outpost\Manifest;
+use Zacksmash\Outpost\Names;
 use Zacksmash\Outpost\Nginx;
 use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\PathRepositories;
@@ -71,6 +72,7 @@ class OutpostCommand extends Command
         Certificates $certificates,
         Detector $detector,
         Outposts $outposts,
+        Names $names,
         DependencyCaches $dependencyCaches,
         PathRepositories $pathRepositories,
         Provisioner $provisioner,
@@ -188,12 +190,9 @@ class OutpostCommand extends Command
                 return self::FAILURE;
             }
 
-            $name = $this->name(
-                $outposts,
-                $pullRequest === null ? $branch : "pr-{$pullRequest}",
-            );
+            $name = $this->name($outposts, $names, $pullRequest === null ? $branch : "pr-{$pullRequest}");
 
-            if (($invalid = $this->invalidName($outposts, $name)) !== null) {
+            if (($invalid = $this->invalidName($outposts, $names, $name)) !== null) {
                 error($invalid);
 
                 return self::FAILURE;
@@ -428,29 +427,64 @@ class OutpostCommand extends Command
 
     /**
      * Determine the name of the instance.
+     *
+     * A supplied name is normalized rather than rejected, so a branch-shaped
+     * value like [feature/billing] becomes [feature-billing] instead of
+     * failing validation. Otherwise the name is derived from the branch,
+     * which is the instance's natural name and keeps it recognizable in
+     * [outpost:list] without consulting the manifest. Interactively, the
+     * derived name becomes the prompt default so pressing enter accepts it
+     * and typing replaces it. Without a terminal there is nobody to accept
+     * or edit a default, so the derived name is used directly, giving CI
+     * scripts a predictable name to compute in advance.
      */
-    protected function name(Outposts $outposts, string $branch): string
+    protected function name(Outposts $outposts, Names $names, string $branch): string
     {
-        $name = $this->option('name');
+        $supplied = $this->option('name');
 
-        if (is_string($name) && $name !== '') {
+        if (is_string($supplied) && $supplied !== '') {
+            $name = $names->normalize($supplied);
+
+            if ($name !== $supplied && $name !== '') {
+                note("Using [{$name}] for the supplied name [{$supplied}].");
+            }
+
             return $name;
+        }
+
+        $budget = $this->nameBudget();
+        $derived = $names->derive($branch, $budget);
+
+        if (! $this->input->isInteractive()) {
+            return $derived;
         }
 
         return text(
             label: 'What should the instance be named?',
-            default: Str::slug($branch),
+            default: $names->unique($outposts, $derived, $budget),
             required: true,
-            validate: fn (string $value) => $this->invalidName($outposts, $value),
+            validate: fn (string $value) => $this->invalidName($outposts, $names, $value),
         );
+    }
+
+    /**
+     * Determine how many characters the instance name may occupy.
+     *
+     * The container is [{instance-name}-{project-directory-slug}] and must
+     * stay within the 63-character DNS label limit, so the instance name
+     * gets whatever the project directory's slug does not use.
+     */
+    protected function nameBudget(): int
+    {
+        return 63 - 1 - strlen(Str::slug(basename($this->laravel->basePath())));
     }
 
     /**
      * Determine why the given instance name is unacceptable, if it is.
      */
-    protected function invalidName(Outposts $outposts, string $name): ?string
+    protected function invalidName(Outposts $outposts, Names $names, string $name): ?string
     {
-        if ($name === '' || Str::slug($name) !== $name) {
+        if ($name === '' || $names->normalize($name) !== $name) {
             return 'The name must be a URL-friendly slug.';
         }
 
