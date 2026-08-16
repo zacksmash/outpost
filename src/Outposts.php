@@ -140,16 +140,13 @@ class Outposts
 
         // The manifest lives inside the worktree's parent directory, so it
         // must be treated as untrusted input: refuse one that claims a
-        // different name or targets an unexpected container. The container
-        // either equals the instance name (current convention) or carries
-        // the legacy "{name}-<suffix>" shape from instances created before
-        // the project-directory suffix was dropped.
+        // different name or targets an unexpected container.
         if ($manifest->name !== $name) {
             throw new RuntimeException("The manifest at [{$path}] does not belong to the [{$name}] instance.");
         }
 
         if (Str::slug($manifest->container) !== $manifest->container
-            || ($manifest->container !== $name && ! str_starts_with($manifest->container, "{$name}-"))) {
+            || ! str_starts_with($manifest->container, "{$name}-")) {
             throw new RuntimeException("The manifest at [{$path}] names an unexpected container [{$manifest->container}].");
         }
 

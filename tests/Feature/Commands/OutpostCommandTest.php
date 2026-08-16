@@ -130,13 +130,13 @@ it('creates a fully provisioned instance', function () {
     fakeCreation();
 
     $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
-        ->expectsOutputToContain('http://feature-x.outpost')
+        ->expectsOutputToContain('http://feature-x-laravel.outpost')
         ->assertSuccessful();
 
     $manifest = json_decode(File::get($this->root.'/feature-x/outpost.json'), true);
 
     expect($manifest['name'])->toBe('feature-x')
-        ->and($manifest['container'])->toBe('feature-x')
+        ->and($manifest['container'])->toBe('feature-x-laravel')
         ->and($manifest['branch'])->toBe('feature-x')
         ->and($manifest['cpus'])->toBe(4)
         ->and($manifest['memory'])->toBe('2G')
@@ -151,10 +151,10 @@ it('creates a fully provisioned instance', function () {
         ->and(File::exists($this->root.'/feature-x/runtime/supervisord.conf'))->toBeTrue()
         ->and(File::isDirectory($this->root.'/.cache/composer'))->toBeTrue()
         ->and(File::isDirectory($this->root.'/.cache/npm'))->toBeTrue()
-        ->and(File::get($this->root.'/feature-x/app/.env'))->toContain('APP_URL=http://feature-x.outpost');
+        ->and(File::get($this->root.'/feature-x/app/.env'))->toContain('APP_URL=http://feature-x-laravel.outpost');
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'run', '--detach', '--name', 'feature-x', '--dns', '1.1.1.1',
+        'container', 'run', '--detach', '--name', 'feature-x-laravel', '--dns', '1.1.1.1',
         '--cpus', '4', '--memory', '2G',
         '--env', 'OUTPOST_UID=501', '--env', 'OUTPOST_GID=20',
         '--env', 'COMPOSER_CACHE_DIR=/var/cache/outpost/composer',
@@ -230,7 +230,7 @@ it('configures and releases application processes after provisioning', function 
         'container', 'exec', '--env', 'HOME=/root',
         '--env', 'COMPOSER_CACHE_DIR=/root/.composer/cache', '--env', 'NPM_CONFIG_CACHE=/root/.npm',
         '--user', 'root', '--workdir', '/app',
-        'feature-x', 'touch', '/var/lib/outpost/ready',
+        'feature-x-laravel', 'touch', '/var/lib/outpost/ready',
     ]);
 });
 
@@ -247,7 +247,7 @@ it('runs repository-owned setup hooks after built-in provisioning', function () 
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
         'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
-        'feature-x', 'php8.5', 'artisan', 'scout:sync-index-settings',
+        'feature-x-laravel', 'php8.5', 'artisan', 'scout:sync-index-settings',
     ]);
 });
 
@@ -257,7 +257,7 @@ it('marks an instance failed when a setup hook fails', function () {
     ]]);
 
     fakeCreation([
-        processPattern('container', 'exec').' *'.processPattern('feature-x', 'php8.5', 'artisan', 'scout:sync-index-settings') => Process::result('', 'search unavailable', 1),
+        processPattern('container', 'exec').' *'.processPattern('feature-x-laravel', 'php8.5', 'artisan', 'scout:sync-index-settings') => Process::result('', 'search unavailable', 1),
     ]);
 
     $exit = Artisan::call('outpost', ['branch' => 'feature-x', '--name' => 'feature-x']);
@@ -305,13 +305,13 @@ it('boots a trusted https instance with its certificate mounted read only', func
     ]);
 
     $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
-        ->expectsOutputToContain('https://feature-x.outpost')
+        ->expectsOutputToContain('https://feature-x-laravel.outpost')
         ->assertSuccessful();
 
     $manifest = json_decode(File::get($this->root.'/feature-x/outpost.json'), true);
     $nginx = File::get($this->root.'/feature-x/runtime/nginx.conf');
 
-    expect($manifest['url'])->toBe('https://feature-x.outpost')
+    expect($manifest['url'])->toBe('https://feature-x-laravel.outpost')
         ->and($nginx)->toContain('listen 443 ssl default_server;')
         ->and(File::isDirectory($this->root.'/feature-x/runtime/tls'))->toBeTrue();
 
@@ -319,13 +319,13 @@ it('boots a trusted https instance with its certificate mounted read only', func
         'mkcert',
         '-cert-file', $this->root.'/feature-x/runtime/tls/certificate.pem',
         '-key-file', $this->root.'/feature-x/runtime/tls/key.pem',
-        'feature-x.outpost',
+        'feature-x-laravel.outpost',
     ]);
 
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('*.outpost', $process->command, true));
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'container', 'run', '--detach', '--name', 'feature-x', '--dns', '1.1.1.1',
+        'container', 'run', '--detach', '--name', 'feature-x-laravel', '--dns', '1.1.1.1',
         '--cpus', '4', '--memory', '2G',
         '--env', 'OUTPOST_UID=501', '--env', 'OUTPOST_GID=20',
         '--env', 'COMPOSER_CACHE_DIR=/var/cache/outpost/composer',
@@ -450,7 +450,7 @@ it('rejects a pull request remote when no pull request was requested', function 
 
 it('opens a newly created instance when requested', function () {
     fakeCreation([
-        processPattern('open', 'http://feature-x.outpost') => Process::result(''),
+        processPattern('open', 'http://feature-x-laravel.outpost') => Process::result(''),
     ]);
 
     $this->artisan('outpost', [
@@ -460,13 +460,13 @@ it('opens a newly created instance when requested', function () {
     ])->assertSuccessful();
 
     Process::assertRan(fn (PendingProcess $process) => $process->command === [
-        'open', 'http://feature-x.outpost',
+        'open', 'http://feature-x-laravel.outpost',
     ]);
 });
 
 it('keeps a ready instance when its browser cannot be opened', function () {
     fakeCreation([
-        processPattern('open', 'http://feature-x.outpost') => Process::result('', 'no browser handler', 1),
+        processPattern('open', 'http://feature-x-laravel.outpost') => Process::result('', 'no browser handler', 1),
     ]);
 
     $this->artisan('outpost', [
@@ -475,7 +475,7 @@ it('keeps a ready instance when its browser cannot be opened', function () {
         '--open' => true,
     ])
         ->expectsOutputToContain('no browser handler')
-        ->expectsOutputToContain('Open it manually: http://feature-x.outpost')
+        ->expectsOutputToContain('Open it manually: http://feature-x-laravel.outpost')
         ->assertSuccessful();
 });
 
@@ -519,12 +519,12 @@ it('provisions the application before checking its final HTTP response', functio
     $composerInstalled = false;
 
     fakeCreation([
-        processPattern('container', 'exec').' *'.processPattern('feature-x', 'php8.5', '/usr/local/bin/composer').' *' => function () use (&$composerInstalled) {
+        processPattern('container', 'exec').' *'.processPattern('feature-x-laravel', 'php8.5', '/usr/local/bin/composer').' *' => function () use (&$composerInstalled) {
             $composerInstalled = true;
 
             return Process::result();
         },
-        processPattern('container', 'exec').' *'.processPattern('feature-x', 'curl').' *' => function () use (&$composerInstalled) {
+        processPattern('container', 'exec').' *'.processPattern('feature-x-laravel', 'curl').' *' => function () use (&$composerInstalled) {
             expect($composerInstalled)->toBeTrue();
 
             return Process::result();
@@ -577,7 +577,7 @@ it('refuses a name that is already an instance', function () {
 it('refuses a container name that exceeds the DNS label limit', function () {
     fakeCreation();
 
-    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => str_repeat('a', 64)])
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => str_repeat('a', 60)])
         ->expectsOutputToContain('63-character DNS label limit')
         ->assertFailed();
 
@@ -689,7 +689,7 @@ it('leaves everything in place when the instance never answers', function () {
     Sleep::fake();
 
     fakeCreation([
-        processPattern('container', 'exec').' *'.processPattern('feature-x', 'curl').' *' => Process::result('', 'refused', 7),
+        processPattern('container', 'exec').' *'.processPattern('feature-x-laravel', 'curl').' *' => Process::result('', 'refused', 7),
     ]);
 
     config(['outpost.timeout' => 3]);
@@ -707,8 +707,8 @@ it('leaves everything in place when the instance never answers', function () {
 
 it('reports the failing provisioning step and keeps the container', function () {
     fakeCreation([
-        processPattern('container', 'exec').' *'.processPattern('feature-x', 'curl').' *' => Process::result(''),
-        processPattern('container', 'exec').' *'.processPattern('feature-x', 'php8.5', '/usr/local/bin/composer').' *' => Process::result('', 'could not resolve host', 1),
+        processPattern('container', 'exec').' *'.processPattern('feature-x-laravel', 'curl').' *' => Process::result(''),
+        processPattern('container', 'exec').' *'.processPattern('feature-x-laravel', 'php8.5', '/usr/local/bin/composer').' *' => Process::result('', 'could not resolve host', 1),
     ]);
 
     $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
@@ -720,31 +720,6 @@ it('reports the failing provisioning step and keeps the container', function () 
 
     expect(json_decode(File::get($this->root.'/feature-x/outpost.json'), true)['status'])
         ->toBe('failed');
-});
-
-it('uses the instance name alone as the container hostname', function () {
-    fakeCreation();
-
-    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
-        ->expectsOutputToContain('http://feature-x.outpost')
-        ->assertSuccessful();
-
-    $manifest = app(Outposts::class)->find('feature-x');
-
-    expect($manifest->container)->toBe('feature-x')
-        ->and($manifest->url)->toBe('http://feature-x.outpost');
-});
-
-it('keeps serving instances created before the hostname changed', function () {
-    $legacy = fakeManifest(name: 'feature-billing');
-
-    expect($legacy->container)->toBe('feature-billing-app')
-        ->and($legacy->url)->toBe('http://feature-billing-app.outpost');
-
-    app(Outposts::class)->save($legacy);
-
-    expect(app(Outposts::class)->find('feature-billing')?->container)
-        ->toBe('feature-billing-app');
 });
 
 it('uses the generated name when nothing is supplied and nothing is typed', function () {
@@ -760,7 +735,7 @@ it('uses the generated name when nothing is supplied and nothing is typed', func
     ]);
 
     expect($exit)->toBe(0)
-        ->and(Artisan::output())->toContain('http://blissful-lake.outpost');
+        ->and(Artisan::output())->toContain('http://blissful-lake-laravel.outpost');
 
     expect(app(Outposts::class)->exists('blissful-lake'))->toBeTrue();
 });
@@ -772,7 +747,7 @@ it('hyphenates a supplied name that a branch namespace would otherwise mangle', 
     fakeCreation();
 
     $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature/some-bug-to-fix'])
-        ->expectsOutputToContain('http://feature-some-bug-to-fix.outpost')
+        ->expectsOutputToContain('http://feature-some-bug-to-fix-laravel.outpost')
         ->expectsOutputToContain('feature-some-bug-to-fix')
         ->assertSuccessful();
 

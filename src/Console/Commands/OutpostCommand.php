@@ -7,6 +7,7 @@ namespace Zacksmash\Outpost\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Certificates;
@@ -197,7 +198,7 @@ class OutpostCommand extends Command
                 return self::FAILURE;
             }
 
-            $container = $name;
+            $container = $name.'-'.Str::slug(basename($this->laravel->basePath()));
 
             if (($invalid = $this->invalidContainer($container)) !== null) {
                 error($invalid);
@@ -206,7 +207,7 @@ class OutpostCommand extends Command
             }
 
             if ($runtime->exists($container)) {
-                error("A container named [{$container}] already exists on this machine. Instance names are shared across every project, so it may belong to another application. Choose a different --name, or remove that container if it is yours.");
+                error("A container named [{$container}] already exists. Remove it before reusing the name.");
 
                 return self::FAILURE;
             }
@@ -481,10 +482,15 @@ class OutpostCommand extends Command
      * Determine why the derived container name is unusable, if it is.
      *
      * The container name becomes the instance's DNS hostname label, so it
-     * must stay within the 63-character DNS label limit.
+     * must survive the slug round-trip that reading the manifest enforces
+     * and stay within the 63-character DNS label limit.
      */
     protected function invalidContainer(string $container): ?string
     {
+        if (Str::slug($container) !== $container) {
+            return 'Unable to derive a container name from the project directory ['.basename($this->laravel->basePath()).'] because it has no URL-friendly characters. Rename the directory or move the project.';
+        }
+
         if (strlen($container) > 63) {
             return "The [{$container}] container name exceeds the 63-character DNS label limit, so its URL would never resolve. Choose a shorter name with --name.";
         }

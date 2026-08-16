@@ -17,7 +17,7 @@ Outpost turns any branch of your Laravel application into an isolated, reviewabl
 ```shell
 php artisan outpost feature/billing
 
-# Created [blissful-lake]: https://blissful-lake.outpost
+# Created [blissful-lake]: https://blissful-lake-app.outpost
 ```
 
 Each instance receives its own editable Git worktree, VM, URL, database, and detected services. Outpost doesn't replace your primary development environment — it gives your branches and agents somewhere to build in parallel, so you can preview their actual, compiled output before it ships.
@@ -105,7 +105,7 @@ php artisan outpost origin/review/invoices --name=invoices --open
 php artisan outpost --pr=482 --name=pr-482 --open
 ```
 
-A supplied `--name` is normalized to a URL-friendly slug rather than rejected, so `--name=feature/billing` creates `feature-billing`; Outpost reports the substitution whenever normalization changes what you typed. The instance URL is always `https://<name>.<domain>`, with no project-directory suffix. Because the suffix is gone, instance names are shared across every project on the machine rather than scoped to one, so pick a name that is unique across all of them. Instances created before this change keep their existing hostnames — the container name and URL are recorded in the manifest at creation time and are never rewritten.
+A supplied `--name` is normalized to a URL-friendly slug rather than rejected, so `--name=feature/billing` creates `feature-billing`; Outpost reports the substitution whenever normalization changes what you typed. The instance URL is `https://<name>-<project-directory>.<domain>`, so the container is scoped to the project that created it and identical instance names in different projects never collide. The container name and URL are recorded in the manifest at creation time and are never rewritten, even if the project directory is later renamed.
 
 Outpost creates a Git worktree beneath `.outpost/<name>/app`, detects your application's runtime and services, boots the VM, prepares `.env` from `.env.example`, installs your dependencies, builds the front end, migrates the database, and waits for a real application response.
 
