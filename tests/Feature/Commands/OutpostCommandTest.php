@@ -20,6 +20,7 @@ beforeEach(function () {
     Process::preventStrayProcesses();
 
     $this->root = sys_get_temp_dir().'/outpost-create-'.Str::random(10);
+    $this->originalBasePath = $this->app->basePath();
 
     config([
         'outpost.path' => $this->root,
@@ -41,6 +42,11 @@ beforeEach(function () {
 
 afterEach(function () {
     File::deleteDirectory($this->root);
+
+    if (isset($this->unslugabbleBasePath)) {
+        $this->app->setBasePath($this->originalBasePath);
+        File::deleteDirectory($this->unslugabbleBasePath);
+    }
 });
 
 function fakeCreation(array $overrides = []): void
@@ -583,6 +589,20 @@ it('refuses a container name that exceeds the DNS label limit', function () {
 
     $this->artisan('outpost', ['branch' => 'feature-x', '--name' => str_repeat('a', 60)])
         ->expectsOutputToContain('63-character DNS label limit')
+        ->assertFailed();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[2] ?? null) === 'add');
+});
+
+it('refuses a project directory with no url-friendly characters', function () {
+    $this->unslugabbleBasePath = sys_get_temp_dir().'/你好';
+    File::ensureDirectoryExists($this->unslugabbleBasePath);
+    $this->app->setBasePath($this->unslugabbleBasePath);
+
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->expectsOutputToContain('no URL-friendly characters')
         ->assertFailed();
 
     Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[2] ?? null) === 'add');

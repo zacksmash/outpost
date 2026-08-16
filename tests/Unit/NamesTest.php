@@ -85,6 +85,21 @@ it('increments the numeric suffix past claimed fallbacks', function () {
     expect(namesWith()->unique($outposts))->toBe('blissful-lake-4');
 });
 
+it('throws when every draw and every numeric suffix is already taken', function () {
+    $outposts = availableStore(takenNames: [
+        'blissful-lake',
+        ...array_map(
+            fn (int $suffix): string => "blissful-lake-{$suffix}",
+            range(2, Names::ATTEMPTS),
+        ),
+    ]);
+
+    namesWith()->unique($outposts);
+})->throws(
+    RuntimeException::class,
+    'Unable to generate an unused instance name. Remove an instance, or choose one with --name.',
+);
+
 it('hyphenates every non-alphanumeric run when normalizing a name', function (string $input, string $expected) {
     expect(namesWith()->normalize($input))->toBe($expected);
 })->with([
