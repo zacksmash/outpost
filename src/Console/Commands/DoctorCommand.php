@@ -5,16 +5,16 @@ declare(strict_types=1);
 namespace Zacksmash\Outpost\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Str;
+use Laravel\Prompts\Elements\BulletedList;
+use Laravel\Prompts\Elements\Heading;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Console\Concerns\RendersJsonOutput;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\DoctorCheck;
 
-use function Laravel\Prompts\error;
-use function Laravel\Prompts\note;
-use function Laravel\Prompts\outro;
+use function Laravel\Prompts\callout;
 use function Laravel\Prompts\table;
-use function Laravel\Prompts\warning;
 
 #[AsCommand(name: 'outpost:doctor')]
 class DoctorCommand extends Command
@@ -70,30 +70,104 @@ class DoctorCommand extends Command
             ], $checks),
         );
 
+        $hasIssues = $failures !== [] || $warnings !== [];
+
+        if ($hasIssues) {
+            $this->renderIssues($failures, $warnings);
+        } else {
+            $this->renderReady(count($checks));
+        }
+
+        if ($hasIssues || $this->output->isVerbose()) {
+            $this->renderTroubleshooting();
+        }
+
+        return $failures === [] ? self::SUCCESS : self::FAILURE;
+    }
+
+    /**
+     * Render the single all-clear callout for a fully healthy run.
+     */
+    private function renderReady(int $checkCount): void
+    {
+        callout(
+            'Outpost is ready',
+            'Create an instance with [php artisan outpost].',
+            null,
+            "{$checkCount} ".Str::plural('check', $checkCount).' passed',
+        );
+    }
+
+    /**
+     * Render a single callout carrying every failing or warning check's remedy.
+     *
+     * @param  list<DoctorCheck>  $failures
+     * @param  list<DoctorCheck>  $warnings
+     */
+    private function renderIssues(array $failures, array $warnings): void
+    {
+        $content = [];
+
         foreach ([...$failures, ...$warnings] as $check) {
             if ($check->remedy !== null) {
-                note("{$check->name}: {$check->remedy}");
+                $content[] = new Heading($check->name);
+                $content[] = new BulletedList([$check->remedy]);
             }
         }
 
-        note('Host access: If browsers or CLI tools cannot reach container addresses, enable the calling application under System Settings > Privacy & Security > Local Network.');
-        note("Container probes (the published hostname does not resolve inside its own container):\n\n  HTTP:  php artisan outpost:exec <name> -- curl --fail --silent --show-error http://localhost\n  HTTPS: php artisan outpost:exec <name> -- curl --fail --silent --show-error --insecure https://localhost");
-        note("Service web endpoints use the same scheme as the application. Mailpit container probes:\n\n  HTTP:  php artisan outpost:exec <name> -- curl --fail --silent --show-error http://localhost:8025\n  HTTPS: php artisan outpost:exec <name> -- curl --fail --silent --show-error --insecure https://localhost:8025\n\nCopy host URLs from: php artisan outpost:info <name>");
+        callout(
+            $this->issuesLabel($failures, $warnings),
+            $content,
+            $failures !== [] ? 'error' : 'warning',
+            'php artisan outpost:doctor -v for more',
+        );
+    }
+
+    /**
+     * Describe the failing and warning counts, correctly pluralized.
+     *
+     * @param  list<DoctorCheck>  $failures
+     * @param  list<DoctorCheck>  $warnings
+     */
+    private function issuesLabel(array $failures, array $warnings): string
+    {
+        $parts = [];
 
         if ($failures !== []) {
-            error(sprintf('Outpost found %d blocking issue%s.', count($failures), count($failures) === 1 ? '' : 's'));
-
-            return self::FAILURE;
+            $parts[] = count($failures).' blocking '.Str::plural('issue', count($failures));
         }
 
         if ($warnings !== []) {
-            warning(sprintf('Outpost is ready with %d warning%s.', count($warnings), count($warnings) === 1 ? '' : 's'));
-
-            return self::SUCCESS;
+            $parts[] = count($warnings).' '.Str::plural('warning', count($warnings));
         }
 
-        outro('Outpost is ready.');
+        return implode(', ', $parts);
+    }
 
-        return self::SUCCESS;
+    /**
+     * Render the standing troubleshooting reference as a single callout.
+     */
+    private function renderTroubleshooting(): void
+    {
+        callout(
+            'Troubleshooting',
+            [
+                new Heading('Host access'),
+                'If browsers or CLI tools cannot reach container addresses, enable the calling application under System Settings > Privacy & Security > Local Network.',
+                new Heading('Container probes'),
+                'The published hostname does not resolve inside its own container.',
+                new BulletedList([
+                    'HTTP: php artisan outpost:exec <name> -- curl --fail --silent --show-error http://localhost',
+                    'HTTPS: php artisan outpost:exec <name> -- curl --fail --silent --show-error --insecure https://localhost',
+                ]),
+                new Heading('Service web endpoints'),
+                'Service web endpoints use the same scheme as the application. Mailpit container probes:',
+                new BulletedList([
+                    'HTTP: php artisan outpost:exec <name> -- curl --fail --silent --show-error http://localhost:8025',
+                    'HTTPS: php artisan outpost:exec <name> -- curl --fail --silent --show-error --insecure https://localhost:8025',
+                ]),
+                'Copy host URLs from: php artisan outpost:info <name>',
+            ],
+        );
     }
 }
