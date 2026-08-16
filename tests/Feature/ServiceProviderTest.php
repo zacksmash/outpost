@@ -13,6 +13,7 @@ use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Endpoints;
 use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\LifecycleHooks;
+use Zacksmash\Outpost\Names;
 use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\OutpostServiceProvider;
 use Zacksmash\Outpost\Processes;
@@ -99,4 +100,16 @@ it('registers the focused command surface', function () {
         ->toHaveKey('outpost:upgrade')
         ->toHaveKey('outpost:verify')
         ->not->toHaveKey('outpost:reload');
+});
+
+it('registers the name generator as a singleton', function () {
+    expect(app(Names::class))
+        ->toBeInstanceOf(Names::class)
+        ->toBe(app(Names::class));
+});
+
+it('allows tests to pin the generated name', function () {
+    fakeNames('quiet-harbor');
+
+    expect(app(Names::class)->generate())->toBe('quiet-harbor');
 });

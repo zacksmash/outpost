@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
 use Zacksmash\Outpost\Manifest;
+use Zacksmash\Outpost\Names;
 use Zacksmash\Outpost\Runtime;
 use Zacksmash\Outpost\Tests\TestCase;
 
@@ -60,5 +61,15 @@ function fakeManifest(
         imageDigest: $imageDigest,
         runtime: $runtime,
         pathRepositoryMounts: $pathRepositoryMounts,
+    );
+}
+
+function fakeNames(string $name = 'blissful-lake'): void
+{
+    [$adjective, $noun] = explode('-', $name, 2);
+
+    app()->instance(
+        Names::class,
+        new Names([$adjective], [$noun]),
     );
 }
