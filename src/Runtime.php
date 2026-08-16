@@ -25,7 +25,7 @@ class Runtime implements RuntimeDriver
     /**
      * The exact shared image shipped for this package contract.
      */
-    public const string PUBLISHED_IMAGE = 'ghcr.io/zacksmash/outpost:0.5.3';
+    public const string PUBLISHED_IMAGE = 'ghcr.io/zacksmash/outpost:0.5.4';
 
     /**
      * The OCI label used to advertise the image's runtime mount contract.

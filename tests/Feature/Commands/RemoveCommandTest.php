@@ -247,6 +247,28 @@ it('refuses to remove a dirty worktree even when forced', function () {
     Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'delete');
 });
 
+it('removes a proven legacy Redis dump instead of treating it as user work', function () {
+    $worktree = $this->root.'/feature-x/app';
+    $runtime = $this->root.'/feature-x/runtime';
+
+    File::ensureDirectoryExists($worktree);
+    File::ensureDirectoryExists($runtime);
+    File::put($runtime.'/supervisord.conf', "[program:redis]\ncommand=/usr/bin/redis-server --bind 127.0.0.1\n");
+    File::put($worktree.'/dump.rdb', 'REDIS0010legacy');
+
+    fakeRemoval([
+        processPattern('git', '-C', $worktree, 'status', '--short') => Process::sequence()
+            ->push(Process::result("?? dump.rdb\n"))
+            ->push(Process::result('')),
+    ]);
+
+    $this->artisan('outpost:remove', ['name' => 'feature-x', '--force' => true])
+        ->expectsOutputToContain('Removed legacy Redis data file [dump.rdb] from [feature-x]')
+        ->assertSuccessful();
+
+    expect(File::isDirectory($this->root.'/feature-x'))->toBeFalse();
+});
+
 it('removes a dirty worktree only with the explicit discard option', function () {
     File::ensureDirectoryExists($this->root.'/feature-x/app');
 

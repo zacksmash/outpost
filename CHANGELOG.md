@@ -1,12 +1,26 @@
 # Release Notes
 
-## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.3...HEAD)
+## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.4...HEAD)
+
+## [v0.5.4](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.3...v0.5.4) - 2026-08-15
+
+### Fixed
+
+- Upgrade, missing-container recovery, and removal now automatically delete the root-level `dump.rdb` artifact only when it is proven to be an untracked Redis snapshot from legacy Outpost runtime configuration; ambiguous files remain protected by the dirty-worktree guard.
+
+### Changed
+
+- Pinned the package and release image together at `ghcr.io/zacksmash/outpost:0.5.4`.
 
 ## [v0.5.3](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.2...v0.5.3) - 2026-08-15
 
 ### Fixed
 
 - Redis now runs as its dedicated system user with `/var/lib/redis` as its data directory, preventing `dump.rdb` from leaking into and permanently dirtying application worktrees.
+
+### Upgrade note
+
+- Redis instances upgraded from v0.5.2 or earlier may leave one root-level, untracked `dump.rdb` in the worktree when the old container shuts down. This is disposable sandbox Redis state; delete it before rerunning `outpost:upgrade` or `outpost:remove`.
 
 ### Changed
 

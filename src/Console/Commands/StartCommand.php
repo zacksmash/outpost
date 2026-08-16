@@ -15,6 +15,7 @@ use Zacksmash\Outpost\DependencyCaches;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Host;
+use Zacksmash\Outpost\LegacyRedisDump;
 use Zacksmash\Outpost\LifecycleHooks;
 use Zacksmash\Outpost\Nginx;
 use Zacksmash\Outpost\Outposts;
@@ -64,6 +65,7 @@ class StartCommand extends Command
         Processes $processes,
         Supervisord $supervisord,
         LifecycleHooks $hooks,
+        LegacyRedisDump $legacyRedisDump,
     ): int {
         if (($manifest = $this->instance($outposts)) === null) {
             return self::FAILURE;
@@ -83,7 +85,7 @@ class StartCommand extends Command
             if ($state === null) {
                 $hooks->commands(LifecycleHooks::SETUP, $manifest->php);
 
-                if ($this->hasUnsafeWorktree([$manifest], $outposts, $git)) {
+                if ($this->hasUnsafeWorktree([$manifest], $outposts, $git, $legacyRedisDump)) {
                     return self::FAILURE;
                 }
 
@@ -107,6 +109,7 @@ class StartCommand extends Command
                     $nginx,
                     $processes,
                     $supervisord,
+                    $legacyRedisDump,
                     $image,
                     $digest,
                     $mounts,

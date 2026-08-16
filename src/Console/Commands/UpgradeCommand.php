@@ -18,6 +18,7 @@ use Zacksmash\Outpost\Detector;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Host;
+use Zacksmash\Outpost\LegacyRedisDump;
 use Zacksmash\Outpost\LifecycleHooks;
 use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Nginx;
@@ -72,6 +73,7 @@ class UpgradeCommand extends Command
         Processes $processes,
         Supervisord $supervisord,
         LifecycleHooks $hooks,
+        LegacyRedisDump $legacyRedisDump,
     ): int {
         if ($this->option('all') && is_string($this->argument('name')) && $this->argument('name') !== '') {
             error('Choose an instance name or --all, not both.');
@@ -105,7 +107,7 @@ class UpgradeCommand extends Command
                 return self::SUCCESS;
             }
 
-            if ($this->hasUnsafeWorktree($targets, $outposts, $git)) {
+            if ($this->hasUnsafeWorktree($targets, $outposts, $git, $legacyRedisDump)) {
                 return self::FAILURE;
             }
 
@@ -184,6 +186,7 @@ class UpgradeCommand extends Command
                     $nginx,
                     $processes,
                     $supervisord,
+                    $legacyRedisDump,
                     $image,
                     $digest,
                     $mounts[$manifest->name],

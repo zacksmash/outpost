@@ -188,6 +188,114 @@ it('refuses a dirty worktree before deleting its container', function () {
     Process::assertDidntRun(fn (PendingProcess $process) => in_array($process->command[1] ?? null, ['stop', 'delete', 'run'], true));
 });
 
+it('removes proven legacy Redis dumps before and after stopping the old container', function () {
+    app(Outposts::class)->save(fakeManifest(
+        name: 'feature-x',
+        services: ['redis'],
+        image: 'ghcr.io/zacksmash/outpost:0.5.2',
+        imageDigest: $this->oldDigest,
+    ));
+    File::put($this->runtime.'/supervisord.conf', "[program:redis]\ncommand=/usr/bin/redis-server --bind 127.0.0.1\n");
+    File::put($this->worktree.'/dump.rdb', 'REDIS0010before');
+
+    fakeUpgradeProcesses($this->root, $this->currentDigest, [
+        processPattern('git', '-C', $this->worktree, 'status', '--short') => Process::sequence()
+            ->push(Process::result("?? dump.rdb\n"))
+            ->push(Process::result(''))
+            ->push(Process::result("?? dump.rdb\n")),
+        processPattern('container', 'stop', 'feature-x-app') => function () {
+            File::put($this->worktree.'/dump.rdb', 'REDIS0010after');
+
+            return Process::result('');
+        },
+    ]);
+
+    $this->artisan('outpost:upgrade', ['name' => 'feature-x'])
+        ->expectsOutputToContain('Removed legacy Redis data file [dump.rdb] from [feature-x]')
+        ->assertSuccessful();
+
+    expect(File::exists($this->worktree.'/dump.rdb'))->toBeFalse();
+});
+
+it('removes a legacy Redis dump without bypassing other worktree changes', function () {
+    app(Outposts::class)->save(fakeManifest(
+        name: 'feature-x',
+        services: ['redis'],
+        image: 'ghcr.io/zacksmash/outpost:0.5.2',
+        imageDigest: $this->oldDigest,
+    ));
+    File::put($this->runtime.'/supervisord.conf', "[program:redis]\ncommand=/usr/bin/redis-server --bind 127.0.0.1\n");
+    File::put($this->worktree.'/dump.rdb', 'REDIS0010legacy');
+
+    fakeUpgradeProcesses($this->root, $this->currentDigest, [
+        processPattern('git', '-C', $this->worktree, 'status', '--short') => Process::sequence()
+            ->push(Process::result(" M app/Invoice.php\n?? dump.rdb\n"))
+            ->push(Process::result(" M app/Invoice.php\n")),
+    ]);
+
+    $this->artisan('outpost:upgrade', ['name' => 'feature-x'])
+        ->expectsOutputToContain('Removed legacy Redis data file [dump.rdb] from [feature-x]')
+        ->expectsOutputToContain('M app/Invoice.php')
+        ->assertFailed();
+
+    expect(File::exists($this->worktree.'/dump.rdb'))->toBeFalse();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => in_array($process->command[1] ?? null, ['stop', 'delete', 'run'], true));
+});
+
+it('preserves dump files that are not proven legacy Redis artifacts', function (
+    array $services,
+    string $supervisor,
+    string $contents,
+    string $status,
+) {
+    app(Outposts::class)->save(fakeManifest(
+        name: 'feature-x',
+        services: $services,
+        image: 'ghcr.io/zacksmash/outpost:0.5.2',
+        imageDigest: $this->oldDigest,
+    ));
+    File::put($this->runtime.'/supervisord.conf', $supervisor);
+    File::put($this->worktree.'/dump.rdb', $contents);
+
+    fakeUpgradeProcesses($this->root, $this->currentDigest, [
+        processPattern('git', '-C', $this->worktree, 'status', '--short') => Process::result($status),
+    ]);
+
+    $this->artisan('outpost:upgrade', ['name' => 'feature-x'])
+        ->expectsOutputToContain('uncommitted changes')
+        ->assertFailed();
+
+    expect(File::get($this->worktree.'/dump.rdb'))->toBe($contents);
+
+    Process::assertDidntRun(fn (PendingProcess $process) => in_array($process->command[1] ?? null, ['stop', 'delete', 'run'], true));
+})->with([
+    'non-Redis contents' => [
+        ['redis'],
+        "[program:redis]\ncommand=/usr/bin/redis-server --bind 127.0.0.1\n",
+        'application data',
+        "?? dump.rdb\n",
+    ],
+    'current Redis configuration' => [
+        ['redis'],
+        "[program:redis]\ncommand=/usr/bin/redis-server --bind 127.0.0.1 --dir /var/lib/redis\n",
+        'REDIS0010current',
+        "?? dump.rdb\n",
+    ],
+    'tracked Redis snapshot' => [
+        ['redis'],
+        "[program:redis]\ncommand=/usr/bin/redis-server --bind 127.0.0.1\n",
+        'REDIS0010tracked',
+        " M dump.rdb\n",
+    ],
+    'instance without Redis' => [
+        ['mysql'],
+        "[program:redis]\ncommand=/usr/bin/redis-server --bind 127.0.0.1\n",
+        'REDIS0010unused',
+        "?? dump.rdb\n",
+    ],
+]);
+
 it('reuses recorded path repository mounts during a forced rebuild without another flag', function () {
     $package = $this->root.'/package-source';
     $mount = "{$package}:{$package}:ro";

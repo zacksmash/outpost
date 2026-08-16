@@ -12,6 +12,7 @@ use Zacksmash\Outpost\DependencyCaches;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Host;
+use Zacksmash\Outpost\LegacyRedisDump;
 use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Nginx;
 use Zacksmash\Outpost\Outposts;
@@ -78,13 +79,28 @@ trait RebuildsInstanceContainers
      *
      * @param  list<Manifest>  $manifests
      */
-    protected function hasUnsafeWorktree(array $manifests, Outposts $outposts, Git $git): bool
-    {
+    protected function hasUnsafeWorktree(
+        array $manifests,
+        Outposts $outposts,
+        Git $git,
+        LegacyRedisDump $legacyRedisDump,
+    ): bool {
         $dirty = false;
 
         foreach ($manifests as $manifest) {
             $this->assertWorktreeRebuildable($manifest, $outposts);
-            $status = $git->worktreeStatus($outposts->worktreePath($manifest->name));
+            $worktree = $outposts->worktreePath($manifest->name);
+            $status = $git->worktreeStatus($worktree);
+
+            if ($legacyRedisDump->remove(
+                $manifest,
+                $worktree,
+                $outposts->runtimePath($manifest->name),
+                $status,
+            )) {
+                info("Removed legacy Redis data file [dump.rdb] from [{$manifest->name}].");
+                $status = $git->worktreeStatus($worktree);
+            }
 
             if ($status === '') {
                 continue;
@@ -151,6 +167,7 @@ trait RebuildsInstanceContainers
         Nginx $nginx,
         Processes $processes,
         Supervisord $supervisord,
+        LegacyRedisDump $legacyRedisDump,
         string $image,
         string $digest,
         array $mounts,
@@ -201,6 +218,14 @@ trait RebuildsInstanceContainers
                     fn () => $runtime->delete($manifest->container, $force),
                     "Deleting the old [{$manifest->name}] container",
                 );
+
+                if ($previousManifest->uses('redis') && File::isFile($worktree.'/dump.rdb')) {
+                    $status = $git->worktreeStatus($worktree);
+
+                    if ($legacyRedisDump->remove($previousManifest, $worktree, $runtimePath, $status)) {
+                        info("Removed legacy Redis data file [dump.rdb] from [{$manifest->name}].");
+                    }
+                }
             }
 
             File::delete($runtimePath.'/octane-watch');

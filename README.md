@@ -257,6 +257,8 @@ The `outpost:upgrade` command pulls a missing configured image, verifies its run
 
 Dirty worktrees are always refused, including with `--force`; the flag forces a rebuild, not the destruction or mutation of uncommitted work. A rebuild keeps your source and branch, resets container-local databases and services, reconciles Outpost-managed `.env` values, then refreshes Composer dependencies, front-end builds, migrations, and `setup` hooks. Rebuilt containers also pick up the repository's shared download caches and automatically reuse path-repository mounts previously approved for that instance. Only newly discovered external repositories prompt for approval; add `--mount-path-repos` to approve those without prompting.
 
+Redis instances created before v0.5.3 may leave one root-level `dump.rdb` in the worktree. During upgrade, missing-container recovery, or removal, Outpost deletes it automatically only when the instance uses legacy Redis configuration, Git reports the file as untracked, and its binary header identifies a Redis snapshot. Tracked or ambiguous files remain protected by the normal dirty-worktree guard.
+
 ### Local Network Permission
 
 If macOS blocks direct browser or CLI access, allow the calling application under **System Settings → Privacy & Security → Local Network**, then restart it. In the meantime, an agent may probe from inside the instance:
@@ -300,7 +302,7 @@ php artisan vendor:publish --tag="outpost-config"
 | Key | Default | Description |
 | --- | --- | --- |
 | `domain` | `outpost` | Local publication domain. |
-| `image` | `ghcr.io/zacksmash/outpost:0.5.3` | Exact OCI image used by instances. |
+| `image` | `ghcr.io/zacksmash/outpost:0.5.4` | Exact OCI image used by instances. |
 | `dns` | `1.1.1.1` | Nameserver injected into builds and instances. |
 | `path` | `.outpost` | Project-relative instance directory. |
 | `resources.cpus` | `4` | Virtual CPUs per instance. |

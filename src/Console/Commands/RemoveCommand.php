@@ -13,6 +13,7 @@ use Zacksmash\Outpost\Console\Concerns\FlushesDnsCaches;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Git;
+use Zacksmash\Outpost\LegacyRedisDump;
 use Zacksmash\Outpost\LifecycleHooks;
 use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Outposts;
@@ -53,6 +54,7 @@ class RemoveCommand extends Command
         RuntimeDriver $runtime,
         Git $git,
         LifecycleHooks $hooks,
+        LegacyRedisDump $legacyRedisDump,
     ): int {
         if (($name = $this->instanceName($outposts)) === null) {
             return self::FAILURE;
@@ -76,7 +78,7 @@ class RemoveCommand extends Command
             return self::FAILURE;
         }
 
-        if ($this->refusesDirtyWorktree($outposts, $git, $manifest->name)) {
+        if ($this->refusesDirtyWorktree($outposts, $git, $manifest->name, $manifest, $legacyRedisDump)) {
             return self::FAILURE;
         }
 
@@ -223,8 +225,13 @@ class RemoveCommand extends Command
     /**
      * Refuse to destroy uncommitted work without an explicit discard option.
      */
-    protected function refusesDirtyWorktree(Outposts $outposts, Git $git, string $name): bool
-    {
+    protected function refusesDirtyWorktree(
+        Outposts $outposts,
+        Git $git,
+        string $name,
+        ?Manifest $manifest = null,
+        ?LegacyRedisDump $legacyRedisDump = null,
+    ): bool {
         $worktree = $outposts->worktreePath($name);
 
         if ((bool) $this->option('discard-changes') || ! File::isDirectory($worktree)) {
@@ -233,6 +240,16 @@ class RemoveCommand extends Command
 
         try {
             $status = $git->worktreeStatus($worktree);
+
+            if ($manifest !== null && $legacyRedisDump?->remove(
+                $manifest,
+                $worktree,
+                $outposts->runtimePath($name),
+                $status,
+            )) {
+                info("Removed legacy Redis data file [dump.rdb] from [{$name}].");
+                $status = $git->worktreeStatus($worktree);
+            }
         } catch (RuntimeException $e) {
             error($e->getMessage());
             note("Unable to check the [{$name}] worktree for uncommitted changes, so it was not removed.\nRemove it anyway, discarding anything uncommitted, with:\n\n  php artisan outpost:remove {$name} --discard-changes");

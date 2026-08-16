@@ -7,7 +7,7 @@ use Zacksmash\Outpost\Runtime;
 it('exposes sensible defaults', function () {
     expect(config('outpost.domain'))->toBe('outpost')
         ->and(config('outpost.image'))->toBe(Runtime::PUBLISHED_IMAGE)
-        ->and(Runtime::PUBLISHED_IMAGE)->toBe('ghcr.io/zacksmash/outpost:0.5.3')
+        ->and(Runtime::PUBLISHED_IMAGE)->toBe('ghcr.io/zacksmash/outpost:0.5.4')
         ->and(config('outpost.dns'))->toBe('1.1.1.1')
         ->and(config('outpost.path'))->toBe('.outpost')
         ->and(config('outpost.resources'))->toBe(['cpus' => 4, 'memory' => '2G'])
