@@ -10,77 +10,74 @@ use RuntimeException;
 class Names
 {
     /**
-     * The number of candidates tried before falling back to a numeric suffix.
+     * The number of numeric suffixes tried before giving up.
      */
     public const int ATTEMPTS = 50;
 
     /**
-     * The adjectives a generated name may start with.
-     *
-     * @var list<string>
+     * The number of hexadecimal characters kept from the disambiguating hash.
      */
-    protected array $adjectives;
+    protected const int HASH_LENGTH = 4;
 
     /**
-     * The nouns a generated name may end with.
+     * Derive an instance name from a branch, within the given budget.
      *
-     * @var list<string>
+     * The normalized branch is used unchanged when it fits the budget — no
+     * hash, no truncation. When it does not fit, it is cut back to the last
+     * hyphen at or before the available space so the result never ends
+     * mid-word, then suffixed with a few characters of a hash of the full
+     * original branch. The hash is what keeps the result deterministic (the
+     * same branch always derives the same name, which is what makes
+     * --no-interaction predictable for CI) while stopping two long branches
+     * that share a prefix from truncating to the same name.
      */
-    protected array $nouns;
-
-    /**
-     * Create a new name generator.
-     *
-     * @param  list<string>|null  $adjectives
-     * @param  list<string>|null  $nouns
-     */
-    public function __construct(?array $adjectives = null, ?array $nouns = null)
+    public function derive(string $branch, int $budget): string
     {
-        /** @var list<string> $defaultAdjectives */
-        $defaultAdjectives = require __DIR__.'/../resources/names/adjectives.php';
+        $normalized = $this->normalize($branch);
 
-        /** @var list<string> $defaultNouns */
-        $defaultNouns = require __DIR__.'/../resources/names/nouns.php';
+        if (strlen($normalized) <= $budget) {
+            return $normalized;
+        }
 
-        $this->adjectives = $adjectives ?? $defaultAdjectives;
-        $this->nouns = $nouns ?? $defaultNouns;
+        $hash = substr(hash('xxh128', $branch), 0, self::HASH_LENGTH);
+        $available = max($budget - self::HASH_LENGTH - 1, 0);
+        $truncated = substr($normalized, 0, $available);
+
+        $lastHyphen = strrpos($truncated, '-');
+
+        if ($lastHyphen !== false) {
+            $truncated = substr($truncated, 0, $lastHyphen);
+        }
+
+        return "{$truncated}-{$hash}";
     }
 
     /**
-     * Generate a readable adjective and noun instance name.
-     */
-    public function generate(): string
-    {
-        return $this->word($this->adjectives).'-'.$this->word($this->nouns);
-    }
-
-    /**
-     * Generate a name no manifest in this application has claimed.
+     * Find a name based on the given candidate that no manifest in this
+     * application has claimed, appending a numeric suffix on collision.
      *
-     * The generated name only has to be unique within this application: the
+     * The candidate only has to be unique within this application: the
      * project-directory suffix appended to the container name keeps
-     * container names scoped per project, so two applications drawing the
-     * same instance name cannot collide.
+     * container names scoped per project, so two applications deriving the
+     * same instance name cannot collide. A numeric suffix that would push an
+     * already budget-filling candidate past the limit trims the base first,
+     * so the result never exceeds the budget even on collision.
      */
-    public function unique(Outposts $outposts): string
+    public function unique(Outposts $outposts, string $name, int $budget): string
     {
-        for ($attempt = 0; $attempt < self::ATTEMPTS; $attempt++) {
-            $name = $this->generate();
+        if (! $outposts->exists($name)) {
+            return $name;
+        }
 
-            if (! $outposts->exists($name)) {
-                return $name;
+        for ($number = 2; $number <= self::ATTEMPTS; $number++) {
+            $candidate = $this->withSuffix($name, $number, $budget);
+
+            if (! $outposts->exists($candidate)) {
+                return $candidate;
             }
         }
 
-        $base = $this->generate();
-
-        for ($suffix = 2; $suffix <= self::ATTEMPTS; $suffix++) {
-            if (! $outposts->exists("{$base}-{$suffix}")) {
-                return "{$base}-{$suffix}";
-            }
-        }
-
-        throw new RuntimeException('Unable to generate an unused instance name. Remove an instance, or choose one with --name.');
+        throw new RuntimeException('Unable to find an available instance name after '.self::ATTEMPTS.' attempts. Remove an instance, or choose one with --name.');
     }
 
     /**
@@ -96,12 +93,17 @@ class Names
     }
 
     /**
-     * Draw one word from the given list.
-     *
-     * @param  list<string>  $words
+     * Append a numeric suffix to a name, trimming the base first if the
+     * suffix would otherwise push the result past the budget.
      */
-    protected function word(array $words): string
+    protected function withSuffix(string $name, int $number, int $budget): string
     {
-        return $words[random_int(0, count($words) - 1)];
+        $suffix = "-{$number}";
+
+        if (strlen($name) + strlen($suffix) <= $budget) {
+            return $name.$suffix;
+        }
+
+        return substr($name, 0, max($budget - strlen($suffix), 0)).$suffix;
     }
 }

@@ -430,10 +430,13 @@ class OutpostCommand extends Command
      *
      * A supplied name is normalized rather than rejected, so a branch-shaped
      * value like [feature/billing] becomes [feature-billing] instead of
-     * failing validation. Interactively, the prompt default is generated,
-     * because the branch is no longer part of the instance hostname. Without
-     * a terminal there is nobody to accept or edit that default, so the
-     * branch gives a predictable name a script can compute in advance.
+     * failing validation. Otherwise the name is derived from the branch,
+     * which is the instance's natural name and keeps it recognizable in
+     * [outpost:list] without consulting the manifest. Interactively, the
+     * derived name becomes the prompt default so pressing enter accepts it
+     * and typing replaces it. Without a terminal there is nobody to accept
+     * or edit a default, so the derived name is used directly, giving CI
+     * scripts a predictable name to compute in advance.
      */
     protected function name(Outposts $outposts, Names $names, string $branch): string
     {
@@ -449,16 +452,31 @@ class OutpostCommand extends Command
             return $name;
         }
 
+        $budget = $this->nameBudget();
+        $derived = $names->derive($branch, $budget);
+
         if (! $this->input->isInteractive()) {
-            return $names->normalize($branch);
+            return $derived;
         }
 
         return text(
             label: 'What should the instance be named?',
-            default: $names->unique($outposts),
+            default: $names->unique($outposts, $derived, $budget),
             required: true,
             validate: fn (string $value) => $this->invalidName($outposts, $names, $value),
         );
+    }
+
+    /**
+     * Determine how many characters the instance name may occupy.
+     *
+     * The container is [{instance-name}-{project-directory-slug}] and must
+     * stay within the 63-character DNS label limit, so the instance name
+     * gets whatever the project directory's slug does not use.
+     */
+    protected function nameBudget(): int
+    {
+        return 63 - 1 - strlen(Str::slug(basename($this->laravel->basePath())));
     }
 
     /**

@@ -747,7 +747,6 @@ it('reports the failing provisioning step and keeps the container', function () 
 });
 
 it('derives the instance name from the branch when nothing is supplied under --no-interaction', function () {
-    fakeNames('blissful-lake');
     fakeCreation();
 
     $exit = Artisan::call('outpost', [
@@ -758,8 +757,7 @@ it('derives the instance name from the branch when nothing is supplied under --n
     expect($exit)->toBe(0)
         ->and(Artisan::output())->toContain('http://feature-x-laravel.outpost');
 
-    expect(app(Outposts::class)->exists('feature-x'))->toBeTrue()
-        ->and(app(Outposts::class)->exists('blissful-lake'))->toBeFalse();
+    expect(app(Outposts::class)->exists('feature-x'))->toBeTrue();
 });
 
 it('hyphenates a branch namespace when deriving the name under --no-interaction', function () {
@@ -782,11 +780,7 @@ it('hyphenates a branch namespace when deriving the name under --no-interaction'
         ->and(app(Outposts::class)->exists('featuresome-bug-to-fix'))->toBeFalse();
 });
 
-it('offers a generated name as the interactive default when nothing is supplied', function () {
-    File::ensureDirectoryExists($this->root.'/blissful-lake/app');
-    File::put($this->root.'/blissful-lake/app/.env.example', "APP_NAME=Example\nDB_CONNECTION=sqlite\n");
-
-    fakeNames('blissful-lake');
+it('offers the branch-derived name as the interactive default when nothing is supplied', function () {
     fakeCreation();
 
     $captured = null;
@@ -811,9 +805,9 @@ it('offers a generated name as the interactive default when nothing is supplied'
     $exit = Artisan::call('outpost', ['branch' => 'feature-x']);
 
     expect($exit)->toBe(0)
-        ->and($captured)->toBe('blissful-lake');
+        ->and($captured)->toBe('feature-x');
 
-    expect(app(Outposts::class)->exists('blissful-lake'))->toBeTrue();
+    expect(app(Outposts::class)->exists('feature-x'))->toBeTrue();
 });
 
 it('hyphenates a supplied name that a branch namespace would otherwise mangle', function () {

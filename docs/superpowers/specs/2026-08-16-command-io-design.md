@@ -33,36 +33,60 @@ touches.
 
 ## Naming and Hostnames
 
-### Generated names
+### Derived names
 
-Instance names become Forge-style generated adjective-noun pairs —
-`blissful-lake`, `quiet-harbor` — replacing branch-derived names. The branch
-is no longer an input to the hostname, which makes the slug defect
-unreachable on the default path.
+Instance names are derived from the branch that creates them —
+`feature/billing` becomes `feature-billing` — rather than generated. A branch
+is the instance's natural name: it is recognizable in `outpost:list` without
+opening the manifest, which a generated word pair is not.
 
 A new `Zacksmash\Outpost\Names` class owns this:
 
-- `generate(): string` — an adjective-noun pair drawn from a bundled
-  wordlist of roughly 128 adjectives and 128 nouns, giving about 16,000
-  combinations. The wordlist ships as a package resource.
-- `unique(Outposts $outposts): string` — regenerates while the candidate
-  exists as a manifest for this application. A runtime check is unnecessary:
-  the project-directory suffix on the container name keeps container names
-  scoped per project, so an instance name only has to be unique within this
-  application. Attempts are capped; on exhaustion the class appends a numeric
-  suffix rather than looping.
+- `derive(string $branch, int $budget): string` — normalizes the branch and
+  returns it unchanged when it fits `$budget`, with no hash and no
+  truncation. When it does not fit, the normalized branch is cut back to the
+  last hyphen at or before the available space, then suffixed with a hyphen
+  and the first four characters of `hash('xxh128', $branch)` computed over
+  the full original branch, so the same branch always derives the same name
+  and two long branches sharing a prefix still diverge. `$budget` is supplied
+  by the caller — `Names` has no knowledge of the project directory or
+  filesystem.
+- `unique(Outposts $outposts, string $name, int $budget): string` — appends a
+  numeric suffix while the candidate exists as a manifest for this
+  application, trimming the base first if a suffix would otherwise push an
+  already budget-filling candidate past the limit. A runtime check is
+  unnecessary: the project-directory suffix on the container name keeps
+  container names scoped per project, so an instance name only has to be
+  unique within this application. Attempts are capped; on exhaustion the
+  class throws.
 - `normalize(string $name): string` — collapses every run of
   non-alphanumeric characters to a single hyphen before slugging, so
-  `feature/some-bug-to-fix` yields `feature-some-bug-to-fix`.
+  `feature/some-bug-to-fix` yields `feature-some-bug-to-fix`. Unchanged from
+  the generated-names design below; it is the original bug fix and stays
+  exactly as it was.
+
+**This section originally specified Forge-style generated adjective-noun
+pairs (`blissful-lake`, `quiet-harbor`).** That was implemented, then
+reversed. A generated name carries no information about which branch is
+running, so using one meant consulting `outpost:list` on every command
+instead of just reading the name. The branch is a better default name than
+any word pair, and it was already the `--no-interaction` fallback, so
+generation actually made the tool name things two different ways depending
+on how it was invoked. The length rule — truncation plus a short hash — exists
+only because DNS labels cap at 63 characters and some branch names do not
+fit.
 
 ### Where each is used
 
-The generated name becomes the default of the existing `text()` prompt in
-`OutpostCommand::name()`, so pressing enter accepts it and typing replaces it.
-`--name` continues to override and skip the prompt entirely. Under
-`--no-interaction` with no `--name`, there is no terminal to accept or edit a
-generated default, so the name is derived from the branch with `normalize()`
-instead, giving CI scripts a predictable name to compute in advance.
+The derived name becomes the default of the existing `text()` prompt in
+`OutpostCommand::name()`, so pressing enter accepts it and typing replaces
+it; `Names::unique()` bumps a numeric suffix onto that default when the
+derived name is already claimed by this application. `--name` continues to
+override and skip the prompt entirely. Under `--no-interaction` with no
+`--name`, there is no terminal to accept or edit a default, so the derived
+name is used directly and a collision fails the run instead of being bumped —
+there is nobody to confirm a substituted name — which keeps the name a CI
+script computes in advance predictable.
 
 `normalize()` applies to user-supplied names — the `--name` option and typed
 prompt input. This is the path where the original defect is still reachable.
@@ -74,8 +98,7 @@ accepting it as `feature-foo` and saying so.
 ### Hostname shape
 
 The container keeps the `{instance-name}-{project-directory-slug}` shape, so
-the URL is `https://blissful-lake-myapp.outpost`. Only the instance name
-changes: generated rather than branch-derived.
+the URL is `https://feature-billing-myapp.outpost`.
 
 **This section originally specified removing the project-directory suffix.
 That was implemented, then reversed.** The suffix is what makes container
@@ -200,14 +223,16 @@ Test-driven, Pest, behavior observed through public APIs, per the
 
 **`Names` is unit tested directly.** `normalize()` gets a case table covering
 `feature/x`, `release/v2.1.0`, `ZACK_fix.thing`, unicode input, and the empty
-string. Uniqueness is tested against a fake `Outposts` that reports
-collisions, asserting both regeneration and the numeric-suffix
-fallback on exhaustion.
+string. `derive()` is covered for the unchanged short-branch case, the
+truncated-plus-hash case, determinism, and two long branches sharing a prefix
+diverging. `unique()` is tested against a fake `Outposts` that reports
+collisions, asserting both the numeric-suffix bump and the exhaustion
+fallback.
 
-**Generated names are made deterministic in feature tests.** A random name
-would make assertions non-deterministic, so `Names` is bound in the container
-and replaced with a deterministic fake in `TestCase`. Feature tests continue
-asserting against a known name.
+**Branch derivation is deterministic by construction, so feature tests need
+no fake.** Unlike the generated names this section originally specified,
+deriving from the branch never needs a seam to make assertions repeatable —
+the same branch and budget always produce the same name.
 
 **Output assertions move from `expectsOutput` to `expectsOutputToContain`**
 on the semantic payload — the URL, the instance name, the remedy text. Box

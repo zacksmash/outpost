@@ -102,14 +102,8 @@ it('registers the focused command surface', function () {
         ->not->toHaveKey('outpost:reload');
 });
 
-it('registers the name generator as a singleton', function () {
+it('registers the names helper as a singleton', function () {
     expect(app(Names::class))
         ->toBeInstanceOf(Names::class)
         ->toBe(app(Names::class));
-});
-
-it('allows tests to pin the generated name', function () {
-    fakeNames('quiet-harbor');
-
-    expect(app(Names::class)->generate())->toBe('quiet-harbor');
 });
