@@ -41,6 +41,15 @@ it('runs postgres as the postgres user', function () {
     expect($config)->toContain('user=postgres');
 });
 
+it('keeps redis persistence out of the application worktree', function () {
+    $config = $this->supervisord->generate(fakeManifest(services: ['redis']));
+
+    expect($config)
+        ->toContain('--dir /var/lib/redis')
+        ->toContain("[program:redis]\ncommand=")
+        ->toContain("priority=15\nuser=redis");
+});
+
 it('keeps mailpit private behind the nginx service endpoint', function () {
     $config = $this->supervisord->generate(fakeManifest(services: ['mailpit']));
 

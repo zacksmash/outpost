@@ -117,12 +117,12 @@ it('detects image reference and digest upgrades while keeping legacy state unkno
     $current = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     $new = 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
-    expect(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.5.2', $current))->toBeFalse()
+    expect(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.5.3', $current))->toBeFalse()
         ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.2.2', $current))->toBeTrue()
-        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.5.2', $new))->toBeTrue()
-        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.5.2', null))->toBeNull()
+        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.5.3', $new))->toBeTrue()
+        ->and(fakeManifest()->imageOutdated('ghcr.io/zacksmash/outpost:0.5.3', null))->toBeNull()
         ->and(fakeManifest(image: null, imageDigest: null)
-            ->imageOutdated('ghcr.io/zacksmash/outpost:0.5.2', $current))->toBeNull();
+            ->imageOutdated('ghcr.io/zacksmash/outpost:0.5.3', $current))->toBeNull();
 });
 
 it('updates image identity without changing instance metadata', function () {

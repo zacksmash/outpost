@@ -300,7 +300,7 @@ php artisan vendor:publish --tag="outpost-config"
 | Key | Default | Description |
 | --- | --- | --- |
 | `domain` | `outpost` | Local publication domain. |
-| `image` | `ghcr.io/zacksmash/outpost:0.5.2` | Exact OCI image used by instances. |
+| `image` | `ghcr.io/zacksmash/outpost:0.5.3` | Exact OCI image used by instances. |
 | `dns` | `1.1.1.1` | Nameserver injected into builds and instances. |
 | `path` | `.outpost` | Project-relative instance directory. |
 | `resources.cpus` | `4` | Virtual CPUs per instance. |

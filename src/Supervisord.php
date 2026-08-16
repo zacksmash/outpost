@@ -47,7 +47,12 @@ class Supervisord
             $command = $manifest->exposeServices
                 ? '/usr/bin/redis-server --bind 0.0.0.0 --protected-mode yes --requirepass '.$this->credential('password')
                 : '/usr/bin/redis-server --bind 127.0.0.1';
-            $programs[] = $this->program('redis', $command, 15);
+            $programs[] = $this->program(
+                'redis',
+                $command.' --dir /var/lib/redis',
+                15,
+                user: 'redis',
+            );
         }
 
         $programs[] = $this->program(
