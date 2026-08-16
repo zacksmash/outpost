@@ -19,10 +19,14 @@ it('shows the ready summary and hides troubleshooting text on a healthy run', fu
     $output = Artisan::output();
 
     expect($exit)->toBe(0)
-        ->and($output)->toContain('PASS')
         ->and($output)->toContain('Outpost is ready')
+        ->and($output)->toContain('Platform')
+        ->and($output)->toContain('macOS 27.0 on arm64')
+        ->and($output)->toContain('Runtime')
+        ->and($output)->toContain('The Apple container system is running.')
         ->and($output)->toContain('Create an instance with')
         ->and($output)->toContain('2 checks passed')
+        ->and($output)->not->toContain('┬') // no table column borders
         ->and($output)->not->toContain('Host access')
         ->and($output)->not->toContain('Container probes')
         ->and($output)->not->toContain('Service web endpoints');
@@ -72,7 +76,9 @@ it('shows the remedy and troubleshooting text for a failing check, and exits FAI
     $output = Artisan::output();
 
     expect($exit)->toBe(1)
-        ->and($output)->toContain('FAIL')
+        ->and($output)->toContain('Runtime (FAIL)')
+        ->and($output)->not->toContain('Project (FAIL)')
+        ->and($output)->not->toContain('Project (WARN)')
         ->and($output)->toContain('The Apple container system is stopped.')
         ->and($output)->toContain('1 blocking issue')
         ->and($output)->toContain('Run: container system start')
@@ -98,7 +104,9 @@ it('exits SUCCESS and uses warning styling for a warning-only run', function () 
     $output = Artisan::output();
 
     expect($exit)->toBe(0)
-        ->and($output)->toContain('WARN')
+        ->and($output)->toContain('Runtime version (WARN)')
+        ->and($output)->not->toContain('Runtime version (FAIL)')
+        ->and($output)->not->toContain('Platform (WARN)')
         ->and($output)->toContain('1 warning')
         ->and($output)->not->toContain('blocking issue')
         ->and($output)->toContain('If Outpost behaves unexpectedly, install the latest Apple')
@@ -121,7 +129,11 @@ it('pluralizes blocking issue and warning counts correctly', function () {
 
     expect($exit)->toBe(1)
         ->and($output)->toContain('2 blocking issues')
-        ->and($output)->toContain('2 warnings');
+        ->and($output)->toContain('2 warnings')
+        ->and($output)->toContain('Runtime (FAIL)')
+        ->and($output)->toContain('DNS resolver (FAIL)')
+        ->and($output)->toContain('Composer lock (WARN)')
+        ->and($output)->toContain('Local HTTPS (WARN)');
 });
 
 it('provides a complete json diagnostic report unchanged by the presentation rework', function () {

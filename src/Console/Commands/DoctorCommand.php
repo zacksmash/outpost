@@ -8,13 +8,13 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 use Laravel\Prompts\Elements\BulletedList;
 use Laravel\Prompts\Elements\Heading;
+use Laravel\Prompts\Elements\KeyValueList;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Console\Concerns\RendersJsonOutput;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\DoctorCheck;
 
 use function Laravel\Prompts\callout;
-use function Laravel\Prompts\table;
 
 #[AsCommand(name: 'outpost:doctor')]
 class DoctorCommand extends Command
@@ -61,21 +61,12 @@ class DoctorCommand extends Command
             return $failures === [] ? self::SUCCESS : self::FAILURE;
         }
 
-        table(
-            ['Status', 'Check', 'Details'],
-            array_map(fn (DoctorCheck $check): array => [
-                $check->status,
-                $check->name,
-                $check->detail,
-            ], $checks),
-        );
-
         $hasIssues = $failures !== [] || $warnings !== [];
 
         if ($hasIssues) {
-            $this->renderIssues($failures, $warnings);
+            $this->renderIssues($checks, $failures, $warnings);
         } else {
-            $this->renderReady(count($checks));
+            $this->renderReady($checks);
         }
 
         if ($hasIssues || $this->output->isVerbose()) {
@@ -87,26 +78,34 @@ class DoctorCommand extends Command
 
     /**
      * Render the single all-clear callout for a fully healthy run.
+     *
+     * @param  list<DoctorCheck>  $checks
      */
-    private function renderReady(int $checkCount): void
+    private function renderReady(array $checks): void
     {
+        $checkCount = count($checks);
+
         callout(
             'Outpost is ready',
-            'Create an instance with [php artisan outpost].',
+            [
+                new KeyValueList($this->checksList($checks)),
+                'Create an instance with [php artisan outpost].',
+            ],
             null,
             "{$checkCount} ".Str::plural('check', $checkCount).' passed',
         );
     }
 
     /**
-     * Render a single callout carrying every failing or warning check's remedy.
+     * Render a single callout carrying every check plus each failing or warning check's remedy.
      *
+     * @param  list<DoctorCheck>  $checks
      * @param  list<DoctorCheck>  $failures
      * @param  list<DoctorCheck>  $warnings
      */
-    private function renderIssues(array $failures, array $warnings): void
+    private function renderIssues(array $checks, array $failures, array $warnings): void
     {
-        $content = [];
+        $content = [new KeyValueList($this->checksList($checks))];
 
         foreach ([...$failures, ...$warnings] as $check) {
             if ($check->remedy !== null) {
@@ -121,6 +120,34 @@ class DoctorCommand extends Command
             $failures !== [] ? 'error' : 'warning',
             'php artisan outpost:doctor -v for more',
         );
+    }
+
+    /**
+     * Build the check name => detail map, marking non-passing checks so the
+     * status survives losing both the table and any colour (e.g. piped output).
+     *
+     * @param  list<DoctorCheck>  $checks
+     * @return array<string, string>
+     */
+    private function checksList(array $checks): array
+    {
+        return array_combine(
+            array_map($this->markCheckName(...), $checks),
+            array_map(fn (DoctorCheck $check): string => $check->detail, $checks),
+        );
+    }
+
+    /**
+     * Suffix a failing or warning check's name with its status so it stays
+     * unmistakable inside the key/value list, with or without colour.
+     */
+    private function markCheckName(DoctorCheck $check): string
+    {
+        return match ($check->status) {
+            DoctorCheck::FAIL => "{$check->name} (FAIL)",
+            DoctorCheck::WARNING => "{$check->name} (WARN)",
+            default => $check->name,
+        };
     }
 
     /**
