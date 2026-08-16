@@ -70,14 +70,31 @@ accepting it as `feature-foo` and saying so.
 
 ### Hostname shape
 
-The container name becomes the instance name alone. The
-`-{project-directory-slug}` suffix at `OutpostCommand:202` is removed, so the
-URL is `https://blissful-lake.outpost`.
+The container keeps the `{instance-name}-{project-directory-slug}` shape, so
+the URL is `https://blissful-lake-myapp.outpost`. Only the instance name
+changes: generated rather than branch-derived.
 
-This deletes a failure class. `invalidContainer()` currently errors when the
-project directory contains no URL-friendly characters; the directory no
-longer feeds the hostname, so that branch goes away. The 63-character DNS
-label check stays, now reachable only through a very long `--name`.
+**This section originally specified removing the project-directory suffix.
+That was implemented, then reversed.** The suffix is what makes container
+names project-scoped. Removing it made them machine-global, which produced
+three problems: `--name` collisions between unrelated projects sharing a
+machine, a forced widening of the untrusted-input guard in `Outposts::find()`
+(which required accepting `container === name` alongside the legacy prefix),
+and a collision remedy that told users to delete a container that might
+belong to another application's running instance.
+
+Subdomains (`blissful-lake.myapp.outpost`) were evaluated as the nicer form
+of the same scoping and **ruled out on runtime grounds**. A controlled probe
+against Apple `container` 1.2.2 showed the CLI accepts a dotted container
+name and runs the container normally, but never publishes it: a single-label
+control container resolved through `dscacheutil`, the dotted one did not.
+That failure mode is worse than the problem it solves — a running instance
+that is silently unreachable — so the hyphenated suffix stands as the
+reachable form of project scoping.
+
+`invalidContainer()` therefore keeps both checks: the slug round-trip, which
+errors when the project directory has no URL-friendly characters, and the
+63-character DNS label limit.
 
 ### Compatibility
 
