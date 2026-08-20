@@ -18,6 +18,7 @@ use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\OutpostServiceProvider;
 use Zacksmash\Outpost\Processes;
 use Zacksmash\Outpost\Runtime;
+use Zacksmash\Outpost\Secrets;
 use Zacksmash\Outpost\VerificationChecks;
 
 it('merges the package config', function () {
@@ -94,9 +95,14 @@ it('publishes the package config', function () {
         ->and(array_values($paths))->toBe([config_path('outpost.php')]);
 });
 
+it('binds the secrets store as a singleton', function () {
+    expect(app(Secrets::class))->toBe(app(Secrets::class));
+});
+
 it('registers the focused command surface', function () {
     expect(Artisan::all())
         ->toHaveKey('outpost:process')
+        ->toHaveKey('outpost:secret')
         ->toHaveKey('outpost:upgrade')
         ->toHaveKey('outpost:verify')
         ->not->toHaveKey('outpost:reload');

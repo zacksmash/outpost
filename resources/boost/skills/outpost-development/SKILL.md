@@ -59,6 +59,9 @@ php artisan outpost:verify billing --json
 php artisan outpost:shell billing
 php artisan outpost:logs billing --follow
 php artisan outpost:remove billing
+php artisan outpost:secret set STRIPE_SECRET
+php artisan outpost:secret list
+php artisan outpost:secret forget STRIPE_SECRET
 ```
 
 - `outpost` accepts local, remote, new, or GitHub pull-request branches and creates an editable worktree under `.outpost/<name>/app`.
@@ -71,6 +74,7 @@ php artisan outpost:remove billing
 - Repository-configured `outpost.previews` entries resolve same-origin review paths and optional notes for every instance. Open one with `outpost:open <name> <preview>` or read it from `endpoints.<preview>` in info JSON. Invalid custom entries are omitted from discovery; requesting one explicitly reports its configuration error.
 - Outpost serves every instance through its private nginx and PHP-FPM runtime. The **App Processes** column and `outpost:process <name> --json` report only user-configured supervised commands. Add a process name and `--restart` to restart one after long-lived PHP code changes. `outpost:info --json` also exposes the keyed `process_states` map; `unavailable` means the container is stopped or missing, `waiting` means provisioning is incomplete, and `unknown` isolates a failed live-state probe. Table info does not probe Supervisor.
 - `outpost:verify --json` is the stable handoff report. It runs host-owned `verify` hooks, checks runtime, container, image, final Git state, a fresh production asset build when `package.json` defines a `build` script, configured project checks, and the application response. API-only apps skip asset building. Dirty worktrees warn without failing; a skipped `Configured checks` row means no project-specific test or lint command ran.
+- `outpost:secret set|list|forget` manages host-owned secrets. Declare which environment keys are secret in `outpost.secrets`; store each value with `outpost:secret set <KEY>` (a hidden prompt, never an argument). Values live in the macOS Keychain scoped to the project, are injected into the instance at boot through a host-only file, and are never written to the worktree `.env`. Creating or recreating an instance fails with the exact `outpost:secret set` remedy when a declared key has no stored value, and `outpost:doctor` reports the same gap. `list` and every error reveal only whether a value is present, never the value.
 - `outpost:remove` refuses dirty worktrees even with `--force` before running `teardown` hooks. Successful hook file writes do not cause a second refusal. `--discard-changes` explicitly destroys uncommitted work. Teardown runs only for ready, running instances; `--forget` bypasses hook parsing and execution and reports the orphaned container.
 
 ### 3. Upgrade and recover
@@ -156,7 +160,18 @@ Repository lifecycle hooks supplement built-in provisioning. They are read from 
 
 Hook failure preserves the instance and fails the lifecycle operation. Hooks always run as the non-root application user; there is no privileged hook mode. The base image supplies Playwright's Ubuntu Chromium dependencies but not a browser binary, so a setup hook may safely download the project's matching browser with `npx playwright install chromium`. Teardown hooks run only when the manifest is ready and the container is running; stopped, missing, and incomplete instances skip them. `outpost:remove --forget` bypasses even malformed hook configuration when runtime recovery is impossible.
 
-Important config values are `domain`, `image`, `dns`, `path`, `resources`, `php`, `frontend`, `https`, `tls.path`, `services`, `expose_services`, `previews`, `processes`, `checks`, `hooks`, `database`, `lifecycle_timeout`, and `timeout`. Image-level changes require `outpost:build --force` and instance upgrades.
+Host-managed secrets keep real credentials out of the instance. Declare the secret environment keys in `outpost.secrets`; like hooks they are read from the host checkout, so an instance branch cannot change them, and a key that collides with an Outpost-managed value (`APP_URL`, `DB_*`, the cache directories) is rejected:
+
+```php
+'secrets' => [
+    'STRIPE_SECRET',
+    'OPENAI_API_KEY',
+],
+```
+
+Store each value with `outpost:secret set <KEY>`; Outpost keeps it in the macOS Keychain scoped to the project, injects it via a host-only file at boot, and never writes it to the worktree `.env`. Instance creation and recreation fail closed when a declared key is unset. The injected values are still readable as environment inside the instance and are baked in if the app runs `config:cache` there, so prefer provider test keys and scoped tokens for disposable instances.
+
+Important config values are `domain`, `image`, `dns`, `path`, `resources`, `php`, `frontend`, `https`, `tls.path`, `services`, `expose_services`, `previews`, `processes`, `checks`, `hooks`, `secrets`, `database`, `lifecycle_timeout`, and `timeout`. Image-level changes require `outpost:build --force` and instance upgrades.
 
 Composer path repositories outside the worktree are offered as default-no read-only mounts. Approved mounts are recorded per instance and reused during upgrades and recovery; newly discovered repositories still require explicit approval. Approved relative repositories receive an ignored host bridge so Composer vendor links work for host tools. Do not edit through that bridge unless the external repository is explicitly in scope.
 
@@ -189,7 +204,7 @@ Composer path repositories outside the worktree are offered as default-no read-o
 - do not configure absolute or network URLs in `previews`; use a same-origin path beginning with one slash and do not reuse built-in endpoint names
 - do not use `outpost:process` to control nginx, PHP-FPM, databases, or ad hoc commands; it is limited to application processes recorded in the instance manifest
 - do not treat lifecycle hooks from an instance branch as trusted configuration; Outpost intentionally reads them from the host checkout
-- do not provide production secrets or sensitive mounts to untrusted code
+- do not paste real credentials into an instance `.env`; declare secret keys in `outpost.secrets` and store values with `outpost:secret set`, and prefer provider test keys and scoped tokens for untrusted code
 - do not edit `.outpost/<name>/runtime`; Outpost owns and regenerates runtime configuration
 - do not copy or share `vendor` or `node_modules` between instances; Outpost shares only package-manager downloads
 - do not document package internals as public API

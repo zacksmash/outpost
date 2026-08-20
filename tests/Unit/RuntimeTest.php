@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Process\Exceptions\ProcessTimedOutException;
 use Illuminate\Process\PendingProcess;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Sleep;
 use Symfony\Component\Process\Exception\ProcessTimedOutException as SymfonyProcessTimedOutException;
@@ -220,6 +221,65 @@ it('rejects malformed container environment names', function () {
         [],
         environment: ['INVALID-NAME' => 'value'],
     ))->toThrow(RuntimeException::class, 'container environment variable name [INVALID-NAME] is invalid');
+
+    Process::assertNothingRan();
+});
+
+it('passes secret environment through a host-only 0600 file, not the argv', function () {
+    $envFile = null;
+    $envContent = null;
+    $perms = null;
+
+    Process::fake([
+        processPattern('container', 'run').' *' => function (PendingProcess $process) use (&$envFile, &$envContent, &$perms) {
+            $i = array_search('--env-file', $process->command, true);
+
+            if ($i !== false) {
+                $envFile = $process->command[$i + 1];
+                $envContent = File::get($envFile);
+                $perms = substr(sprintf('%o', fileperms($envFile)), -4);
+            }
+
+            return Process::result('');
+        },
+    ]);
+
+    $this->runtime->boot('feature-x-app', 'outpost-base', '1.1.1.1', [], secretEnvironment: [
+        'STRIPE_SECRET' => 'sk_live_xyz',
+    ]);
+
+    expect($envContent)->toBe("STRIPE_SECRET=sk_live_xyz\n")
+        ->and($perms)->toBe('0600')
+        ->and(File::exists($envFile))->toBeFalse();
+
+    Process::assertRan(fn (PendingProcess $process) => in_array('--env-file', $process->command, true)
+        && ! collect($process->command)->contains(fn ($arg): bool => str_contains((string) $arg, 'sk_live_xyz')));
+});
+
+it('rejects a secret value containing a line break', function () {
+    Process::fake();
+
+    expect(fn () => $this->runtime->boot(
+        'feature-x-app',
+        'outpost-base',
+        '1.1.1.1',
+        [],
+        secretEnvironment: ['STRIPE_SECRET' => "sk_live\nmalicious"],
+    ))->toThrow(RuntimeException::class, 'line break');
+
+    Process::assertNothingRan();
+});
+
+it('rejects a malformed secret environment name', function () {
+    Process::fake();
+
+    expect(fn () => $this->runtime->boot(
+        'feature-x-app',
+        'outpost-base',
+        '1.1.1.1',
+        [],
+        secretEnvironment: ['bad-name' => 'value'],
+    ))->toThrow(RuntimeException::class, 'container environment variable name [bad-name] is invalid');
 
     Process::assertNothingRan();
 });

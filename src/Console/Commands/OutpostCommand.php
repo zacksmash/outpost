@@ -27,6 +27,7 @@ use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\PathRepositories;
 use Zacksmash\Outpost\Processes;
 use Zacksmash\Outpost\Provisioner;
+use Zacksmash\Outpost\Secrets;
 use Zacksmash\Outpost\Supervisord;
 
 use function Laravel\Prompts\error;
@@ -74,6 +75,7 @@ class OutpostCommand extends Command
         Outposts $outposts,
         Names $names,
         DependencyCaches $dependencyCaches,
+        Secrets $secrets,
         PathRepositories $pathRepositories,
         Provisioner $provisioner,
         Processes $processes,
@@ -218,6 +220,17 @@ class OutpostCommand extends Command
             $commands = $processes->commands($detection->php);
             $hooks->commands(LifecycleHooks::SETUP, $detection->php);
 
+            // Refuse before any worktree or container work when a declared
+            // secret has no stored value, so the instance never boots missing
+            // a credential the configuration promises to inject.
+            try {
+                $secrets->assertAllStored();
+            } catch (RuntimeException $e) {
+                error($e->getMessage());
+
+                return self::FAILURE;
+            }
+
             info(sprintf(
                 'PHP %s (PHP-FPM) · Resources: %d CPU / %s · Frontend: %s · Services: %s · App processes: %s',
                 $detection->php,
@@ -309,6 +322,7 @@ class OutpostCommand extends Command
                     uid: $uid,
                     gid: $gid,
                     environment: $dependencyCaches->environment(),
+                    secretEnvironment: $secrets->environment(),
                 ),
                 'Booting the instance',
             );

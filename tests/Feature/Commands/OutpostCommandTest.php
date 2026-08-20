@@ -180,6 +180,65 @@ it('creates a fully provisioned instance', function () {
     Process::assertRan(fn (PendingProcess $process) => $process->command === ['dscacheutil', '-flushcache']);
 });
 
+it('injects a declared, stored secret via a host-only env file, never the argv', function () {
+    config(['outpost.secrets' => ['STRIPE_SECRET']]);
+    $envFile = null;
+    $envContent = null;
+
+    fakeCreation([
+        processPattern('security', 'find-generic-password', '-s', 'outpost', '-a', app()->basePath().':STRIPE_SECRET') => Process::result(exitCode: 0),
+        processPattern('security', 'find-generic-password', '-s', 'outpost', '-a', app()->basePath().':STRIPE_SECRET', '-w') => Process::result("sk_live_xyz\n"),
+        processPattern('container', 'run').' *' => function (PendingProcess $process) use (&$envFile, &$envContent) {
+            $i = array_search('--env-file', $process->command, true);
+
+            if ($i !== false) {
+                $envFile = $process->command[$i + 1];
+                $envContent = File::get($envFile);
+            }
+
+            return Process::result('');
+        },
+    ]);
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->expectsOutputToContain('http://feature-x-laravel.outpost')
+        ->assertSuccessful();
+
+    // The value travels in the env file, not on the argv.
+    expect($envContent)->toContain('STRIPE_SECRET=sk_live_xyz');
+    Process::assertRan(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'run'
+        && ! collect($process->command)->contains(fn ($arg): bool => str_contains((string) $arg, 'sk_live_xyz')));
+
+    // The env file lives outside every mounted instance path and is removed after boot.
+    expect($envFile)->not->toContain($this->root)
+        ->and(File::exists($envFile))->toBeFalse()
+        ->and(File::get($this->root.'/feature-x/app/.env'))->not->toContain('sk_live_xyz');
+});
+it('does not query the keychain when no secrets are declared', function () {
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->assertSuccessful();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[0] ?? null) === 'security');
+});
+
+it('refuses to create an instance when a declared secret is unset', function () {
+    config(['outpost.secrets' => ['STRIPE_SECRET']]);
+
+    fakeCreation([
+        processPattern('security', 'find-generic-password', '-s', 'outpost', '-a', app()->basePath().':STRIPE_SECRET') => Process::result('', 'not found', 44),
+    ]);
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->expectsOutputToContain('outpost:secret set STRIPE_SECRET')
+        ->assertFailed();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'run');
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'worktree'
+        && in_array('add', $process->command, true));
+});
+
 it('points the application at an explicitly configured database service', function () {
     config(['outpost.services' => ['mysql']]);
 

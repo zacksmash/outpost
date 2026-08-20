@@ -25,6 +25,8 @@ class Doctor
 
     public const string TLS_CHECK = 'Local HTTPS';
 
+    public const string SECRETS_CHECK = 'Host secrets';
+
     /**
      * The oldest Apple container CLI Outpost supports.
      */
@@ -46,6 +48,7 @@ class Doctor
         protected readonly string $basePath,
         protected readonly Repository $config,
         protected readonly Certificates $certificates,
+        protected readonly Secrets $secrets,
     ) {}
 
     /**
@@ -356,7 +359,7 @@ class Doctor
      */
     protected function projectChecks(): array
     {
-        return [
+        $checks = [
             $this->git->hasCommits()
                 ? DoctorCheck::pass('Git repository', 'The application has at least one commit.')
                 : DoctorCheck::failure(
@@ -380,6 +383,52 @@ class Doctor
                 ),
             $this->https(),
         ];
+
+        if (($secrets = $this->secrets()) !== null) {
+            $checks[] = $secrets;
+        }
+
+        return $checks;
+    }
+
+    /**
+     * Report declared host secrets that have no stored value on this machine.
+     *
+     * Returns null when the project declares no secrets, so the row appears
+     * only when the feature is in use.
+     */
+    protected function secrets(): ?DoctorCheck
+    {
+        try {
+            if ($this->secrets->configured() === []) {
+                return null;
+            }
+
+            $missing = $this->secrets->missing();
+        } catch (RuntimeException $e) {
+            return DoctorCheck::failure(
+                self::SECRETS_CHECK,
+                $e->getMessage(),
+                'Fix the [secrets] list in config/outpost.php.',
+            );
+        }
+
+        if ($missing === []) {
+            return DoctorCheck::pass(self::SECRETS_CHECK, 'Every declared secret has a stored value.');
+        }
+
+        // Fail, not warn: an unset declared secret blocks instance creation and
+        // recreation, matching the other project checks that gate creation.
+        $remedy = implode(' ', array_map(
+            fn (string $key): string => "php artisan outpost:secret set {$key};",
+            $missing,
+        ));
+
+        return DoctorCheck::failure(
+            self::SECRETS_CHECK,
+            'These declared secrets have no stored value: '.implode(', ', $missing).'.',
+            $remedy,
+        );
     }
 
     /**

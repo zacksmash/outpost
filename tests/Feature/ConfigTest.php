@@ -24,6 +24,7 @@ it('exposes sensible defaults', function () {
             'verify' => [],
             'teardown' => [],
         ])
+        ->and(config('outpost.secrets'))->toBe([])
         ->and(config('outpost.lifecycle_timeout'))->toBe(30)
         ->and(config('outpost.timeout'))->toBe(60);
 });

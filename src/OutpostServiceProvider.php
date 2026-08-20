@@ -44,6 +44,7 @@ class OutpostServiceProvider extends ServiceProvider
                 $app->basePath(),
                 $app->make('config'),
                 $app->make(Certificates::class),
+                $app->make(Secrets::class),
             );
         });
 
@@ -76,6 +77,10 @@ class OutpostServiceProvider extends ServiceProvider
                 $app->make('files'),
                 is_string($home) ? $home : null,
             );
+        });
+
+        $this->app->singleton(Secrets::class, function (Application $app) {
+            return new Secrets($app->make('config'), $app->basePath());
         });
 
         $this->app->singleton(VerificationChecks::class);
@@ -118,6 +123,7 @@ class OutpostServiceProvider extends ServiceProvider
             Console\Commands\ProcessCommand::class,
             Console\Commands\PullCommand::class,
             Console\Commands\RemoveCommand::class,
+            Console\Commands\SecretCommand::class,
             Console\Commands\ShellCommand::class,
             Console\Commands\StartCommand::class,
             Console\Commands\StopCommand::class,
