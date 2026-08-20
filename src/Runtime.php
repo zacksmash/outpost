@@ -6,8 +6,10 @@ namespace Zacksmash\Outpost;
 
 use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Process\Exceptions\ProcessTimedOutException;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Sleep;
+use Illuminate\Support\Str;
 use RuntimeException;
 use Symfony\Component\Process\Process as SymfonyProcess;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
@@ -300,6 +302,7 @@ class Runtime implements RuntimeDriver
         ?int $uid = null,
         ?int $gid = null,
         array $environment = [],
+        array $secretEnvironment = [],
     ): void {
         $this->validatedResources($cpus, $memory);
 
@@ -330,6 +333,18 @@ class Runtime implements RuntimeDriver
             $command[] = "{$name}={$value}";
         }
 
+        // Secret values are read from a host-only file rather than the argv, so
+        // they never appear in the process list or in a command line a failure
+        // might surface. The file lives outside every mounted path.
+        $secretFile = $secretEnvironment === []
+            ? null
+            : $this->writeSecretEnvironmentFile($secretEnvironment);
+
+        if ($secretFile !== null) {
+            $command[] = '--env-file';
+            $command[] = $secretFile;
+        }
+
         foreach ($volumes as $volume) {
             $command[] = '--volume';
             $command[] = $volume;
@@ -337,7 +352,53 @@ class Runtime implements RuntimeDriver
 
         $command[] = $image;
 
-        $this->runOrFail($command, "Unable to boot the container [{$container}]", self::TIMEOUT);
+        try {
+            $this->runOrFail($command, "Unable to boot the container [{$container}]", self::TIMEOUT);
+        } finally {
+            if ($secretFile !== null) {
+                File::delete($secretFile);
+            }
+        }
+    }
+
+    /**
+     * Write instance secrets to a host-only 0600 file for "container --env-file".
+     *
+     * @param  array<string, string>  $environment
+     */
+    protected function writeSecretEnvironmentFile(array $environment): string
+    {
+        $lines = '';
+
+        foreach ($environment as $name => $value) {
+            if (preg_match('/^[A-Z_][A-Z0-9_]*$/D', $name) !== 1) {
+                throw new RuntimeException("The container environment variable name [{$name}] is invalid.");
+            }
+
+            if (preg_match('/[\r\n]/', $value) === 1) {
+                throw new RuntimeException("The secret [{$name}] contains a line break, which cannot be passed to the container.");
+            }
+
+            $lines .= "{$name}={$value}\n";
+        }
+
+        $path = sys_get_temp_dir().'/outpost-secrets-'.Str::random(40);
+
+        // Create the file 0600 before writing, so secret values never land in a
+        // world-readable file even briefly.
+        if (File::put($path, '') === false) {
+            throw new RuntimeException('Unable to create a temporary file for the instance secrets.');
+        }
+
+        chmod($path, 0600);
+
+        if (File::put($path, $lines) === false) {
+            File::delete($path);
+
+            throw new RuntimeException('Unable to write the instance secrets file.');
+        }
+
+        return $path;
     }
 
     /**

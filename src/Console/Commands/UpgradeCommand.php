@@ -26,6 +26,7 @@ use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\PathRepositories;
 use Zacksmash\Outpost\Processes;
 use Zacksmash\Outpost\Provisioner;
+use Zacksmash\Outpost\Secrets;
 use Zacksmash\Outpost\Supervisord;
 
 use function Laravel\Prompts\error;
@@ -67,6 +68,7 @@ class UpgradeCommand extends Command
         Git $git,
         Host $host,
         DependencyCaches $dependencyCaches,
+        Secrets $secrets,
         PathRepositories $pathRepositories,
         Provisioner $provisioner,
         Nginx $nginx,
@@ -106,6 +108,11 @@ class UpgradeCommand extends Command
 
                 return self::SUCCESS;
             }
+
+            // Fail fast before any worktree mutation or certificate work when a
+            // declared secret is unset. Secrets are project-global, so one check
+            // covers every target and avoids a redundant per-instance read.
+            $secrets->assertAllStored();
 
             if ($this->hasUnsafeWorktree($targets, $outposts, $git, $legacyRedisDump)) {
                 return self::FAILURE;
@@ -182,6 +189,7 @@ class UpgradeCommand extends Command
                     $git,
                     $host,
                     $dependencyCaches,
+                    $secrets,
                     $provisioner,
                     $nginx,
                     $processes,

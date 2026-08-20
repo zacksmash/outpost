@@ -216,6 +216,29 @@ Hooks are named, shell-free commands read from the host checkout's `config/outpo
 
 A failing hook stops the lifecycle operation and preserves the instance for diagnosis. Hooks always run as the non-root application user; Outpost does not expose privileged hooks. The base image includes Playwright's Ubuntu Chromium dependencies, so projects may download their matching browser with `npx playwright install chromium` without requesting system privileges. Teardown hooks only run for a fully provisioned instance whose container is running — stopped, missing, and incomplete instances skip them with a warning — and emergency `--forget` removal bypasses hook parsing and execution entirely.
 
+### Host-Managed Secrets
+
+Outpost keeps real credentials out of the instance. List the environment keys you consider secret in `config/outpost.php`, then store each value once on the host:
+
+```php
+'secrets' => [
+    'STRIPE_SECRET',
+    'OPENAI_API_KEY',
+],
+```
+
+```shell
+php artisan outpost:secret set STRIPE_SECRET      # Prompts for the value; never echoed
+php artisan outpost:secret list                   # Shows which declared keys are stored
+php artisan outpost:secret forget STRIPE_SECRET
+```
+
+Values live in your macOS Keychain, scoped to the project that stored them, and reach the instance through a host-only file at boot — never on the command line, and never written to the worktree `.env`. The `secrets` list is read from the host checkout, exactly like lifecycle hooks, so an instance branch can never change which keys resolve. A key that would collide with an Outpost-managed value — `APP_URL`, the `DB_*` credentials, the package-manager cache directories, and so on — is rejected.
+
+Creating or recreating an instance fails with the exact `outpost:secret set` remedy when a declared key has no stored value, and `outpost:doctor` reports the same gap. `outpost:secret list` and every error message reveal only whether a value is present, never the value itself.
+
+This protects against the common accident — a real key committed to the branch, or read out of the worktree by an agent — not against code running inside the instance, which necessarily receives the values it needs as environment variables. If the application compiles its configuration with `config:cache` inside the instance, the resolved values are written into the on-disk compiled cache. Prefer provider test keys and narrowly scoped tokens for disposable instances regardless.
+
 ## Managing Instances
 
 ```shell
@@ -323,6 +346,7 @@ php artisan vendor:publish --tag="outpost-config"
 | `processes` | `[]` | Named supervised argument lists. |
 | `checks` | `[]` | Named shell-free commands run by `outpost:verify`. |
 | `hooks` | `setup`, `verify`, and `teardown`: `[]` | Host-owned shell-free lifecycle commands. |
+| `secrets` | `[]` | Host-owned env keys injected from the Keychain at boot, never written to the worktree. |
 | `database` | `outpost` / `outpost` / `password` | Instance credentials. |
 | `lifecycle_timeout` | `30` | Timeout for quick VM lifecycle operations. |
 | `timeout` | `60` | Timeout for the application readiness check. |

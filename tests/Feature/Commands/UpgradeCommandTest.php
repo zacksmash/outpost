@@ -112,6 +112,22 @@ it('upgrades only the container while preserving and reprovisioning the worktree
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('key:generate', $process->command, true));
 });
 
+it('refuses to upgrade and never deletes the existing container when a declared secret is unset', function () {
+    config(['outpost.secrets' => ['STRIPE_SECRET']]);
+
+    fakeUpgradeProcesses($this->root, $this->currentDigest, [
+        processPattern('security', 'find-generic-password', '-s', 'outpost', '-a', app()->basePath().':STRIPE_SECRET') => Process::result('', 'not found', 44),
+    ]);
+
+    $this->artisan('outpost:upgrade', ['name' => 'feature-x'])
+        ->expectsOutputToContain('outpost:secret set STRIPE_SECRET')
+        ->assertFailed();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'stop');
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'delete');
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'run');
+});
+
 it('rebuilds a current legacy sqlite instance around its single managed database', function () {
     app(Outposts::class)->save(fakeManifest(
         name: 'feature-x',

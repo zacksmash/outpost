@@ -154,6 +154,86 @@ it('recreates a missing container without replacing the surviving worktree', fun
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('key:generate', $process->command, true));
 });
 
+it('injects a declared, stored secret via a host-only env file when recreating', function () {
+    config(['outpost.secrets' => ['STRIPE_SECRET']]);
+    $envFile = null;
+    $envContent = null;
+
+    $worktree = $this->root.'/feature-x/app';
+    $runtime = $this->root.'/feature-x/runtime';
+    $git = $this->root.'/git';
+
+    File::ensureDirectoryExists($worktree);
+    File::ensureDirectoryExists($runtime);
+    File::ensureDirectoryExists($git);
+    File::put($worktree.'/.env', "APP_KEY=base64:existing\nAPP_URL=http://localhost\nDB_CONNECTION=sqlite\nDB_DATABASE=/app/database/database.sqlite\n");
+    File::put($runtime.'/nginx.conf', 'nginx');
+    File::put($runtime.'/supervisord.conf', 'supervisor');
+    app(Outposts::class)->save(fakeManifest('feature-x', database: 'sqlite', services: []));
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
+        processPattern('git', '-C', $worktree, 'status', '--short') => Process::result(''),
+        processPattern('git', 'rev-parse', '--path-format=absolute', '--git-common-dir') => Process::result($git."\n"),
+        processPattern('id', '-u') => Process::result("501\n"),
+        processPattern('id', '-g') => Process::result("20\n"),
+        processPattern('security', 'find-generic-password', '-s', 'outpost', '-a', app()->basePath().':STRIPE_SECRET') => Process::result(exitCode: 0),
+        processPattern('security', 'find-generic-password', '-s', 'outpost', '-a', app()->basePath().':STRIPE_SECRET', '-w') => Process::result("sk_live_xyz\n"),
+        processPattern('container', 'run').' *' => function (PendingProcess $process) use (&$envFile, &$envContent) {
+            $i = array_search('--env-file', $process->command, true);
+
+            if ($i !== false) {
+                $envFile = $process->command[$i + 1];
+                $envContent = File::get($envFile);
+            }
+
+            return Process::result('');
+        },
+        processPattern('container', 'exec').' *' => Process::result(''),
+        processPattern('dscacheutil', '-flushcache') => Process::result(''),
+    ]);
+
+    $this->artisan('outpost:start', ['name' => 'feature-x'])
+        ->expectsOutputToContain('Recreated [feature-x]')
+        ->assertSuccessful();
+
+    expect($envContent)->toContain('STRIPE_SECRET=sk_live_xyz');
+    Process::assertRan(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'run'
+        && ! collect($process->command)->contains(fn ($arg): bool => str_contains((string) $arg, 'sk_live_xyz')));
+    expect(File::exists($envFile))->toBeFalse();
+});
+
+it('refuses to recreate a missing container when a declared secret is unset', function () {
+    config(['outpost.secrets' => ['STRIPE_SECRET']]);
+
+    $worktree = $this->root.'/feature-x/app';
+    $runtime = $this->root.'/feature-x/runtime';
+    $git = $this->root.'/git';
+
+    File::ensureDirectoryExists($worktree);
+    File::ensureDirectoryExists($runtime);
+    File::ensureDirectoryExists($git);
+    File::put($worktree.'/.env', "APP_KEY=base64:existing\n");
+    app(Outposts::class)->save(fakeManifest('feature-x', database: 'sqlite', services: []));
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result('[]'),
+        processPattern('container', 'image', 'inspect', Runtime::PUBLISHED_IMAGE) => Process::result(fakeImageInspect()),
+        processPattern('git', '-C', $worktree, 'status', '--short') => Process::result(''),
+        processPattern('security', 'find-generic-password', '-s', 'outpost', '-a', app()->basePath().':STRIPE_SECRET') => Process::result('', 'not found', 44),
+    ]);
+
+    $this->artisan('outpost:start', ['name' => 'feature-x'])
+        ->expectsOutputToContain('outpost:secret set STRIPE_SECRET')
+        ->assertFailed();
+
+    // Recreate never deletes (the container is already missing); assert it
+    // never boots a replacement. The delete-prevention path is covered by the
+    // upgrade test, where an existing container is replaced.
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'run');
+});
+
 it('refuses to recreate a missing container over a dirty worktree', function () {
     $worktree = $this->root.'/feature-x/app';
 

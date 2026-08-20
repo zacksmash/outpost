@@ -54,6 +54,7 @@ interface RuntimeDriver
     /**
      * @param  list<string>  $volumes
      * @param  array<string, string>  $environment
+     * @param  array<string, string>  $secretEnvironment  Passed via a host-only file, never the argv.
      */
     public function boot(
         string $container,
@@ -65,6 +66,7 @@ interface RuntimeDriver
         ?int $uid = null,
         ?int $gid = null,
         array $environment = [],
+        array $secretEnvironment = [],
     ): void;
 
     /**

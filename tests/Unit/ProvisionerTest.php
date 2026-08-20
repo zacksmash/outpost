@@ -12,13 +12,14 @@ use Zacksmash\Outpost\Manifest;
 use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\Provisioner;
 use Zacksmash\Outpost\Runtime;
+use Zacksmash\Outpost\Secrets;
 
 beforeEach(function () {
     Process::preventStrayProcesses();
 
     $this->root = sys_get_temp_dir().'/outpost-provision-'.Str::random(10);
     $this->outposts = new Outposts($this->root);
-    $this->provisioner = new Provisioner(new Runtime, $this->outposts, app('config'), app(LifecycleHooks::class));
+    $this->provisioner = new Provisioner(new Runtime, $this->outposts, app('config'), app(LifecycleHooks::class), app(Secrets::class));
 
     File::ensureDirectoryExists($this->root.'/feature-x/app');
     File::put($this->root.'/feature-x/app/.env.example', implode("\n", [
@@ -38,6 +39,73 @@ it('seeds .env from .env.example when missing', function () {
     $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []));
 
     expect(File::get($this->root.'/feature-x/app/.env'))->toContain('APP_NAME=Example');
+});
+
+it('strips a declared secret copied from .env.example so its value never persists on disk', function () {
+    config(['outpost.secrets' => ['STRIPE_SECRET']]);
+    Process::fake();
+
+    File::put($this->root.'/feature-x/app/.env.example', implode("\n", [
+        'APP_NAME=Example',
+        'STRIPE_SECRET=sk_test_from_example',
+        'DB_CONNECTION=sqlite',
+    ])."\n");
+
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []));
+
+    $env = File::get($this->root.'/feature-x/app/.env');
+
+    expect($env)->not->toContain('STRIPE_SECRET')
+        ->and($env)->not->toContain('sk_test_from_example')
+        ->and($env)->toContain('APP_NAME=Example');
+});
+
+it('strips a declared secret already present in an existing worktree env', function () {
+    config(['outpost.secrets' => ['STRIPE_SECRET']]);
+    Process::fake();
+
+    File::put($this->root.'/feature-x/app/.env', "APP_KEY=base64:existing\nSTRIPE_SECRET=sk_live_realvalue\n");
+
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []));
+
+    $env = File::get($this->root.'/feature-x/app/.env');
+
+    expect($env)->not->toContain('STRIPE_SECRET')
+        ->and($env)->not->toContain('sk_live_realvalue')
+        ->and($env)->toContain('APP_KEY=base64:existing');
+});
+
+it('strips a declared secret from the worktree env when recovering', function () {
+    config(['outpost.secrets' => ['STRIPE_SECRET']]);
+    Process::fake();
+
+    File::put($this->root.'/feature-x/app/.env', "APP_KEY=base64:existing\nSTRIPE_SECRET=sk_live_realvalue\n");
+
+    $this->provisioner->recover(
+        fakeManifest(name: 'feature-x', database: 'sqlite', services: []),
+        previous: fakeManifest(name: 'feature-x', database: 'sqlite', services: []),
+    );
+
+    $env = File::get($this->root.'/feature-x/app/.env');
+
+    expect($env)->not->toContain('STRIPE_SECRET')
+        ->and($env)->not->toContain('sk_live_realvalue')
+        ->and($env)->toContain('APP_KEY=base64:existing');
+});
+
+it('strips a declared secret written with an export prefix', function () {
+    config(['outpost.secrets' => ['STRIPE_SECRET']]);
+    Process::fake();
+
+    File::put($this->root.'/feature-x/app/.env', "APP_KEY=base64:existing\nexport STRIPE_SECRET=sk_live_exported\n");
+
+    $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'sqlite', services: []));
+
+    $env = File::get($this->root.'/feature-x/app/.env');
+
+    expect($env)->not->toContain('STRIPE_SECRET')
+        ->and($env)->not->toContain('sk_live_exported')
+        ->and($env)->toContain('APP_KEY=base64:existing');
 });
 
 it('refuses to provision without an example environment file', function () {

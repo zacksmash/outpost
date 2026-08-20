@@ -20,6 +20,7 @@ class Provisioner
         protected readonly Outposts $outposts,
         protected readonly Repository $config,
         protected readonly LifecycleHooks $hooks,
+        protected readonly Secrets $secrets,
     ) {}
 
     /**
@@ -159,6 +160,11 @@ class Provisioner
             ? []
             : array_values(array_diff($this->managedEnvironmentKeys($previous), array_keys($values)));
 
+        // Declared host secrets are injected as container environment at boot,
+        // so strip them from the worktree file: a value copied from .env.example
+        // must never persist on disk or reach the git tree.
+        $obsolete = array_values(array_unique([...$obsolete, ...$this->secrets->configured()]));
+
         $this->writeEnvironment($worktree.'/.env', $values, $obsolete);
 
         if ($manifest->database === 'sqlite') {
@@ -285,7 +291,9 @@ class Provisioner
         $contents = rtrim(File::get($path));
 
         foreach ($obsolete as $key) {
-            $contents = (string) preg_replace('/^'.preg_quote($key, '/').'=.*(?:\r\n|\n|\r)?/m', '', $contents);
+            // Match an optional "export " prefix so a declared secret written
+            // as "export KEY=..." is stripped too; phpdotenv would load it.
+            $contents = (string) preg_replace('/^(?:export\s+)?'.preg_quote($key, '/').'=.*(?:\r\n|\n|\r)?/m', '', $contents);
         }
 
         foreach ($values as $key => $value) {

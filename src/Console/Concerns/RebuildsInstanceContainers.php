@@ -18,6 +18,7 @@ use Zacksmash\Outpost\Nginx;
 use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\Processes;
 use Zacksmash\Outpost\Provisioner;
+use Zacksmash\Outpost\Secrets;
 use Zacksmash\Outpost\Supervisord;
 
 use function Laravel\Prompts\error;
@@ -163,6 +164,7 @@ trait RebuildsInstanceContainers
         Git $git,
         Host $host,
         DependencyCaches $dependencyCaches,
+        Secrets $secrets,
         Provisioner $provisioner,
         Nginx $nginx,
         Processes $processes,
@@ -258,6 +260,7 @@ trait RebuildsInstanceContainers
                     uid: $host->userId(),
                     gid: $host->groupId(),
                     environment: $dependencyCaches->environment(),
+                    secretEnvironment: $secrets->environment(),
                 ),
                 "Rebuilding [{$manifest->name}]",
             );

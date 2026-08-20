@@ -22,6 +22,7 @@ use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\PathRepositories;
 use Zacksmash\Outpost\Processes;
 use Zacksmash\Outpost\Provisioner;
+use Zacksmash\Outpost\Secrets;
 use Zacksmash\Outpost\Supervisord;
 
 use function Laravel\Prompts\error;
@@ -59,6 +60,7 @@ class StartCommand extends Command
         Git $git,
         Host $host,
         DependencyCaches $dependencyCaches,
+        Secrets $secrets,
         PathRepositories $pathRepositories,
         Provisioner $provisioner,
         Nginx $nginx,
@@ -83,6 +85,10 @@ class StartCommand extends Command
             }
 
             if ($state === null) {
+                // Fail fast before any worktree mutation or image pull when a
+                // declared secret is unset, matching the create-time guard.
+                $secrets->assertAllStored();
+
                 $hooks->commands(LifecycleHooks::SETUP, $manifest->php);
 
                 if ($this->hasUnsafeWorktree([$manifest], $outposts, $git, $legacyRedisDump)) {
@@ -105,6 +111,7 @@ class StartCommand extends Command
                     $git,
                     $host,
                     $dependencyCaches,
+                    $secrets,
                     $provisioner,
                     $nginx,
                     $processes,

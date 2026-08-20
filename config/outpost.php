@@ -230,6 +230,29 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Host-Managed Secrets
+    |--------------------------------------------------------------------------
+    |
+    | Environment keys listed here are secrets owned by the host, not the
+    | instance branch. Store each value once with "outpost:secret set <KEY>";
+    | Outpost keeps it in your macOS Keychain (scoped to this project), injects
+    | it into the instance at boot, and never writes it to the worktree .env.
+    | Creating or recreating an instance fails with the exact fix when a listed
+    | key has no stored value.
+    |
+    | The value is injected as real process environment. If the application
+    | compiles its configuration with "config:cache" inside the instance, the
+    | resolved value is written into the on-disk compiled config cache.
+    |
+    */
+
+    'secrets' => [
+        // 'STRIPE_SECRET',
+        // 'OPENAI_API_KEY',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Instance Database
     |--------------------------------------------------------------------------
     |

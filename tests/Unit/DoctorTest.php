@@ -12,6 +12,7 @@ use Zacksmash\Outpost\DoctorCheck;
 use Zacksmash\Outpost\Git;
 use Zacksmash\Outpost\Host;
 use Zacksmash\Outpost\Runtime;
+use Zacksmash\Outpost\Secrets;
 
 beforeEach(function () {
     Process::preventStrayProcesses();
@@ -40,6 +41,7 @@ beforeEach(function () {
         $this->root,
         app('config'),
         $certificates,
+        new Secrets(app('config'), $this->root),
     );
 });
 
@@ -282,4 +284,48 @@ it('reports domain, resolver, image, and project problems with fixes', function 
         ->and($checks['Git repository']->status)->toBe(DoctorCheck::FAIL)
         ->and($checks['Environment template']->status)->toBe(DoctorCheck::FAIL)
         ->and($checks['Composer lock']->status)->toBe(DoctorCheck::WARNING);
+});
+
+it('fails when a declared secret has no stored value', function () {
+    config(['outpost.secrets' => ['STRIPE_SECRET']]);
+    fakeHealthyDoctor([
+        processPattern('security', 'find-generic-password', '-s', 'outpost', '-a', $this->root.':STRIPE_SECRET') => Process::result('', 'not found', 44),
+    ]);
+
+    $check = collect($this->doctor->inspect())->keyBy('name')[Doctor::SECRETS_CHECK];
+
+    expect($check->status)->toBe(DoctorCheck::FAIL)
+        ->and($check->detail)->toContain('STRIPE_SECRET')
+        ->and($check->remedy)->toContain('outpost:secret set STRIPE_SECRET');
+});
+
+it('fails the secrets check when the secrets configuration is malformed', function () {
+    config(['outpost.secrets' => ['DB_PASSWORD']]);
+    fakeHealthyDoctor();
+
+    $check = collect($this->doctor->inspect())->keyBy('name')[Doctor::SECRETS_CHECK];
+
+    expect($check->status)->toBe(DoctorCheck::FAIL)
+        ->and($check->detail)->toContain('reserved')
+        ->and($check->remedy)->toContain('config/outpost.php');
+});
+
+it('passes the secrets check when every declared secret is stored', function () {
+    config(['outpost.secrets' => ['STRIPE_SECRET']]);
+    fakeHealthyDoctor([
+        processPattern('security', 'find-generic-password', '-s', 'outpost', '-a', $this->root.':STRIPE_SECRET') => Process::result(exitCode: 0),
+    ]);
+
+    $check = collect($this->doctor->inspect())->keyBy('name')[Doctor::SECRETS_CHECK];
+
+    expect($check->status)->toBe(DoctorCheck::PASS);
+});
+
+it('omits the secrets check when no secrets are declared', function () {
+    config(['outpost.secrets' => []]);
+    fakeHealthyDoctor();
+
+    $checks = collect($this->doctor->inspect())->keyBy('name');
+
+    expect($checks->has(Doctor::SECRETS_CHECK))->toBeFalse();
 });
