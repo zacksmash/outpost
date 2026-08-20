@@ -1,22 +1,6 @@
 # Release Notes
 
-## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.7.0...HEAD)
-
-## [v0.7.0](https://github.com/zacksmash/outpost/commits/main/compare/v0.6.0...v0.7.0) - 2026-08-20
-
-### Added
-
-- Added host-managed instance secrets backed by the macOS Keychain. Declare environment variable names in `outpost.secrets`, then manage their values with `outpost:secret set`, `list`, and `forget` without writing credentials into the application worktree.
-- Instance creation, start, and upgrade inject declared secrets through a temporary host-only environment file and fail closed when a declared value is missing. `outpost:doctor` reports missing values with exact remediation commands.
-
-### Changed
-
-- Replaced remaining "sandbox" terminology in documentation, configuration comments, runtime output, generated files, and the bundled Laravel Boost skill with "instance" or "environment".
-- Pinned the package and release image together at `ghcr.io/zacksmash/outpost:0.7.0`.
-
-### Security
-
-- Secret values are never accepted as command arguments, included in process error messages, or stored in instance manifests. Temporary injection files are created with owner-only permissions and removed after container boot.
+## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.6.0...HEAD)
 
 ## [v0.6.0](https://github.com/zacksmash/outpost/commits/main/compare/v0.5.6...v0.6.0) - 2026-08-16
 
