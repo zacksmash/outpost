@@ -3,6 +3,8 @@
 /.phpunit.cache
 /.phpunit.result.cache
 /coverage
+/.superpowers
+/docs
 composer.lock
 .phpunit.cache
 .phpunit.result.cache
