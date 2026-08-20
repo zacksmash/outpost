@@ -231,7 +231,7 @@ class Endpoints
     }
 
     /**
-     * Read a sandbox credential.
+     * Read an instance credential.
      */
     protected function credential(string $key): string
     {

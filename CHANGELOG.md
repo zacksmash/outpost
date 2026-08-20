@@ -64,7 +64,7 @@
 
 ### Upgrade note
 
-- Redis instances upgraded from v0.5.2 or earlier may leave one root-level, untracked `dump.rdb` in the worktree when the old container shuts down. This is disposable sandbox Redis state; delete it before rerunning `outpost:upgrade` or `outpost:remove`.
+- Redis instances upgraded from v0.5.2 or earlier may leave one root-level, untracked `dump.rdb` in the worktree when the old container shuts down. This is disposable instance Redis state; delete it before rerunning `outpost:upgrade` or `outpost:remove`.
 
 ### Changed
 
@@ -85,7 +85,7 @@
 
 ### Fixed
 
-- An explicit `services` override containing one database now makes that service the application's sandbox connection and reconciles the complete `DB_*` environment block instead of provisioning an unused database beside SQLite.
+- An explicit `services` override containing one database now makes that service the application's instance connection and reconciles the complete `DB_*` environment block instead of provisioning an unused database beside SQLite.
 - Doctor and the bundled agent skill now clarify that service web endpoints such as Mailpit use the application's HTTP or HTTPS scheme and point to the exact URLs from `outpost:info`.
 
 ### Changed
@@ -176,7 +176,7 @@
 
 ## [v0.2.0](https://github.com/zacksmash/outpost/commits/main/compare/v0.1.2...v0.2.0) - 2026-08-15
 
-Outpost is now deliberately an isolated Laravel branch sandbox for parallel agents and reviewers—not a replacement for the primary development environment. Instances use predictable PHP-FPM and production-built front-end assets so the browser preview reflects what is actually going to ship.
+Outpost is now deliberately an isolated Laravel branch environment for parallel agents and reviewers—not a replacement for the primary development environment. Instances use predictable PHP-FPM and production-built front-end assets so the browser preview reflects what is actually going to ship.
 
 ### Breaking changes
 
@@ -250,7 +250,7 @@ Container-local MySQL, PostgreSQL, Redis, and Mailpit data cannot be recovered a
 - Direct host access to MySQL, PostgreSQL, Redis, Mailpit SMTP, and the Mailpit UI on each instance's hostname and standard ports, with authenticated stateful services, an opt-out for loopback-only services, copyable details from `outpost:info`, structured `--json` output for agents, and named browser endpoints through `outpost:open`.
 - `php artisan outpost:install` — one-confirmation host setup that uses doctor checks to start Apple container, preserve and update its user-level publication-domain configuration, restart it, invoke the administrator-protected DNS registration, prepare trusted HTTPS, and pull a missing image; supports non-interactive `--force`, explicit `--https`, and local-image builds via `--local`.
 - `php artisan outpost:doctor` — read-only diagnostics for the supported macOS and Apple silicon platform, Apple `container` version and service state, live publication domain, DNS resolver, base image, trusted HTTPS, Git repository, environment template, and Composer lock file, with exact remediation and browser Local Network guidance.
-- `php artisan outpost` — create an isolated instance of any branch: automatic interactive first-run setup when the Mac is not ready, prompt-driven branch and name selection, runtime and service detection from the application's own configuration, git worktree checkout, generated nginx and supervisord configuration, container boot, full provisioning (`.env` seeding from `.env.example`, sandbox database credentials, `composer install`, `key:generate`, `storage:link`, the selected front-end workflow, `migrate`, optional `--seed`), and final HTTP readiness polling. Non-interactive creation reports the explicit setup command instead of attempting privileged changes; generated nginx configuration accommodates modern Laravel preload headers.
+- `php artisan outpost` — create an isolated instance of any branch: automatic interactive first-run setup when the Mac is not ready, prompt-driven branch and name selection, runtime and service detection from the application's own configuration, git worktree checkout, generated nginx and supervisord configuration, container boot, full provisioning (`.env` seeding from `.env.example`, instance database credentials, `composer install`, `key:generate`, `storage:link`, the selected front-end workflow, `migrate`, optional `--seed`), and final HTTP readiness polling. Non-interactive creation reports the explicit setup command instead of attempting privileged changes; generated nginx configuration accommodates modern Laravel preload headers.
 - `php artisan outpost:build` — build a customized local base image (Ubuntu 24.04, nginx, PHP 8.4 + 8.5 with Swoole, pinned checksum-verified RoadRunner and FrankenPHP binaries, Node, MySQL, PostgreSQL, Redis, Mailpit, supervisord) with database credentials and PHP versions supplied from configuration as build arguments.
 - `php artisan outpost:list`, `outpost:info`, `outpost:open`, `outpost:start`, `outpost:stop`, `outpost:shell`, `outpost:logs`, and `outpost:remove` for day-to-day instance management.
 - Scriptable agent operations through `outpost:list --json` and shell-free `outpost:exec`, including streamed output and unchanged command exit codes.
@@ -258,7 +258,7 @@ Container-local MySQL, PostgreSQL, Redis, and Mailpit data cannot be recovered a
 - Service detection for MySQL/MariaDB, PostgreSQL, Redis, and Mailpit, with a `config('outpost.services')` override and honest reporting of detected-but-deferred capabilities (Horizon and external Scout drivers).
 - Per-instance manifest at `.outpost/<name>/outpost.json` recording what was detected and provisioned.
 - Read-only mounting of composer path repositories behind an explicit default-no confirmation; non-interactive runs mount nothing unless `--mount-path-repos` is passed, and sensitive locations (the home directory, its ancestors, hidden directories directly beneath it, and ~/Library) are never mounted.
-- `config/outpost.php` with the instance domain, base image, DNS, instance path and resources, PHP versions, Octane/PHP-FPM selection, Swoole/RoadRunner/FrankenPHP selection, front-end workflow, trusted HTTPS, service detection and exposure, supervised processes, sandbox credentials, and boot timeout.
+- `config/outpost.php` with the instance domain, base image, DNS, instance path and resources, PHP versions, Octane/PHP-FPM selection, Swoole/RoadRunner/FrankenPHP selection, front-end workflow, trusted HTTPS, service detection and exposure, supervised processes, instance credentials, and boot timeout.
 
 ### Changed
 

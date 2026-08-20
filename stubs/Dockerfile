@@ -80,7 +80,7 @@ RUN curl -fsSL "https://github.com/axllent/mailpit/releases/download/${MAILPIT_V
     && tar -xzf /tmp/mailpit.tar.gz -C /usr/local/bin mailpit \
     && rm /tmp/mailpit.tar.gz
 
-# Sandbox-friendly PHP settings for every version and SAPI.
+# Development-friendly PHP settings for every version and SAPI.
 COPY php.ini /tmp/outpost-php.ini
 RUN for v in $PHP_VERSIONS; do \
         cp /tmp/outpost-php.ini /etc/php/$v/cli/conf.d/99-outpost.ini; \

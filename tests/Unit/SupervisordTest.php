@@ -93,7 +93,7 @@ it('escapes supervisor command arguments without invoking a shell', function () 
     expect($config)->toContain('command=/usr/local/bin/outpost-wait "binary" "a \\"quoted\\" value" "a\\\\path" "100%%"');
 });
 
-it('exposes stateful services with sandbox authentication', function () {
+it('exposes stateful services with instance authentication', function () {
     $config = $this->supervisord->generate(fakeManifest(
         services: ['mysql', 'pgsql', 'redis', 'mailpit'],
         exposeServices: true,

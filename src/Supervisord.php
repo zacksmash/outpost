@@ -89,7 +89,7 @@ class Supervisord
     }
 
     /**
-     * Read a shell-safe sandbox credential.
+     * Read a shell-safe instance credential.
      */
     protected function credential(string $key): string
     {

@@ -136,7 +136,7 @@ class Provisioner
     }
 
     /**
-     * Seed the instance's .env file and point it at the sandbox services.
+     * Seed the instance's .env file and point it at its services.
      */
     protected function prepareEnvironment(Manifest $manifest, ?Manifest $previous = null): void
     {
@@ -259,7 +259,7 @@ class Provisioner
     }
 
     /**
-     * Read a sandbox database credential, refusing unsafe characters.
+     * Read an instance database credential, refusing unsafe characters.
      */
     protected function credential(string $key): string
     {

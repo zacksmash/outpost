@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Provision the sandbox PostgreSQL role and database at image build time.
+# Provision the instance PostgreSQL role and database at image build time.
 # The cluster keeps its default loopback listener unless the generated
 # Supervisor command enables direct service access for an instance.
 

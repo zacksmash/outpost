@@ -13,7 +13,7 @@
 
 ## Introduction
 
-Outpost turns any branch of your Laravel application into an isolated, reviewable sandbox powered by Apple's [`container`](https://github.com/apple/container) runtime:
+Outpost turns any branch of your Laravel application into an isolated, reviewable instance powered by Apple's [`container`](https://github.com/apple/container) runtime:
 
 ```shell
 php artisan outpost feature/billing
@@ -68,7 +68,7 @@ The `--https` option enables HTTPS for future Artisan processes and prepares exa
 
 ### Custom Images
 
-Outpost's default configuration works without customization. However, if you need to change the installed PHP versions, sandbox credentials, or other image settings, you may publish the configuration file and rebuild the image:
+Outpost's default configuration works without customization. However, if you need to change the installed PHP versions, instance credentials, or other image settings, you may publish the configuration file and rebuild the image:
 
 ```shell
 php artisan vendor:publish --tag="outpost-config"
@@ -126,7 +126,7 @@ Remote and pull request refs are checked out as local, editable branches, while 
 
 ## Services
 
-Every instance runs PHP-FPM. Outpost inspects your application's configuration to select its PHP version, MySQL or PostgreSQL, Redis, Mailpit, and front-end workflow. You may override service detection using the `services` configuration option. When that list contains exactly one database service, Outpost also makes it the application's sandbox connection and writes its `DB_*` values; listing both keeps the application's configured default.
+Every instance runs PHP-FPM. Outpost inspects your application's configuration to select its PHP version, MySQL or PostgreSQL, Redis, Mailpit, and front-end workflow. You may override service detection using the `services` configuration option. When that list contains exactly one database service, Outpost also makes it the application's instance connection and writes its `DB_*` values; listing both keeps the application's configured default.
 
 Detected services listen on their standard ports on the instance's private IP address, so instances never compete for host ports:
 
@@ -259,7 +259,7 @@ A dirty worktree is a non-blocking warning, while a skipped "Configured checks" 
 
 ### Upgrading Instances
 
-The `outpost:upgrade` command pulls a missing configured image, verifies its runtime contract, and preflights every selected worktree before deleting any container. By default it replaces outdated or missing containers and repairs legacy manifests whose sole managed database is not yet the application's sandbox connection. Add `--force` to rebuild any other current container and re-read the current HTTPS, PHP, resources, services, service exposure, processes, and frontend settings. This is the maintenance path after changing `config/outpost.php` or its environment values.
+The `outpost:upgrade` command pulls a missing configured image, verifies its runtime contract, and preflights every selected worktree before deleting any container. By default it replaces outdated or missing containers and repairs legacy manifests whose sole managed database is not yet the application's instance connection. Add `--force` to rebuild any other current container and re-read the current HTTPS, PHP, resources, services, service exposure, processes, and frontend settings. This is the maintenance path after changing `config/outpost.php` or its environment values.
 
 Dirty worktrees are always refused, including with `--force`; the flag forces a rebuild, not the destruction or mutation of uncommitted work. A rebuild keeps your source and branch, resets container-local databases and services, reconciles Outpost-managed `.env` values, then refreshes Composer dependencies, front-end builds, migrations, and `setup` hooks. Rebuilt containers also pick up the repository's shared download caches and automatically reuse path-repository mounts previously approved for that instance. Only newly discovered external repositories prompt for approval; add `--mount-path-repos` to approve those without prompting.
 
@@ -295,7 +295,7 @@ If an Apple container VM is stuck, `outpost:remove <name> --forget` removes only
 
 Composer path repositories that live outside the worktree are offered as read-only mounts, defaulting to no. Outpost records approved mounts in the instance manifest and reuses them for upgrades and missing-container recovery; a newly discovered repository still requires confirmation or `--mount-path-repos`. Approved relative repositories also receive an ignored, host-side bridge so their Composer symlinks resolve in both the container and your host tools. The bridge itself is a host symlink and cannot enforce read-only access — do not edit the external package through it unless that source was explicitly assigned.
 
-Finally, remember that an instance is a development sandbox, not production parity. Its database credentials are deliberately permissive, and enabled services are reachable from the local container network. Disable `expose_services` when network separation matters more than host database-tool access.
+Finally, remember that an instance is a development environment, not production parity. Its database credentials are deliberately permissive, and enabled services are reachable from the local container network. Disable `expose_services` when network separation matters more than host database-tool access.
 
 ## Configuration
 
@@ -317,13 +317,13 @@ php artisan vendor:publish --tag="outpost-config"
 | `frontend` | `build` | Build assets once, or `none` to skip Node. |
 | `https` | `false` | Set `true` to require prepared trusted HTTPS. |
 | `tls.path` | `.outpost/tls` | Project-relative trusted HTTPS state directory. |
-| `services` | `null` | Explicit service list; one listed database becomes the sandbox connection. `null` enables detection. |
+| `services` | `null` | Explicit service list; one listed database becomes the instance connection. `null` enables detection. |
 | `expose_services` | `true` | Expose detected services on the instance IP. |
 | `previews` | `[]` | Named same-origin review paths with optional notes. |
 | `processes` | `[]` | Named supervised argument lists. |
 | `checks` | `[]` | Named shell-free commands run by `outpost:verify`. |
 | `hooks` | `setup`, `verify`, and `teardown`: `[]` | Host-owned shell-free lifecycle commands. |
-| `database` | `outpost` / `outpost` / `password` | Sandbox credentials. |
+| `database` | `outpost` / `outpost` / `password` | Instance credentials. |
 | `lifecycle_timeout` | `30` | Timeout for quick VM lifecycle operations. |
 | `timeout` | `60` | Timeout for the application readiness check. |
 

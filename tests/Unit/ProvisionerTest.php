@@ -58,7 +58,7 @@ it('preserves an existing .env file', function () {
     expect(File::get($this->root.'/feature-x/app/.env'))->toContain('APP_NAME=Existing');
 });
 
-it('points the environment at the sandbox mysql service', function () {
+it('points the environment at the instance mysql service', function () {
     Process::fake();
 
     $this->provisioner->provision(fakeManifest(name: 'feature-x', database: 'mysql', services: ['mysql']));

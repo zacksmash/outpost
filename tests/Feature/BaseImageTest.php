@@ -5,7 +5,7 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\File;
 use Zacksmash\Outpost\Runtime;
 
-it('keeps production application servers and watchers out of the sandbox image', function () {
+it('keeps production application servers and watchers out of the base image', function () {
     $dockerfile = File::get(dirname(__DIR__, 2).'/stubs/Dockerfile');
 
     expect($dockerfile)

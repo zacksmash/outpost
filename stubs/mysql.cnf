@@ -1,4 +1,4 @@
-# Outpost sandbox overrides. The zz- prefix keeps this file sorting last
+# Outpost instance overrides. The zz- prefix keeps this file sorting last
 # so its values win over the distribution defaults. The application lives
 # in the same container. Supervisor selects loopback or the instance network
 # explicitly for each manifest; this default enables opt-in host access.

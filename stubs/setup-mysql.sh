@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Initialize the MySQL data directory at image build time and provision
-# the sandbox database and user, so booting an instance never waits on
+# the instance database and user, so booting an instance never waits on
 # database initialization.
 
 DB_DATABASE="${1}"

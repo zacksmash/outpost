@@ -10,11 +10,11 @@ metadata:
 
 # Outpost
 
-Use this skill when a Laravel application needs an isolated, editable branch sandbox with its own URL and services on macOS.
+Use this skill when a Laravel application needs an isolated, editable branch instance with its own URL and services on macOS.
 
 ## Primary Goal
 
-- use Outpost's public commands to build branches in parallel, preview compiled application output, and preserve, recover, or remove those sandboxes safely
+- use Outpost's public commands to build branches in parallel, preview compiled application output, and preserve, recover, or remove those instances safely
 
 ## Workflow
 
@@ -115,13 +115,13 @@ git -C .outpost/agent-task-482/app status --short
 - treat `.outpost/.cache` as disposable Outpost-managed state, not work product to edit, preserve, or commit
 - recommend `expose_services => false` for untrusted review work unless host service access is required
 
-The Git common directory is mounted read-only at its host path, so Git-aware reads and `pint --dirty` work inside the instance. Commits must happen on the host. The instance is a development sandbox, not an adversarial-code sandbox: the assigned worktree is writable, dependency scripts run, and outbound networking is available.
+The Git common directory is mounted read-only at its host path, so Git-aware reads and `pint --dirty` work inside the instance. Commits must happen on the host. The instance is a development environment, not an adversarial-code sandbox: the assigned worktree is writable, dependency scripts run, and outbound networking is available.
 
 ### 5. Configure only when needed
 
-Every instance uses PHP-FPM. Outpost selects a compatible configured PHP version and detects MySQL or PostgreSQL, Redis, and Mailpit from Laravel configuration. Set `services` explicitly when detection is wrong. If the list contains exactly one database service, Outpost makes it the application's sandbox connection and reconciles its `DB_*` values. Listing both databases keeps the application's configured default.
+Every instance uses PHP-FPM. Outpost selects a compatible configured PHP version and detects MySQL or PostgreSQL, Redis, and Mailpit from Laravel configuration. Set `services` explicitly when detection is wrong. If the list contains exactly one database service, Outpost makes it the application's instance connection and reconciles its `DB_*` values. Listing both databases keeps the application's configured default.
 
-`frontend` defaults to `build`: Outpost uses `npm ci` with a lock file, otherwise `npm install`, then runs the production build. Laravel serves the compiled `public/build` output. Outpost deliberately does not manage Vite's development server, HMR, or `npm run preview`; it is a parallel execution and review sandbox, not a replacement for the primary development environment. Set `frontend` to `none` to skip Node.
+`frontend` defaults to `build`: Outpost uses `npm ci` with a lock file, otherwise `npm install`, then runs the production build. Laravel serves the compiled `public/build` output. Outpost deliberately does not manage Vite's development server, HMR, or `npm run preview`; it is for parallel execution and review, not a replacement for the primary development environment. Set `frontend` to `none` to skip Node.
 
 Long-running Laravel processes are explicit shell-free argument lists. `@php` resolves to the selected PHP version:
 

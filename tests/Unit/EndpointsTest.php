@@ -48,7 +48,7 @@ it('describes configured same-origin review links', function () {
     ]);
 });
 
-it('describes every exposed service using sandbox credentials', function () {
+it('describes every exposed service using instance credentials', function () {
     $endpoints = $this->endpoints->all(fakeManifest(
         database: 'pgsql',
         services: ['pgsql', 'redis', 'mailpit'],

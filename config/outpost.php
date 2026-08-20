@@ -134,7 +134,7 @@ return [
     | determine which services each instance needs: your database
     | connection, Redis usage, and mail transport. Set an array such as
     | ["mysql", "redis"] to override detection. When exactly one database
-    | service is listed, it becomes the application's sandbox connection.
+    | service is listed, it becomes the application's instance connection.
     |
     */
 
