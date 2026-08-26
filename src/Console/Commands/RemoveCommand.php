@@ -10,6 +10,7 @@ use InvalidArgumentException;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Console\Concerns\FlushesDnsCaches;
+use Zacksmash\Outpost\Console\Concerns\RefusesWithoutTerminal;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Git;
@@ -30,6 +31,7 @@ use function Laravel\Prompts\warning;
 class RemoveCommand extends Command
 {
     use FlushesDnsCaches;
+    use RefusesWithoutTerminal;
     use ResolvesInstances;
 
     /**
@@ -89,8 +91,8 @@ class RemoveCommand extends Command
             : "Remove the [{$manifest->name}] instance? Its container, worktree, and data will be destroyed.";
 
         if (! $this->option('force')) {
-            if (($refused = $this->refusesWithoutTerminal($manifest->name)) !== null) {
-                return $refused;
+            if ($this->refusesWithoutTerminal('remove', $this->forcedRemedy($manifest->name))) {
+                return self::FAILURE;
             }
 
             if (! confirm($confirmation, false)) {
@@ -206,8 +208,8 @@ class RemoveCommand extends Command
         }
 
         if (! $this->option('force')) {
-            if (($refused = $this->refusesWithoutTerminal($name)) !== null) {
-                return $refused;
+            if ($this->refusesWithoutTerminal('remove', $this->forcedRemedy($name))) {
+                return self::FAILURE;
             }
 
             if (! confirm("The [{$name}] manifest is unreadable, so its container cannot be determined. Remove the instance directory anyway?", false)) {
@@ -225,6 +227,10 @@ class RemoveCommand extends Command
             error($e->getMessage());
 
             return self::FAILURE;
+        }
+
+        if ((bool) $this->option('delete-branch')) {
+            warning('The instance branch could not be determined from the unreadable manifest, so no branch was deleted.');
         }
 
         warning('If the instance still has a container, delete it manually with [container delete <name>].');
@@ -281,23 +287,21 @@ class RemoveCommand extends Command
     }
 
     /**
-     * Refuse to fall back to a declined confirmation without a terminal.
+     * Build the exact rerun command, preserving the caller's mode flags.
      *
-     * Without a terminal there is nobody to approve the removal, so the
-     * confirmation prompt would silently take its "no" default while the
-     * command still exits successfully. Consent must arrive as the
-     * explicit --force option instead.
+     * Suggesting a bare --force rerun to a --forget or --discard-changes
+     * caller would name a semantically different removal.
      */
-    protected function refusesWithoutTerminal(string $name): ?int
+    protected function forcedRemedy(string $name): string
     {
-        if ($this->input->isInteractive()) {
-            return null;
-        }
+        $flags = array_filter([
+            '--force',
+            $this->option('forget') ? '--forget' : null,
+            $this->option('discard-changes') ? '--discard-changes' : null,
+            $this->option('delete-branch') ? '--delete-branch' : null,
+        ]);
 
-        error('Refusing to remove non-interactively without --force.');
-        note("Approve the removal explicitly:\n\n  php artisan outpost:remove {$name} --force");
-
-        return self::FAILURE;
+        return "php artisan outpost:remove {$name} ".implode(' ', $flags);
     }
 
     /**
@@ -310,6 +314,12 @@ class RemoveCommand extends Command
     protected function offerBranchDeletion(Git $git, string $branch): void
     {
         $requested = (bool) $this->option('delete-branch');
+
+        // A forced removal without an explicit deletion request never
+        // touches branch state, so it cannot fail on an unhealthy repo.
+        if (! $requested && $this->option('force')) {
+            return;
+        }
 
         try {
             if (! $git->branchExists($branch)) {
@@ -324,8 +334,7 @@ class RemoveCommand extends Command
                 return;
             }
 
-            if (! $requested
-                && ($this->option('force') || ! confirm("Delete the [{$branch}] branch too?", false))) {
+            if (! $requested && ! confirm("Delete the [{$branch}] branch too?", false)) {
                 return;
             }
 

@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Sleep;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
+use Zacksmash\Outpost\Console\Concerns\RefusesWithoutTerminal;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Host;
@@ -17,12 +18,12 @@ use Zacksmash\Outpost\Outposts;
 use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\error;
 use function Laravel\Prompts\info;
-use function Laravel\Prompts\note;
 use function Laravel\Prompts\spin;
 
 #[AsCommand(name: 'outpost:recover')]
 class RecoverCommand extends Command
 {
+    use RefusesWithoutTerminal;
     use ResolvesInstances;
 
     /**
@@ -56,13 +57,7 @@ class RecoverCommand extends Command
         }
 
         if (! $this->option('force')) {
-            // Without a terminal there is nobody to approve killing host
-            // processes, so consent must arrive as the explicit option
-            // instead of the confirmation prompt's default.
-            if (! $this->input->isInteractive()) {
-                error('Refusing to recover non-interactively without --force.');
-                note("Approve the recovery explicitly:\n\n  php artisan outpost:recover {$manifest->name} --force");
-
+            if ($this->refusesWithoutTerminal('recover', "php artisan outpost:recover {$manifest->name} --force")) {
                 return self::FAILURE;
             }
 
@@ -104,7 +99,12 @@ class RecoverCommand extends Command
 
         Sleep::for(self::GRACE)->seconds();
 
-        if (($survivors = $host->execClientIds($manifest->container)) !== []) {
+        // Escalation stays scoped to the clients that received the graceful
+        // signal; a healthy client that attached during the grace window
+        // must not be killed outright.
+        $survivors = array_values(array_intersect($host->execClientIds($manifest->container), $ids));
+
+        if ($survivors !== []) {
             $host->terminateProcesses($survivors, force: true);
         }
 

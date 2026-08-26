@@ -12,6 +12,7 @@ use Illuminate\Support\Str;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Certificates;
+use Zacksmash\Outpost\Console\Concerns\AcquiresProvisioningSlots;
 use Zacksmash\Outpost\Console\Concerns\FlushesDnsCaches;
 use Zacksmash\Outpost\Console\Concerns\ResolvesPathRepositoryMounts;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
@@ -44,6 +45,7 @@ use function Laravel\Prompts\warning;
 #[AsCommand(name: 'outpost')]
 class OutpostCommand extends Command
 {
+    use AcquiresProvisioningSlots;
     use FlushesDnsCaches;
     use ResolvesPathRepositoryMounts;
 
@@ -315,9 +317,7 @@ class OutpostCommand extends Command
 
             $this->ensureInstancesIgnored();
 
-            $slot = $slots->acquire(
-                fn (int $limit) => note("Waiting for a provisioning slot. At most {$limit} instances provision at once."),
-            );
+            $slot = $this->acquireProvisioningSlot($slots);
 
             spin(
                 fn () => $runtime->boot(
@@ -351,6 +351,10 @@ class OutpostCommand extends Command
                 $runtime->releaseProcesses($container);
             }
 
+            // The descriptor-heavy work ends with provisioning; the slot
+            // must not be held through a minute of readiness polling.
+            $slot?->release();
+
             $seconds = config()->integer('outpost.timeout');
 
             if (! spin(fn () => $runtime->awaitReady($container, $seconds, $secure), 'Checking the application response')) {
@@ -361,8 +365,6 @@ class OutpostCommand extends Command
 
             $manifest = $manifest->withStatus('ready');
             $outposts->save($manifest);
-
-            $slot?->release();
 
             $this->flushDnsCacheQuietly($runtime);
         } catch (RuntimeException $e) {
@@ -434,8 +436,7 @@ class OutpostCommand extends Command
      */
     protected function mistypedSubcommand(Git $git, string $branch): bool
     {
-        return $branch !== ''
-            && array_key_exists("outpost:{$branch}", Artisan::all())
+        return array_key_exists("outpost:{$branch}", Artisan::all())
             && ! $git->branchExists($branch);
     }
 

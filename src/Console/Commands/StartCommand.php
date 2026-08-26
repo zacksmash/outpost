@@ -7,6 +7,7 @@ namespace Zacksmash\Outpost\Console\Commands;
 use Illuminate\Console\Command;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
+use Zacksmash\Outpost\Console\Concerns\AcquiresProvisioningSlots;
 use Zacksmash\Outpost\Console\Concerns\RebuildsInstanceContainers;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Console\Concerns\ResolvesPathRepositoryMounts;
@@ -35,6 +36,7 @@ use function Laravel\Prompts\spin;
 #[AsCommand(name: 'outpost:start')]
 class StartCommand extends Command
 {
+    use AcquiresProvisioningSlots;
     use RebuildsInstanceContainers;
     use ResolvesInstances;
     use ResolvesPathRepositoryMounts;
@@ -106,9 +108,7 @@ class StartCommand extends Command
                     (bool) $this->option('mount-path-repos'),
                     $manifest->pathRepositoryMounts,
                 );
-                $slot = $slots->acquire(
-                    fn (int $limit) => note("Waiting for a provisioning slot. At most {$limit} instances provision at once."),
-                );
+                $slot = $this->acquireProvisioningSlot($slots);
 
                 $manifest = $this->rebuildInstanceContainer(
                     $manifest,
@@ -136,11 +136,13 @@ class StartCommand extends Command
                 return self::SUCCESS;
             }
 
-            $slot = $slots->acquire(
-                fn (int $limit) => note("Waiting for a provisioning slot. At most {$limit} instances provision at once."),
-            );
+            $slot = $this->acquireProvisioningSlot($slots);
 
             spin(fn () => $runtime->start($manifest->container), "Starting [{$manifest->name}]");
+
+            // Booting the VM and its virtiofs shares is the descriptor-heavy
+            // part; the slot must not be held through readiness polling.
+            $slot?->release();
 
             $seconds = config()->integer('outpost.timeout');
 
@@ -156,8 +158,6 @@ class StartCommand extends Command
             if ($manifest->status !== 'ready') {
                 $outposts->save($manifest = $manifest->withStatus('ready'));
             }
-
-            $slot?->release();
 
             $this->flushDnsCacheQuietly($runtime);
         } catch (RuntimeException $e) {

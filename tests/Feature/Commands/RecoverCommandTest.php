@@ -87,7 +87,7 @@ it('forcefully kills exec clients that survive the graceful signal', function ()
     fakeRecovery([
         processPattern('pgrep', '-f', 'container exec .*[[:space:]]feature-x-app[[:space:]]') => Process::sequence()
             ->push(Process::result("123\n"))
-            ->push(Process::result("123\n")),
+            ->push(Process::result("123\n999\n")),
         processPattern('kill', '-TERM', '123') => Process::result(''),
         processPattern('kill', '-KILL', '123') => Process::result(''),
     ]);
@@ -95,7 +95,10 @@ it('forcefully kills exec clients that survive the graceful signal', function ()
     $this->artisan('outpost:recover', ['name' => 'feature-x', '--force' => true])
         ->assertSuccessful();
 
+    // Client 999 attached during the grace window and was never signaled
+    // gracefully, so escalation must stay scoped to the original clients.
     Process::assertRan(fn (PendingProcess $process) => $process->command === ['kill', '-KILL', '123']);
+    Process::assertDidntRun(fn (PendingProcess $process) => in_array('999', $process->command, true));
 });
 
 it('skips stopping when the container is not running', function () {

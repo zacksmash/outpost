@@ -124,7 +124,7 @@ Composer and npm downloads are cached once per repository beneath `.outpost/.cac
 
 Remote and pull request refs are checked out as local, editable branches, while existing local branches are always preserved and never reset. Non-interactive creation will not perform privileged first-time setup; run `outpost:install --force` first, adding `--https` when certificate trust changes are allowed.
 
-Booting and provisioning briefly holds tens of thousands of host file descriptors per instance, so at most `max_concurrent_provisions` creations, recreations, and upgrades provision at the same time — the default is 3. Later ones print `Waiting for a provisioning slot` and proceed automatically when a slot frees, so launch as many as you like at once; Outpost does the pacing. A killed or crashed provision releases its slot immediately. Set `OUTPOST_MAX_CONCURRENT_PROVISIONS=0` to remove the limit.
+Booting and provisioning briefly holds tens of thousands of host file descriptors per instance, so at most `max_concurrent_provisions` creations, recreations, upgrades, and starts boot at the same time — the default is 3. Later ones print `Waiting for a provisioning slot` and proceed automatically when a slot frees, so launch as many as you like at once; Outpost does the pacing. A killed or crashed provision releases its slot immediately. The limit is per project: provisioning several repositories in parallel multiplies the load, so lower it accordingly. Set `OUTPOST_MAX_CONCURRENT_PROVISIONS=0` to remove the limit.
 
 ## Services
 
@@ -359,7 +359,7 @@ php artisan vendor:publish --tag="outpost-config"
 | `hooks` | `setup`, `verify`, and `teardown`: `[]` | Host-owned shell-free lifecycle commands. |
 | `secrets` | `[]` | Host-owned env keys injected from the Keychain at boot, never written to the worktree. |
 | `database` | `outpost` / `outpost` / `password` | Instance credentials. |
-| `max_concurrent_provisions` | `3` | Instances allowed to boot and provision at once; later ones wait for a slot. `0` removes the limit. |
+| `max_concurrent_provisions` | `3` | Instances allowed to boot and provision at once, per project; later ones wait for a slot. `0` removes the limit. |
 | `lifecycle_timeout` | `30` | Timeout for quick VM lifecycle operations. |
 | `timeout` | `60` | Timeout for the application readiness check. |
 

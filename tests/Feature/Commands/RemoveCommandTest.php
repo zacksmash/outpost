@@ -228,6 +228,7 @@ it('skips every confirmation when forced', function () {
     expect(File::isDirectory($this->root.'/feature-x'))->toBeFalse();
 
     Process::assertDidntRun(fn (PendingProcess $process) => in_array('-D', $process->command, true));
+    Process::assertDidntRun(fn (PendingProcess $process) => in_array('--verify', $process->command, true));
 });
 
 it('refuses to remove a dirty worktree even when forced', function () {
@@ -399,6 +400,35 @@ it('refuses non-interactive removal without the explicit force option', function
     expect(File::exists($this->root.'/feature-x/outpost.json'))->toBeTrue();
 
     Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'delete');
+});
+
+it('preserves the caller mode flags in the non-interactive remedy', function () {
+    fakeRemoval();
+
+    $this->artisan('outpost:remove', [
+        'name' => 'feature-x',
+        '--forget' => true,
+        '--no-interaction' => true,
+    ])
+        ->expectsOutputToContain('php artisan outpost:remove feature-x --force --forget')
+        ->assertFailed();
+});
+
+it('warns when the branch cannot be determined from an unreadable manifest', function () {
+    File::put($this->root.'/feature-x/outpost.json', '{broken');
+
+    fakeRemoval();
+
+    $this->artisan('outpost:remove', [
+        'name' => 'feature-x',
+        '--force' => true,
+        '--delete-branch' => true,
+    ])
+        ->expectsOutputToContain('no branch was deleted')
+        ->expectsOutputToContain('Removed [feature-x].')
+        ->assertSuccessful();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => in_array('-D', $process->command, true));
 });
 
 it('removes non-interactively with the explicit force option', function () {

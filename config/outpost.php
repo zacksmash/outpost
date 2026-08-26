@@ -277,8 +277,9 @@ return [
     | Booting and provisioning an instance briefly holds tens of thousands of
     | host file descriptors, so too many at once can exhaust the kernel file
     | table and take down every instance with it. At most this many creations,
-    | recreations, and upgrades provision at the same time; the rest wait
-    | their turn and say so. Set 0 to remove the limit entirely.
+    | recreations, upgrades, and starts boot at the same time in this project;
+    | the rest wait their turn and say so. The limit is per project — lower it
+    | when provisioning several repositories in parallel. Set 0 to remove it.
     |
     */
 

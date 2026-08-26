@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Certificates;
+use Zacksmash\Outpost\Console\Concerns\AcquiresProvisioningSlots;
 use Zacksmash\Outpost\Console\Concerns\RebuildsInstanceContainers;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Console\Concerns\ResolvesPathRepositoryMounts;
@@ -39,6 +40,7 @@ use function Laravel\Prompts\spin;
 #[AsCommand(name: 'outpost:upgrade')]
 class UpgradeCommand extends Command
 {
+    use AcquiresProvisioningSlots;
     use RebuildsInstanceContainers;
     use ResolvesInstances;
     use ResolvesPathRepositoryMounts;
@@ -181,14 +183,12 @@ class UpgradeCommand extends Command
                 );
             }
 
-            // One slot covers the whole loop: this process only ever boots
-            // and provisions one container at a time.
-            $slot = $slots->acquire(
-                fn (int $limit) => note("Waiting for a provisioning slot. At most {$limit} instances provision at once."),
-            );
-
             foreach ($targets as $manifest) {
                 $state = $states[$manifest->container] ?? null;
+
+                // A slot per target rather than one across the whole loop,
+                // so waiting siblings get a turn between rebuilds.
+                $slot = $this->acquireProvisioningSlot($slots);
 
                 $this->rebuildInstanceContainer(
                     $manifest,
@@ -213,9 +213,9 @@ class UpgradeCommand extends Command
                 info($force
                     ? "Rebuilt [{$manifest->name}] from the current Outpost configuration using [{$image}]."
                     : ($state === null ? 'Recreated' : 'Upgraded')." [{$manifest->name}] to [{$image}].");
-            }
 
-            $slot?->release();
+                $slot?->release();
+            }
         } catch (RuntimeException $e) {
             error($e->getMessage());
             note('The source worktree and branch were left in place. Inspect any rebuilt container with [php artisan outpost:logs <name>].');
