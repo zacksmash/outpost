@@ -38,6 +38,7 @@ class RemoveCommand extends Command
     protected $signature = 'outpost:remove
         {name? : The name of the instance}
         {--force : Skip confirmation without bypassing worktree protection}
+        {--delete-branch : Delete the instance branch after removal without prompting}
         {--discard-changes : Remove even when the worktree has uncommitted changes}
         {--forget : Remove local state without contacting the runtime or running teardown hooks}';
 
@@ -87,10 +88,16 @@ class RemoveCommand extends Command
             ? "Forget the [{$manifest->name}] instance? Its worktree and data will be destroyed, but container [{$manifest->container}] will be left behind."
             : "Remove the [{$manifest->name}] instance? Its container, worktree, and data will be destroyed.";
 
-        if (! $this->option('force') && ! confirm($confirmation, false)) {
-            info('Nothing removed.');
+        if (! $this->option('force')) {
+            if (($refused = $this->refusesWithoutTerminal($manifest->name)) !== null) {
+                return $refused;
+            }
 
-            return self::SUCCESS;
+            if (! confirm($confirmation, false)) {
+                info('Nothing removed.');
+
+                return self::SUCCESS;
+            }
         }
 
         try {
@@ -198,11 +205,16 @@ class RemoveCommand extends Command
             return self::FAILURE;
         }
 
-        if (! $this->option('force')
-            && ! confirm("The [{$name}] manifest is unreadable, so its container cannot be determined. Remove the instance directory anyway?", false)) {
-            info('Nothing removed.');
+        if (! $this->option('force')) {
+            if (($refused = $this->refusesWithoutTerminal($name)) !== null) {
+                return $refused;
+            }
 
-            return self::SUCCESS;
+            if (! confirm("The [{$name}] manifest is unreadable, so its container cannot be determined. Remove the instance directory anyway?", false)) {
+                info('Nothing removed.');
+
+                return self::SUCCESS;
+            }
         }
 
         try {
@@ -269,15 +281,51 @@ class RemoveCommand extends Command
     }
 
     /**
-     * Offer to delete the instance's branch when it is safe to do so.
+     * Refuse to fall back to a declined confirmation without a terminal.
+     *
+     * Without a terminal there is nobody to approve the removal, so the
+     * confirmation prompt would silently take its "no" default while the
+     * command still exits successfully. Consent must arrive as the
+     * explicit --force option instead.
+     */
+    protected function refusesWithoutTerminal(string $name): ?int
+    {
+        if ($this->input->isInteractive()) {
+            return null;
+        }
+
+        error('Refusing to remove non-interactively without --force.');
+        note("Approve the removal explicitly:\n\n  php artisan outpost:remove {$name} --force");
+
+        return self::FAILURE;
+    }
+
+    /**
+     * Delete the instance's branch when requested, or offer to when it is safe.
+     *
+     * The instance is already gone by the time an explicitly requested
+     * deletion turns out to be unsafe, so that is reported as a loud
+     * warning rather than a failure.
      */
     protected function offerBranchDeletion(Git $git, string $branch): void
     {
+        $requested = (bool) $this->option('delete-branch');
+
         try {
-            if ($this->option('force')
-                || ! $git->branchExists($branch)
-                || $git->branchCheckedOut($branch)
-                || ! confirm("Delete the [{$branch}] branch too?", false)) {
+            if (! $git->branchExists($branch)) {
+                return;
+            }
+
+            if ($git->branchCheckedOut($branch)) {
+                if ($requested) {
+                    warning("The [{$branch}] branch was not deleted because it is checked out in another worktree.");
+                }
+
+                return;
+            }
+
+            if (! $requested
+                && ($this->option('force') || ! confirm("Delete the [{$branch}] branch too?", false))) {
                 return;
             }
 

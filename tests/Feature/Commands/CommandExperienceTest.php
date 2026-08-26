@@ -18,6 +18,7 @@ it('exposes concise action-oriented descriptions for every public command', func
         'outpost:open' => 'Open an instance endpoint in the default browser',
         'outpost:process' => "Inspect or restart an instance's application processes",
         'outpost:pull' => 'Pull the configured Outpost image',
+        'outpost:recover' => 'Recover one wedged instance by killing its stale exec clients and restarting it',
         'outpost:remove' => 'Remove an instance and its container, worktree, and data',
         'outpost:shell' => 'Open an interactive shell inside an instance',
         'outpost:start' => 'Start an instance or recreate its missing container',
@@ -57,5 +58,7 @@ it('explains machine output and destructive options precisely', function () {
         ->and($commands['outpost:remove']->getDefinition()->getOption('discard-changes')->getDescription())
         ->toBe('Remove even when the worktree has uncommitted changes')
         ->and($commands['outpost:remove']->getDefinition()->getOption('forget')->getDescription())
-        ->toBe('Remove local state without contacting the runtime or running teardown hooks');
+        ->toBe('Remove local state without contacting the runtime or running teardown hooks')
+        ->and($commands['outpost:exec']->getDefinition()->getOption('timeout')->getDescription())
+        ->toBe('Kill the command after this many seconds and exit with code 124');
 });

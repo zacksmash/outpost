@@ -22,6 +22,7 @@ use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\PathRepositories;
 use Zacksmash\Outpost\Processes;
 use Zacksmash\Outpost\Provisioner;
+use Zacksmash\Outpost\ProvisioningSlots;
 use Zacksmash\Outpost\Secrets;
 use Zacksmash\Outpost\Supervisord;
 
@@ -68,6 +69,7 @@ class StartCommand extends Command
         Supervisord $supervisord,
         LifecycleHooks $hooks,
         LegacyRedisDump $legacyRedisDump,
+        ProvisioningSlots $slots,
     ): int {
         if (($manifest = $this->instance($outposts)) === null) {
             return self::FAILURE;
@@ -104,6 +106,10 @@ class StartCommand extends Command
                     (bool) $this->option('mount-path-repos'),
                     $manifest->pathRepositoryMounts,
                 );
+                $slot = $slots->acquire(
+                    fn (int $limit) => note("Waiting for a provisioning slot. At most {$limit} instances provision at once."),
+                );
+
                 $manifest = $this->rebuildInstanceContainer(
                     $manifest,
                     $outposts,
@@ -123,10 +129,16 @@ class StartCommand extends Command
                     null,
                 );
 
+                $slot?->release();
+
                 outro("Recreated [{$manifest->name}]: {$manifest->url}");
 
                 return self::SUCCESS;
             }
+
+            $slot = $slots->acquire(
+                fn (int $limit) => note("Waiting for a provisioning slot. At most {$limit} instances provision at once."),
+            );
 
             spin(fn () => $runtime->start($manifest->container), "Starting [{$manifest->name}]");
 
@@ -144,6 +156,8 @@ class StartCommand extends Command
             if ($manifest->status !== 'ready') {
                 $outposts->save($manifest = $manifest->withStatus('ready'));
             }
+
+            $slot?->release();
 
             $this->flushDnsCacheQuietly($runtime);
         } catch (RuntimeException $e) {

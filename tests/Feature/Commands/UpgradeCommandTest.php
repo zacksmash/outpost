@@ -6,9 +6,11 @@ use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\PathRepositories;
+use Zacksmash\Outpost\ProvisioningSlots;
 use Zacksmash\Outpost\Runtime;
 
 beforeEach(function () {
@@ -629,4 +631,21 @@ it('requires either one name or the all option, but not both', function () {
         ->assertFailed();
 
     Process::assertNothingRan();
+});
+
+it('waits for a provisioning slot before rebuilding', function () {
+    config(['outpost.max_concurrent_provisions' => 1]);
+
+    Sleep::fake();
+
+    $held = app(ProvisioningSlots::class)->acquire();
+
+    Sleep::whenFakingSleep(fn () => $held->release());
+
+    fakeUpgradeProcesses($this->root, $this->currentDigest);
+
+    $this->artisan('outpost:upgrade', ['name' => 'feature-x'])
+        ->expectsOutputToContain('Waiting for a provisioning slot')
+        ->expectsOutputToContain('Upgraded [feature-x]')
+        ->assertSuccessful();
 });

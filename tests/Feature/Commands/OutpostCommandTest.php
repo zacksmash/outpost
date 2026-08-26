@@ -15,6 +15,7 @@ use Symfony\Component\Console\Question\Question;
 use Zacksmash\Outpost\Doctor;
 use Zacksmash\Outpost\DoctorCheck;
 use Zacksmash\Outpost\Outposts;
+use Zacksmash\Outpost\ProvisioningSlots;
 
 beforeEach(function () {
     Process::preventStrayProcesses();
@@ -940,4 +941,46 @@ it('rejects a branch-derived name that already exists under --no-interaction', f
 
     expect($exit)->toBe(1)
         ->and(Artisan::output())->toContain('already exists');
+});
+
+it('waits for a provisioning slot when all are in use', function () {
+    config(['outpost.max_concurrent_provisions' => 1]);
+
+    Sleep::fake();
+
+    $held = app(ProvisioningSlots::class)->acquire();
+
+    Sleep::whenFakingSleep(fn () => $held->release());
+
+    fakeCreation();
+
+    $this->artisan('outpost', ['branch' => 'feature-x', '--name' => 'feature-x'])
+        ->expectsOutputToContain('Waiting for a provisioning slot')
+        ->expectsOutputToContain('Created [feature-x]')
+        ->assertSuccessful();
+});
+
+it('refuses a branch argument that matches an outpost subcommand', function () {
+    fakeCreation([
+        processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/list') => Process::result('', '', 1),
+    ]);
+
+    $this->artisan('outpost', ['branch' => 'list', '--no-interaction' => true])
+        ->expectsOutputToContain('php artisan outpost:list')
+        ->assertFailed();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'worktree' && ($process->command[2] ?? null) === 'add');
+});
+
+it('creates an instance from an existing branch named like a subcommand', function () {
+    File::ensureDirectoryExists($this->root.'/list/app');
+    File::put($this->root.'/list/app/.env.example', "APP_NAME=Example\nDB_CONNECTION=sqlite\n");
+
+    fakeCreation([
+        processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/list') => Process::result('abc123'),
+    ]);
+
+    $this->artisan('outpost', ['branch' => 'list', '--name' => 'list'])
+        ->expectsOutputToContain('Created [list]')
+        ->assertSuccessful();
 });

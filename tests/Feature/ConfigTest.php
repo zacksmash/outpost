@@ -26,7 +26,20 @@ it('exposes sensible defaults', function () {
         ])
         ->and(config('outpost.secrets'))->toBe([])
         ->and(config('outpost.lifecycle_timeout'))->toBe(30)
-        ->and(config('outpost.timeout'))->toBe(60);
+        ->and(config('outpost.timeout'))->toBe(60)
+        ->and(config('outpost.max_concurrent_provisions'))->toBe(3);
+});
+
+it('casts the provisioning concurrency limit to an integer even from the environment', function () {
+    putenv('OUTPOST_MAX_CONCURRENT_PROVISIONS=5');
+
+    try {
+        $config = require dirname(__DIR__, 2).'/config/outpost.php';
+
+        expect($config['max_concurrent_provisions'])->toBe(5);
+    } finally {
+        putenv('OUTPOST_MAX_CONCURRENT_PROVISIONS');
+    }
 });
 
 it('casts instance resource values from the environment', function () {

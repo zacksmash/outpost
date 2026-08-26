@@ -26,6 +26,7 @@ use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\PathRepositories;
 use Zacksmash\Outpost\Processes;
 use Zacksmash\Outpost\Provisioner;
+use Zacksmash\Outpost\ProvisioningSlots;
 use Zacksmash\Outpost\Secrets;
 use Zacksmash\Outpost\Supervisord;
 
@@ -76,6 +77,7 @@ class UpgradeCommand extends Command
         Supervisord $supervisord,
         LifecycleHooks $hooks,
         LegacyRedisDump $legacyRedisDump,
+        ProvisioningSlots $slots,
     ): int {
         if ($this->option('all') && is_string($this->argument('name')) && $this->argument('name') !== '') {
             error('Choose an instance name or --all, not both.');
@@ -179,6 +181,12 @@ class UpgradeCommand extends Command
                 );
             }
 
+            // One slot covers the whole loop: this process only ever boots
+            // and provisions one container at a time.
+            $slot = $slots->acquire(
+                fn (int $limit) => note("Waiting for a provisioning slot. At most {$limit} instances provision at once."),
+            );
+
             foreach ($targets as $manifest) {
                 $state = $states[$manifest->container] ?? null;
 
@@ -206,6 +214,8 @@ class UpgradeCommand extends Command
                     ? "Rebuilt [{$manifest->name}] from the current Outpost configuration using [{$image}]."
                     : ($state === null ? 'Recreated' : 'Upgraded')." [{$manifest->name}] to [{$image}].");
             }
+
+            $slot?->release();
         } catch (RuntimeException $e) {
             error($e->getMessage());
             note('The source worktree and branch were left in place. Inspect any rebuilt container with [php artisan outpost:logs <name>].');

@@ -106,7 +106,7 @@ php artisan outpost origin/review/invoices --name=invoices --open
 php artisan outpost --pr=482 --name=pr-482 --open
 ```
 
-A supplied `--name` is normalized to a URL-friendly slug rather than rejected, so `--name=feature/billing` creates `feature-billing`; Outpost reports the substitution whenever normalization changes what you typed. A branch too long to fit the container's DNS label limit is truncated to a whole-word boundary and given a short, deterministic hash suffix, so the same branch always derives the same name. The instance URL is `https://<name>-<project-directory>.<domain>`, so the container is scoped to the project that created it and identical instance names in different projects never collide. The container name and URL are recorded in the manifest at creation time and are never rewritten, even if the project directory is later renamed.
+A supplied `--name` is normalized to a URL-friendly slug rather than rejected, so `--name=feature/billing` creates `feature-billing`; Outpost reports the substitution whenever normalization changes what you typed. A branch argument that matches an `outpost:*` subcommand — `php artisan outpost list` instead of `php artisan outpost:list` — is refused with the intended command, unless a local branch by that name actually exists. A branch too long to fit the container's DNS label limit is truncated to a whole-word boundary and given a short, deterministic hash suffix, so the same branch always derives the same name. The instance URL is `https://<name>-<project-directory>.<domain>`, so the container is scoped to the project that created it and identical instance names in different projects never collide. The container name and URL are recorded in the manifest at creation time and are never rewritten, even if the project directory is later renamed.
 
 Outpost creates a Git worktree beneath `.outpost/<name>/app`, detects your application's runtime and services, boots the VM, prepares `.env` from `.env.example`, installs your dependencies, builds the front end, migrates the database, and waits for a real application response.
 
@@ -123,6 +123,8 @@ Composer and npm downloads are cached once per repository beneath `.outpost/.cac
 | `--mount-path-repos` | Mount Composer path repositories without prompting. |
 
 Remote and pull request refs are checked out as local, editable branches, while existing local branches are always preserved and never reset. Non-interactive creation will not perform privileged first-time setup; run `outpost:install --force` first, adding `--https` when certificate trust changes are allowed.
+
+Booting and provisioning briefly holds tens of thousands of host file descriptors per instance, so at most `max_concurrent_provisions` creations, recreations, and upgrades provision at the same time — the default is 3. Later ones print `Waiting for a provisioning slot` and proceed automatically when a slot frees, so launch as many as you like at once; Outpost does the pacing. A killed or crashed provision releases its slot immediately. Set `OUTPOST_MAX_CONCURRENT_PROVISIONS=0` to remove the limit.
 
 ## Services
 
@@ -249,7 +251,7 @@ Arguments in angle brackets are required. Arguments in square brackets are optio
 | `outpost:build` | `--force` | Build the configured base image on this Mac. Use `--force` to replace an existing image.<br>`php artisan outpost:build --force` |
 | `outpost:certify` | `--force` | Prepare trusted HTTPS certificates. Use `--force` to recreate them.<br>`php artisan outpost:certify` |
 | `outpost:doctor` | `--json` | Check the host, runtime, image, project, HTTPS, and declared secrets.<br>`php artisan outpost:doctor --json` |
-| `outpost:exec [name] -- <command> [arguments...]` | `name` selects the instance.<br>`--root` runs as root. | Run a command without a shell and return its exit code.<br>`php artisan outpost:exec billing -- php artisan test` |
+| `outpost:exec [name] -- <command> [arguments...]` | `name` selects the instance.<br>`--root` runs as root.<br>`--timeout` kills the command after that many seconds. | Run a command without a shell and return its exit code. An expired `--timeout` exits with code `124`.<br>`php artisan outpost:exec billing -- php artisan test` |
 | `outpost:info [name]` | `--json` | Show an instance's branch, state, image, endpoints, credentials, and configured processes.<br>`php artisan outpost:info billing --json` |
 | `outpost:install` | `--force`<br>`--https`<br>`--local` | Configure the runtime, DNS, image, and optional HTTPS for this project. `--local` builds a missing image instead of pulling it.<br>`php artisan outpost:install --https` |
 | `outpost:list` | `--json` | List this project's instances and their current state.<br>`php artisan outpost:list` |
@@ -257,7 +259,8 @@ Arguments in angle brackets are required. Arguments in square brackets are optio
 | `outpost:open [name] [endpoint]` | `endpoint` defaults to `app`. Use `mailpit` or a configured preview name for another endpoint. | Start the instance if needed, then open its endpoint in the default browser.<br>`php artisan outpost:open billing posts` |
 | `outpost:process [name] [process]` | `--restart`<br>`--json` | Inspect every configured application process, inspect one process, or restart one process.<br>`php artisan outpost:process billing queue --restart` |
 | `outpost:pull` | `--force` | Pull the configured base image. Use `--force` when it already exists locally.<br>`php artisan outpost:pull --force` |
-| `outpost:remove [name]` | `--force`<br>`--discard-changes`<br>`--forget` | Remove the container, worktree, and local data. `--discard-changes` permits deletion of a dirty worktree. `--forget` skips runtime access and teardown hooks.<br>`php artisan outpost:remove billing` |
+| `outpost:recover [name]` | `--force` | Recover one wedged instance without touching its siblings: kill the host `container exec` clients attached to it, stop its container, and start it again. Non-interactive recovery requires the explicit `--force`.<br>`php artisan outpost:recover billing --force` |
+| `outpost:remove [name]` | `--force`<br>`--delete-branch`<br>`--discard-changes`<br>`--forget` | Remove the container, worktree, and local data. Non-interactive removal requires the explicit `--force`. `--delete-branch` also deletes the instance branch. `--discard-changes` permits deletion of a dirty worktree. `--forget` skips runtime access and teardown hooks.<br>`php artisan outpost:remove billing` |
 | `outpost:secret <action> [key]` | `action` is `set`, `list`, or `forget`.<br>`key` is required by `set` and `forget`. | Store project-scoped values in the macOS Keychain, check which declared values exist, or remove one.<br>`php artisan outpost:secret set STRIPE_SECRET` |
 | `outpost:shell [name]` | `--root` | Open an interactive shell as the application user or root.<br>`php artisan outpost:shell billing` |
 | `outpost:start [name]` | `--mount-path-repos` | Start a stopped instance. If its container is missing, rebuild it from the existing clean worktree.<br>`php artisan outpost:start billing` |
@@ -266,6 +269,8 @@ Arguments in angle brackets are required. Arguments in square brackets are optio
 | `outpost:verify [name]` | `--json` | Run the handoff checks, configured verification hooks, and project checks.<br>`php artisan outpost:verify billing --json` |
 
 The `outpost:exec` command passes every token after `--` directly to the command. It does not invoke a shell. It streams output and returns the command's exit code. Both `outpost:exec` and `outpost:shell` run as a host-ID-mapped, non-root user. Use `--root` only when the command needs it.
+
+There is no timeout by default — a cold `composer install` legitimately outlasts any cap Outpost could pick. Scripts and agents that must fail fast can pass `--timeout=<seconds>`: an expired timeout exits with code `124`, distinct from the inner command's own failure codes. The timeout kills the host exec client; the command may keep running inside the instance, so the failure message points to `outpost:recover` if the instance then wedges.
 
 The `doctor`, `list`, `info`, `process`, and `verify` commands support stable `--json` output. Instance-specific JSON commands require an explicit name, never prompt, and return a top-level `error` with an unsuccessful exit code when a report cannot be produced.
 
@@ -314,11 +319,13 @@ git -C .outpost/billing/app status --short
 git -C .outpost/billing/app commit -am "Finish billing"
 ```
 
-Removal refuses a dirty worktree, even with `--force`, before running a `teardown` hook. Preserve the work or destroy it with `--discard-changes`. Files written by a successful teardown do not trigger another refusal or rerun the hooks on retry. `--force` skips prompts and retains the branch. To recreate an instance from another base, remove it, then delete or rename the retained branch yourself.
+Removal refuses a dirty worktree, even with `--force`, before running a `teardown` hook. Preserve the work or destroy it with `--discard-changes`. Files written by a successful teardown do not trigger another refusal or rerun the hooks on retry. `--force` skips prompts and retains the branch; add `--delete-branch` to delete the branch too. Without a terminal — including `--no-interaction` — removal refuses without an explicit `--force` and exits non-zero instead of silently declining, so scripts and agents never mistake a declined prompt for success. To recreate an instance from another base, remove it with `--delete-branch`, or delete or rename the retained branch yourself.
 
 If the manifest and worktree survive but Apple container no longer has the container, run `outpost:start` or `outpost:upgrade`. Both recreate the container automatically, refuse dirty worktrees, preserve the worktree and application key, remount approved path repositories, and refresh Composer dependencies, front-end builds, and migrations. The missing container's writable service data is already gone and cannot be recovered; SQLite data inside the worktree survives.
 
-If an Apple container VM is stuck, `outpost:remove <name> --forget` removes only Outpost's local worktree and manifest, reports the orphaned container, and prints the command to clean it up later.
+If one instance wedges — typically a stale exec session that blocks `outpost:stop` and `outpost:exec` — run `outpost:recover <name>`. It kills the host `container exec` clients attached to that container, stops it, and starts it again, never touching other instances. Prefer it over `container system stop && container system start`, which restarts the whole runtime and takes down every sibling instance with it.
+
+If an Apple container VM is stuck beyond recovery, `outpost:remove <name> --forget` removes only Outpost's local worktree and manifest, reports the orphaned container, and prints the command to clean it up later.
 
 Outpost offers Composer path repositories outside the worktree as read-only mounts and defaults to no. It records approved mounts in the instance manifest and reuses them for upgrades and missing-container recovery. A new repository still requires confirmation or `--mount-path-repos`. Approved relative repositories also get an ignored host bridge so Composer symlinks resolve in the container and in host tools. The bridge is a host symlink and cannot enforce read-only access. Do not edit the external package through it unless that source was assigned to you.
 
@@ -352,6 +359,7 @@ php artisan vendor:publish --tag="outpost-config"
 | `hooks` | `setup`, `verify`, and `teardown`: `[]` | Host-owned shell-free lifecycle commands. |
 | `secrets` | `[]` | Host-owned env keys injected from the Keychain at boot, never written to the worktree. |
 | `database` | `outpost` / `outpost` / `password` | Instance credentials. |
+| `max_concurrent_provisions` | `3` | Instances allowed to boot and provision at once; later ones wait for a slot. `0` removes the limit. |
 | `lifecycle_timeout` | `30` | Timeout for quick VM lifecycle operations. |
 | `timeout` | `60` | Timeout for the application readiness check. |
 

@@ -6,6 +6,7 @@ namespace Zacksmash\Outpost\Console\Commands;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -27,6 +28,7 @@ use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\PathRepositories;
 use Zacksmash\Outpost\Processes;
 use Zacksmash\Outpost\Provisioner;
+use Zacksmash\Outpost\ProvisioningSlots;
 use Zacksmash\Outpost\Secrets;
 use Zacksmash\Outpost\Supervisord;
 
@@ -82,6 +84,7 @@ class OutpostCommand extends Command
         LifecycleHooks $hooks,
         Nginx $nginx,
         Supervisord $supervisord,
+        ProvisioningSlots $slots,
     ): int {
         $domain = config()->string('outpost.domain');
         $image = config()->string('outpost.image');
@@ -119,6 +122,13 @@ class OutpostCommand extends Command
 
             if (! $git->hasCommits()) {
                 error('Outpost needs a Git repository with at least one commit to create instances from.');
+
+                return self::FAILURE;
+            }
+
+            if (is_string($argument) && $this->mistypedSubcommand($git, $argument)) {
+                error("The [{$argument}] branch looks like the [outpost:{$argument}] command. Did you mean [php artisan outpost:{$argument}]?");
+                note("To really create an instance from a new [{$argument}] branch, create the branch first:\n\n  git branch {$argument}");
 
                 return self::FAILURE;
             }
@@ -305,6 +315,10 @@ class OutpostCommand extends Command
 
             $this->ensureInstancesIgnored();
 
+            $slot = $slots->acquire(
+                fn (int $limit) => note("Waiting for a provisioning slot. At most {$limit} instances provision at once."),
+            );
+
             spin(
                 fn () => $runtime->boot(
                     $container,
@@ -347,6 +361,8 @@ class OutpostCommand extends Command
 
             $manifest = $manifest->withStatus('ready');
             $outposts->save($manifest);
+
+            $slot?->release();
 
             $this->flushDnsCacheQuietly($runtime);
         } catch (RuntimeException $e) {
@@ -405,6 +421,22 @@ class OutpostCommand extends Command
             required: true,
             hint: 'Pick a local or remote branch, or type a new local branch name.',
         );
+    }
+
+    /**
+     * Determine whether a supplied branch is likely a mistyped subcommand.
+     *
+     * [php artisan outpost list] parses [list] as this command's branch
+     * argument and would happily create an instance named [list]. A branch
+     * matching a registered outpost:* subcommand is refused unless a local
+     * branch by that name actually exists, so the guard never blocks
+     * legitimate use.
+     */
+    protected function mistypedSubcommand(Git $git, string $branch): bool
+    {
+        return $branch !== ''
+            && array_key_exists("outpost:{$branch}", Artisan::all())
+            && ! $git->branchExists($branch);
     }
 
     /**

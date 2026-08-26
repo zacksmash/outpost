@@ -389,6 +389,84 @@ it('refuses removal with a remedy when the worktree cannot be inspected', functi
     Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'delete');
 });
 
+it('refuses non-interactive removal without the explicit force option', function () {
+    fakeRemoval();
+
+    $this->artisan('outpost:remove', ['name' => 'feature-x', '--no-interaction' => true])
+        ->expectsOutputToContain('Refusing to remove non-interactively without --force.')
+        ->assertFailed();
+
+    expect(File::exists($this->root.'/feature-x/outpost.json'))->toBeTrue();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => ($process->command[1] ?? null) === 'delete');
+});
+
+it('removes non-interactively with the explicit force option', function () {
+    File::ensureDirectoryExists($this->root.'/feature-x/app');
+
+    fakeRemoval();
+
+    $this->artisan('outpost:remove', [
+        'name' => 'feature-x',
+        '--force' => true,
+        '--no-interaction' => true,
+    ])
+        ->expectsOutputToContain('Removed [feature-x].')
+        ->assertSuccessful();
+
+    expect(File::isDirectory($this->root.'/feature-x'))->toBeFalse();
+});
+
+it('refuses non-interactive removal of a broken instance without the explicit force option', function () {
+    File::put($this->root.'/feature-x/outpost.json', '{broken');
+
+    fakeRemoval();
+
+    $this->artisan('outpost:remove', ['name' => 'feature-x', '--no-interaction' => true])
+        ->expectsOutputToContain('Refusing to remove non-interactively without --force.')
+        ->assertFailed();
+
+    expect(File::exists($this->root.'/feature-x/outpost.json'))->toBeTrue();
+});
+
+it('deletes the branch without prompting when explicitly requested', function () {
+    fakeRemoval([
+        processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/feature/billing') => Process::result('abc123'),
+        processPattern('git', 'worktree', 'list', '--porcelain') => Process::result("worktree /projects/app\nbranch refs/heads/main\n"),
+        processPattern('git', 'branch', '-D', '--', 'feature/billing') => Process::result(''),
+    ]);
+
+    $this->artisan('outpost:remove', [
+        'name' => 'feature-x',
+        '--force' => true,
+        '--delete-branch' => true,
+        '--no-interaction' => true,
+    ])
+        ->expectsOutputToContain('Deleted the [feature/billing] branch.')
+        ->assertSuccessful();
+
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'git', 'branch', '-D', '--', 'feature/billing',
+    ]);
+});
+
+it('warns instead of failing when the requested branch is checked out elsewhere', function () {
+    fakeRemoval([
+        processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/feature/billing') => Process::result('abc123'),
+        processPattern('git', 'worktree', 'list', '--porcelain') => Process::result("worktree /projects/app\nbranch refs/heads/feature/billing\n"),
+    ]);
+
+    $this->artisan('outpost:remove', [
+        'name' => 'feature-x',
+        '--force' => true,
+        '--delete-branch' => true,
+    ])
+        ->expectsOutputToContain('was not deleted because it is checked out')
+        ->assertSuccessful();
+
+    Process::assertDidntRun(fn (PendingProcess $process) => in_array('-D', $process->command, true));
+});
+
 it('offers to delete the branch when it is safe', function () {
     fakeRemoval([
         processPattern('git', 'rev-parse', '--verify', '--quiet', 'refs/heads/feature/billing') => Process::result('abc123'),

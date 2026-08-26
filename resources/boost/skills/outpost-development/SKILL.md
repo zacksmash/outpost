@@ -58,24 +58,27 @@ php artisan outpost:process billing queue --restart
 php artisan outpost:verify billing --json
 php artisan outpost:shell billing
 php artisan outpost:logs billing --follow
+php artisan outpost:recover billing --force
 php artisan outpost:remove billing
 php artisan outpost:secret set STRIPE_SECRET
 php artisan outpost:secret list
 php artisan outpost:secret forget STRIPE_SECRET
 ```
 
-- `outpost` accepts local, remote, new, or GitHub pull-request branches and creates an editable worktree under `.outpost/<name>/app`.
+- `outpost` accepts local, remote, new, or GitHub pull-request branches and creates an editable worktree under `.outpost/<name>/app`. Subcommands always use the colon form (`outpost:list`, not `outpost list`); a branch argument matching an `outpost:*` subcommand is refused with the intended command unless a local branch by that name exists.
 - New and rebuilt instances reuse repository-local Composer and npm download caches under `.outpost/.cache`; `vendor` and `node_modules` remain private to each worktree.
+- At most `outpost.max_concurrent_provisions` instances (default 3) boot and provision at once, machine-wide per project. Launch as many creations, recreations, or upgrades as you like in parallel: extra runs print `Waiting for a provisioning slot` and proceed automatically when one frees, so never add your own pacing, retries, or timeouts around a waiting run. A killed provision releases its slot immediately.
 - Other creation options are `--name`, `--open`, `--seed`, `--remote`, and `--mount-path-repos`.
 - Commands with an omitted instance name prompt interactively; the instance-name prompt pre-fills a name derived from the branch (`feature/billing` becomes `feature-billing`) that you may accept or replace. A branch too long for the container's DNS label limit is truncated to a whole-word boundary and given a short, deterministic hash suffix.
 - A supplied `--name` is normalized to a URL-friendly slug rather than rejected, so a branch-shaped value like `--name=feature/billing` creates `feature-billing`; pass an explicit `--name` with `--no-interaction` to avoid a run that fails if the branch-derived name is already taken. The instance URL is `https://<name>-<project-directory>.<domain>`, scoping the container to the project that created it so identical instance names in different projects never collide.
-- `outpost:exec` passes tokens without a shell, streams output, preserves the inner exit code, and runs as the host-ID-mapped non-root user. Use `--root` only for intentional elevation.
+- `outpost:exec` passes tokens without a shell, streams output, preserves the inner exit code, and runs as the host-ID-mapped non-root user. Use `--root` only for intentional elevation. There is no timeout by default; pass `--timeout=<seconds>` to fail fast on commands that may hang. Exit code `124` means the timeout expired — the command may still be running inside the instance, and `outpost:recover <name> --force` is the remedy if the instance then wedges. Do not use `--timeout` around dependency installs or builds, which legitimately run long.
 - `outpost:doctor`, `outpost:list`, `outpost:info`, `outpost:process`, and `outpost:verify` expose stable `--json` reports. Instance-specific JSON commands require an explicit name and never prompt. Pre-report failures return a top-level `error` and an unsuccessful exit code. Missing containers and failed provisioning report degraded state.
 - Repository-configured `outpost.previews` entries resolve same-origin review paths and optional notes for every instance. Open one with `outpost:open <name> <preview>` or read it from `endpoints.<preview>` in info JSON. Invalid custom entries are omitted from discovery; requesting one explicitly reports its configuration error.
 - Outpost serves every instance through its private nginx and PHP-FPM runtime. The **App Processes** column and `outpost:process <name> --json` report only user-configured supervised commands. Add a process name and `--restart` to restart one after long-lived PHP code changes. `outpost:info --json` also exposes the keyed `process_states` map; `unavailable` means the container is stopped or missing, `waiting` means provisioning is incomplete, and `unknown` isolates a failed live-state probe. Table info does not probe Supervisor.
 - `outpost:verify --json` is the stable handoff report. It runs host-owned `verify` hooks, checks runtime, container, image, final Git state, a fresh production asset build when `package.json` defines a `build` script, configured project checks, and the application response. API-only apps skip asset building. Dirty worktrees warn without failing; a skipped `Configured checks` row means no project-specific test or lint command ran.
 - `outpost:secret set|list|forget` manages host-owned secrets. Declare which environment keys are secret in `outpost.secrets`; store each value with `outpost:secret set <KEY>` (a hidden prompt, never an argument). Values live in the macOS Keychain scoped to the project, are injected into the instance at boot through a host-only file, and are never written to the worktree `.env`. Creating or recreating an instance fails with the exact `outpost:secret set` remedy when a declared key has no stored value, and `outpost:doctor` reports the same gap. `list` and every error reveal only whether a value is present, never the value.
-- `outpost:remove` refuses dirty worktrees even with `--force` before running `teardown` hooks. Successful hook file writes do not cause a second refusal. `--discard-changes` explicitly destroys uncommitted work. Teardown runs only for ready, running instances; `--forget` bypasses hook parsing and execution and reports the orphaned container.
+- `outpost:recover` fixes one wedged instance — typically a stale exec session that blocks `outpost:stop` or `outpost:exec` — by killing the host `container exec` clients attached to its container, stopping it, and starting it again. It never touches sibling instances; never run `container system stop`/`container system start` to fix a single instance, because a runtime restart destroys every sibling's running state. Non-interactive recovery requires the explicit `--force`.
+- `outpost:remove` refuses dirty worktrees even with `--force` before running `teardown` hooks. Successful hook file writes do not cause a second refusal. `--discard-changes` explicitly destroys uncommitted work. Teardown runs only for ready, running instances; `--forget` bypasses hook parsing and execution and reports the orphaned container. Non-interactive removal — including any `--no-interaction` run — requires the explicit `--force` and otherwise fails loudly instead of silently declining, so always pass `--force` when scripting removal. Add `--delete-branch` to delete the instance branch too; an undeletable branch is reported as a warning while the removal still succeeds.
 
 ### 3. Upgrade and recover
 
@@ -187,10 +190,11 @@ Composer path repositories outside the worktree are offered as default-no read-o
 - Open the repository's named review screen: `php artisan outpost:open <name> posts`.
 - Restart a stale queue worker: `php artisan outpost:process <name> queue --restart`, then confirm its reported state is `running`.
 - Recover a missing container: inspect worktree status, then run `php artisan outpost:start <name>`.
+- Recover a wedged instance whose stop or exec hangs: `php artisan outpost:recover <name> --force`.
 - Upgrade an outdated instance: inspect worktree status, then run `php artisan outpost:upgrade <name>`.
 - Apply changed Outpost configuration: inspect worktree status, then run `php artisan outpost:upgrade <name> --force`.
 - Verify an agent handoff: run `php artisan outpost:verify <name> --json`, inspect every `FAIL`, and do not claim project tests ran when `Configured checks` is `SKIP`.
-- Recreate from another base: remove the instance, then explicitly delete or rename the retained branch before creating it from the new reference.
+- Recreate from another base: remove the instance with `--delete-branch`, or explicitly delete or rename the retained branch before creating it from the new reference.
 
 ## Anti-patterns
 

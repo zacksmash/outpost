@@ -587,11 +587,16 @@ class Runtime implements RuntimeDriver
     /**
      * Stream a non-interactive command inside the given container.
      *
+     * Without a timeout the command may run forever: provisioning steps
+     * like a cold composer or npm install legitimately outlast any cap
+     * Outpost could pick for them. A timeout kills only the host exec
+     * client; the in-container process may keep running.
+     *
      * @param  list<string>  $command
      */
-    public function run(string $container, array $command, ?callable $output = null, bool $root = false): int
+    public function run(string $container, array $command, ?callable $output = null, bool $root = false, ?int $timeout = null): int
     {
-        return Process::forever()
+        return ($timeout === null ? Process::forever() : Process::timeout($timeout))
             ->run($this->execCommand($container, $command, $root), $output)
             ->exitCode() ?? 1;
     }

@@ -100,7 +100,7 @@ interface RuntimeDriver
     /**
      * @param  list<string>  $command
      */
-    public function run(string $container, array $command, ?callable $output = null, bool $root = false): int;
+    public function run(string $container, array $command, ?callable $output = null, bool $root = false, ?int $timeout = null): int;
 
     /**
      * @return array<string, string>
