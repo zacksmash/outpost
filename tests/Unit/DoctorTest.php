@@ -329,3 +329,81 @@ it('omits the secrets check when no secrets are declared', function () {
 
     expect($checks->has(Doctor::SECRETS_CHECK))->toBeFalse();
 });
+
+it('omits the setup hooks check when neither playwright nor passport is used', function () {
+    fakeHealthyDoctor();
+
+    $checks = collect($this->doctor->inspect())->keyBy('name');
+
+    expect($checks->has('Setup hooks'))->toBeFalse();
+});
+
+it('warns when playwright is used without a browser setup hook', function () {
+    File::put($this->root.'/package.json', json_encode([
+        'devDependencies' => ['@playwright/test' => '^1.49'],
+    ], JSON_THROW_ON_ERROR));
+
+    fakeHealthyDoctor();
+
+    $checks = collect($this->doctor->inspect())->keyBy('name');
+
+    expect($checks['Setup hooks']->status)->toBe(DoctorCheck::WARNING)
+        ->and($checks['Setup hooks']->detail)->toContain('Playwright')
+        ->and($checks['Setup hooks']->remedy)->toContain("'browsers' => ['npx', 'playwright', 'install', 'chromium']");
+});
+
+it('warns when passport is used without a keys setup hook', function () {
+    File::put($this->root.'/composer.json', json_encode([
+        'require' => ['laravel/passport' => '^13.0'],
+    ], JSON_THROW_ON_ERROR));
+
+    fakeHealthyDoctor();
+
+    $checks = collect($this->doctor->inspect())->keyBy('name');
+
+    expect($checks['Setup hooks']->status)->toBe(DoctorCheck::WARNING)
+        ->and($checks['Setup hooks']->detail)->toContain('Passport')
+        ->and($checks['Setup hooks']->remedy)->toContain("'passport' => ['@php', 'artisan', 'passport:keys', '--force']");
+});
+
+it('warns only about the detected tool that lacks a setup hook', function () {
+    File::put($this->root.'/package.json', json_encode([
+        'devDependencies' => ['@playwright/test' => '^1.49'],
+    ], JSON_THROW_ON_ERROR));
+    File::put($this->root.'/composer.json', json_encode([
+        'require' => ['laravel/passport' => '^13.0'],
+    ], JSON_THROW_ON_ERROR));
+    config(['outpost.hooks.setup' => [
+        'browsers' => ['npx', 'playwright', 'install', 'chromium'],
+    ]]);
+
+    fakeHealthyDoctor();
+
+    $checks = collect($this->doctor->inspect())->keyBy('name');
+
+    expect($checks['Setup hooks']->status)->toBe(DoctorCheck::WARNING)
+        ->and($checks['Setup hooks']->detail)->toContain('Passport')
+        ->and($checks['Setup hooks']->detail)->not->toContain('Playwright')
+        ->and($checks['Setup hooks']->remedy)->not->toContain('chromium');
+});
+
+it('passes the setup hooks check when hooks cover the detected tools', function () {
+    File::put($this->root.'/package.json', json_encode([
+        'devDependencies' => ['@playwright/test' => '^1.49'],
+    ], JSON_THROW_ON_ERROR));
+    File::put($this->root.'/composer.json', json_encode([
+        'require' => ['laravel/passport' => '^13.0'],
+    ], JSON_THROW_ON_ERROR));
+    config(['outpost.hooks.setup' => [
+        'browsers' => ['npx', 'playwright', 'install', 'chromium'],
+        'passport' => ['@php', 'artisan', 'passport:keys', '--force'],
+    ]]);
+
+    fakeHealthyDoctor();
+
+    $checks = collect($this->doctor->inspect())->keyBy('name');
+
+    expect($checks['Setup hooks']->status)->toBe(DoctorCheck::PASS)
+        ->and($checks['Setup hooks']->detail)->toContain('Playwright')
+        ->and($checks['Setup hooks']->detail)->toContain('Passport');
+});

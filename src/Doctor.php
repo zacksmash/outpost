@@ -27,6 +27,8 @@ class Doctor
 
     public const string SECRETS_CHECK = 'Host secrets';
 
+    public const string SETUP_HOOKS_CHECK = 'Setup hooks';
+
     /**
      * The oldest Apple container CLI Outpost supports.
      */
@@ -388,7 +390,123 @@ class Doctor
             $checks[] = $secrets;
         }
 
+        if (($setupHooks = $this->setupHooks()) !== null) {
+            $checks[] = $setupHooks;
+        }
+
         return $checks;
+    }
+
+    /**
+     * Suggest setup hooks for detected tools needing per-instance preparation.
+     *
+     * A fresh worktree has no Playwright browser binary and no Passport
+     * encryption keys. Both are project-owned — the browser must match the
+     * project's pinned Playwright version and the keys are application
+     * credentials — so Outpost can only point at the [hooks.setup] entry
+     * that prepares them. Returns null when neither tool is detected, so
+     * the row appears only when the guidance applies.
+     */
+    protected function setupHooks(): ?DoctorCheck
+    {
+        $tools = array_filter([
+            'Playwright' => $this->usesPlaywright(),
+            'Passport' => $this->usesPassport(),
+        ]);
+
+        if ($tools === []) {
+            return null;
+        }
+
+        $hooks = [
+            'Playwright' => ['playwright', "'browsers' => ['npx', 'playwright', 'install', 'chromium']"],
+            'Passport' => ['passport:keys', "'passport' => ['@php', 'artisan', 'passport:keys', '--force']"],
+        ];
+        $unprepared = array_filter(
+            array_keys($tools),
+            fn (string $tool): bool => ! $this->setupHookMentions($hooks[$tool][0]),
+        );
+
+        if ($unprepared === []) {
+            return DoctorCheck::pass(
+                self::SETUP_HOOKS_CHECK,
+                'Setup hooks prepare '.implode(' and ', array_keys($tools)).' for every fresh instance.',
+            );
+        }
+
+        return DoctorCheck::warning(
+            self::SETUP_HOOKS_CHECK,
+            'The application uses '.implode(' and ', $unprepared).', but no setup hook prepares a fresh instance for it, so instances start unable to pass those tests.',
+            'Add to [hooks.setup] in config/outpost.php: '.implode(' and ', array_map(
+                fn (string $tool): string => $hooks[$tool][1],
+                $unprepared,
+            )),
+        );
+    }
+
+    /**
+     * Determine whether the application depends on Playwright.
+     */
+    protected function usesPlaywright(): bool
+    {
+        $manifest = $this->manifest('package.json');
+
+        foreach (['devDependencies', 'dependencies'] as $section) {
+            if (isset($manifest[$section]['@playwright/test']) || isset($manifest[$section]['playwright'])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Determine whether the application depends on Laravel Passport.
+     */
+    protected function usesPassport(): bool
+    {
+        $manifest = $this->manifest('composer.json');
+
+        return isset($manifest['require']['laravel/passport'])
+            || isset($manifest['require-dev']['laravel/passport']);
+    }
+
+    /**
+     * Read a JSON manifest from the application root, tolerating absence.
+     *
+     * @return array<string, mixed>
+     */
+    protected function manifest(string $file): array
+    {
+        if (! $this->files->exists($path = $this->basePath.'/'.$file)) {
+            return [];
+        }
+
+        $decoded = json_decode($this->files->get($path), true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * Determine whether any configured setup hook mentions the given token.
+     */
+    protected function setupHookMentions(string $token): bool
+    {
+        $hooks = $this->config->get('outpost.hooks.setup', []);
+
+        if (! is_array($hooks)) {
+            return false;
+        }
+
+        foreach ($hooks as $command) {
+            foreach (is_array($command) ? $command : [] as $argument) {
+                if (is_string($argument) && str_contains($argument, $token)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -219,6 +219,8 @@ return [
     'hooks' => [
         'setup' => [
             // 'search' => ['@php', 'artisan', 'scout:sync-index-settings'],
+            // 'browsers' => ['npx', 'playwright', 'install', 'chromium'],
+            // 'passport' => ['@php', 'artisan', 'passport:keys', '--force'],
         ],
         'verify' => [
             // 'generate' => ['npm', 'run', 'generate'],
