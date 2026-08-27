@@ -585,18 +585,39 @@ class Runtime implements RuntimeDriver
     }
 
     /**
+     * Seconds granted after an in-container TERM before escalating to KILL.
+     */
+    protected const int EXEC_KILL_GRACE = 10;
+
+    /**
+     * Host backstop headroom beyond the in-container timeout, in seconds.
+     */
+    protected const int EXEC_TIMEOUT_BUFFER = 15;
+
+    /**
      * Stream a non-interactive command inside the given container.
      *
      * Without a timeout the command may run forever: provisioning steps
      * like a cold composer or npm install legitimately outlast any cap
-     * Outpost could pick for them. A timeout kills only the host exec
-     * client; the in-container process may keep running.
+     * Outpost could pick for them. A timeout is enforced inside the
+     * container by coreutils timeout(1), which kills the real process
+     * and exits 124 — leaving no orphan behind. The host exec client is
+     * capped slightly later as a backstop, so a wedged exec session that
+     * ignores even the in-container kill still comes back.
      *
      * @param  list<string>  $command
      */
     public function run(string $container, array $command, ?callable $output = null, bool $root = false, ?int $timeout = null): int
     {
-        return ($timeout === null ? Process::forever() : Process::timeout($timeout))
+        if ($timeout !== null) {
+            $command = ['timeout', '--kill-after='.self::EXEC_KILL_GRACE, (string) $timeout, ...$command];
+        }
+
+        $pending = $timeout === null
+            ? Process::forever()
+            : Process::timeout($timeout + self::EXEC_KILL_GRACE + self::EXEC_TIMEOUT_BUFFER);
+
+        return $pending
             ->run($this->execCommand($container, $command, $root), $output)
             ->exitCode() ?? 1;
     }

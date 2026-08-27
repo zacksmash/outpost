@@ -270,7 +270,7 @@ Arguments in angle brackets are required. Arguments in square brackets are optio
 
 The `outpost:exec` command passes every token after `--` directly to the command. It does not invoke a shell. It streams output and returns the command's exit code. Both `outpost:exec` and `outpost:shell` run as a host-ID-mapped, non-root user. Use `--root` only when the command needs it.
 
-There is no timeout by default — a cold `composer install` legitimately outlasts any cap Outpost could pick. Scripts and agents that must fail fast can pass `--timeout=<seconds>`: an expired timeout exits with code `124`, distinct from the inner command's own failure codes. The timeout kills the host exec client; the command may keep running inside the instance, so the failure message points to `outpost:recover` if the instance then wedges.
+There is no timeout by default — a cold `composer install` legitimately outlasts any cap Outpost could pick. Scripts and agents that must fail fast can pass `--timeout=<seconds>`: the deadline is enforced inside the instance, killing the real command (TERM, then KILL) and exiting with code `124`, distinct from the inner command's own failure codes. A host-side backstop caps the exec client slightly later; if that backstop is what fires, the exec session itself is wedged and the failure message points to `outpost:recover`.
 
 The `doctor`, `list`, `info`, `process`, and `verify` commands support stable `--json` output. Instance-specific JSON commands require an explicit name, never prompt, and return a top-level `error` with an unsuccessful exit code when a report cannot be produced.
 

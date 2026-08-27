@@ -77,16 +77,28 @@ class ExecCommand extends Command
                 return self::FAILURE;
             }
 
-            return $runtime->run(
+            $exit = $runtime->run(
                 $manifest->container,
                 $command,
                 fn (string $type, string $buffer) => $this->output->write($buffer),
                 root: (bool) $this->option('root'),
                 timeout: $timeout,
             );
+
+            // 124 is coreutils timeout reporting the deadline, 137 its
+            // KILL escalation; both mean the command was ended in-place.
+            if ($timeout !== null && in_array($exit, [self::TIMED_OUT, 137], true)) {
+                error("The command was killed after {$timeout} seconds.");
+
+                return self::TIMED_OUT;
+            }
+
+            return $exit;
         } catch (ProcessTimedOutException) {
+            // The backstop fired, so even the in-container kill never came
+            // back — the hallmark of a wedged exec session.
             error("The command was killed after {$timeout} seconds.");
-            note("Only the host exec client was killed; the command may still be running inside [{$manifest->name}].\nIf the instance stops responding, recover it with:\n\n  php artisan outpost:recover {$manifest->name} --force");
+            note("The exec session did not respond to the in-container kill.\nIf the instance stops responding, recover it with:\n\n  php artisan outpost:recover {$manifest->name} --force");
 
             return self::TIMED_OUT;
         } catch (RuntimeException $e) {

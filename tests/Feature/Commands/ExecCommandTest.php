@@ -104,7 +104,7 @@ it('refuses an unknown instance', function () {
         ->assertFailed();
 });
 
-it('applies the requested timeout to the exec client', function () {
+it('enforces the requested timeout inside the container with a host backstop', function () {
     Process::fake([
         processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
             ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
@@ -118,8 +118,63 @@ it('applies the requested timeout to the exec client', function () {
         '--timeout' => '30',
     ])->assertSuccessful();
 
-    Process::assertRan(fn (PendingProcess $process) => $process->timeout === 30
-        && ($process->command[1] ?? null) === 'exec');
+    Process::assertRan(fn (PendingProcess $process) => $process->command === [
+        'container', 'exec', '--env', 'HOME=/home/outpost', '--user', 'outpost', '--workdir', '/app',
+        'feature-x-app', 'timeout', '--kill-after=10', '30', 'php', 'artisan', 'test',
+    ] && $process->timeout === 55);
+});
+
+it('reports a timeout when the in-container command is killed at the deadline', function () {
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+        processPattern('container', 'exec').' *' => Process::result('', '', 124),
+    ]);
+
+    $exit = Artisan::call('outpost:exec', [
+        'name' => 'feature-x',
+        'arguments' => ['php', 'artisan', 'test'],
+        '--timeout' => '30',
+    ]);
+
+    expect($exit)->toBe(124)
+        ->and(Artisan::output())->toContain('killed after 30 seconds');
+});
+
+it('treats a forced kill after the deadline as the same timeout outcome', function () {
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+        processPattern('container', 'exec').' *' => Process::result('', '', 137),
+    ]);
+
+    $exit = Artisan::call('outpost:exec', [
+        'name' => 'feature-x',
+        'arguments' => ['php', 'artisan', 'test'],
+        '--timeout' => '30',
+    ]);
+
+    expect($exit)->toBe(124)
+        ->and(Artisan::output())->toContain('killed after 30 seconds');
+});
+
+it('passes an inner 137 through untouched when no timeout was requested', function () {
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'running']],
+        ], JSON_THROW_ON_ERROR)),
+        processPattern('container', 'exec').' *' => Process::result('', '', 137),
+    ]);
+
+    $exit = Artisan::call('outpost:exec', [
+        'name' => 'feature-x',
+        'arguments' => ['php', 'artisan', 'test'],
+    ]);
+
+    expect($exit)->toBe(137)
+        ->and(Artisan::output())->not->toContain('killed after');
 });
 
 it('runs without any timeout by default', function () {
