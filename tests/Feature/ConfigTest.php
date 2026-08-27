@@ -7,7 +7,7 @@ use Zacksmash\Outpost\Runtime;
 it('exposes sensible defaults', function () {
     expect(config('outpost.domain'))->toBe('outpost')
         ->and(config('outpost.image'))->toBe(Runtime::PUBLISHED_IMAGE)
-        ->and(Runtime::PUBLISHED_IMAGE)->toBe('ghcr.io/zacksmash/outpost:0.7.0')
+        ->and(Runtime::PUBLISHED_IMAGE)->toBe('ghcr.io/zacksmash/outpost:0.8.0')
         ->and(config('outpost.dns'))->toBe('1.1.1.1')
         ->and(config('outpost.path'))->toBe('.outpost')
         ->and(config('outpost.resources'))->toBe(['cpus' => 4, 'memory' => '2G'])
@@ -26,7 +26,20 @@ it('exposes sensible defaults', function () {
         ])
         ->and(config('outpost.secrets'))->toBe([])
         ->and(config('outpost.lifecycle_timeout'))->toBe(30)
-        ->and(config('outpost.timeout'))->toBe(60);
+        ->and(config('outpost.timeout'))->toBe(60)
+        ->and(config('outpost.max_concurrent_provisions'))->toBe(3);
+});
+
+it('casts the provisioning concurrency limit to an integer even from the environment', function () {
+    putenv('OUTPOST_MAX_CONCURRENT_PROVISIONS=5');
+
+    try {
+        $config = require dirname(__DIR__, 2).'/config/outpost.php';
+
+        expect($config['max_concurrent_provisions'])->toBe(5);
+    } finally {
+        putenv('OUTPOST_MAX_CONCURRENT_PROVISIONS');
+    }
 });
 
 it('casts instance resource values from the environment', function () {

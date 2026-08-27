@@ -50,6 +50,49 @@ class Host
     }
 
     /**
+     * Get the IDs of host [container exec] client processes attached to the container.
+     *
+     * These are the host-side CLI clients streaming an exec session. When
+     * one wedges on a dead exec socket, the container cannot be stopped
+     * until the client dies, so recovery needs to find and kill them.
+     *
+     * @return list<int>
+     */
+    public function execClientIds(string $container): array
+    {
+        $result = Process::run(['pgrep', '-f', "container exec .*[[:space:]]{$container}[[:space:]]"]);
+
+        // pgrep exits 1 to report "no matches", which is a normal answer.
+        if (($result->exitCode() ?? 2) > 1) {
+            throw new RuntimeException(
+                "Unable to inspect host processes for [{$container}]: ".trim($result->errorOutput() ?: $result->output()),
+            );
+        }
+
+        return array_values(array_map(
+            intval(...),
+            array_filter(preg_split('/\s+/', trim($result->output())) ?: []),
+        ));
+    }
+
+    /**
+     * Signal the given host processes to terminate.
+     *
+     * Failures are tolerated: a process that died between discovery and
+     * the signal is exactly the outcome the signal wanted.
+     *
+     * @param  list<int>  $ids
+     */
+    public function terminateProcesses(array $ids, bool $force = false): void
+    {
+        if ($ids === []) {
+            return;
+        }
+
+        Process::run(['kill', $force ? '-KILL' : '-TERM', ...array_map(strval(...), $ids)]);
+    }
+
+    /**
      * Open a URL with the macOS default browser handler.
      */
     public function open(string $url): void

@@ -94,6 +94,15 @@ class OutpostServiceProvider extends ServiceProvider
                 str_starts_with($path, '/') ? $path : $app->basePath($path),
             );
         });
+
+        $this->app->singleton(ProvisioningSlots::class, function (Application $app) {
+            $path = $app->make('config')->string('outpost.path');
+
+            return new ProvisioningSlots(
+                str_starts_with($path, '/') ? $path : $app->basePath($path),
+                $app->make('config')->integer('outpost.max_concurrent_provisions'),
+            );
+        });
     }
 
     /**
@@ -122,6 +131,7 @@ class OutpostServiceProvider extends ServiceProvider
             Console\Commands\OutpostCommand::class,
             Console\Commands\ProcessCommand::class,
             Console\Commands\PullCommand::class,
+            Console\Commands\RecoverCommand::class,
             Console\Commands\RemoveCommand::class,
             Console\Commands\SecretCommand::class,
             Console\Commands\ShellCommand::class,

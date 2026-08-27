@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use Zacksmash\Outpost\Outposts;
+use Zacksmash\Outpost\ProvisioningSlots;
 use Zacksmash\Outpost\Runtime;
 
 beforeEach(function () {
@@ -276,4 +277,28 @@ it('refuses an unknown instance', function () {
     $this->artisan('outpost:start', ['name' => 'missing'])
         ->expectsOutputToContain('The [missing] instance does not exist.')
         ->assertFailed();
+});
+
+it('waits for a provisioning slot before starting', function () {
+    config(['outpost.max_concurrent_provisions' => 1]);
+
+    Sleep::fake();
+
+    $held = app(ProvisioningSlots::class)->acquire();
+
+    Sleep::whenFakingSleep(fn () => $held->release());
+
+    Process::fake([
+        processPattern('container', 'list', '--all', '--format', 'json') => Process::result(json_encode([
+            ['id' => 'feature-x-app', 'status' => ['state' => 'stopped']],
+        ], JSON_THROW_ON_ERROR)),
+        processPattern('container', 'start', 'feature-x-app') => Process::result(''),
+        processPattern('container', 'exec').' *'.processPattern('feature-x-app', 'curl').' *' => Process::result(''),
+        processPattern('dscacheutil', '-flushcache') => Process::result(''),
+    ]);
+
+    $this->artisan('outpost:start', ['name' => 'feature-x'])
+        ->expectsOutputToContain('Waiting for a provisioning slot')
+        ->expectsOutputToContain('Started [feature-x]')
+        ->assertSuccessful();
 });

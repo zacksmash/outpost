@@ -35,7 +35,7 @@ return [
     |
     */
 
-    'image' => env('OUTPOST_IMAGE', 'ghcr.io/zacksmash/outpost:0.7.0'),
+    'image' => env('OUTPOST_IMAGE', 'ghcr.io/zacksmash/outpost:0.8.0'),
 
     /*
     |--------------------------------------------------------------------------
@@ -268,6 +268,22 @@ return [
         'username' => 'outpost',
         'password' => 'password',
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Provisioning Concurrency
+    |--------------------------------------------------------------------------
+    |
+    | Booting and provisioning an instance briefly holds tens of thousands of
+    | host file descriptors, so too many at once can exhaust the kernel file
+    | table and take down every instance with it. At most this many creations,
+    | recreations, upgrades, and starts boot at the same time in this project;
+    | the rest wait their turn and say so. The limit is per project — lower it
+    | when provisioning several repositories in parallel. Set 0 to remove it.
+    |
+    */
+
+    'max_concurrent_provisions' => (int) env('OUTPOST_MAX_CONCURRENT_PROVISIONS', 3),
 
     /*
     |--------------------------------------------------------------------------

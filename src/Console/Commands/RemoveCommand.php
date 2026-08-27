@@ -10,6 +10,7 @@ use InvalidArgumentException;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Console\Concerns\FlushesDnsCaches;
+use Zacksmash\Outpost\Console\Concerns\RefusesWithoutTerminal;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Contracts\RuntimeDriver;
 use Zacksmash\Outpost\Git;
@@ -30,6 +31,7 @@ use function Laravel\Prompts\warning;
 class RemoveCommand extends Command
 {
     use FlushesDnsCaches;
+    use RefusesWithoutTerminal;
     use ResolvesInstances;
 
     /**
@@ -38,6 +40,7 @@ class RemoveCommand extends Command
     protected $signature = 'outpost:remove
         {name? : The name of the instance}
         {--force : Skip confirmation without bypassing worktree protection}
+        {--delete-branch : Delete the instance branch after removal without prompting}
         {--discard-changes : Remove even when the worktree has uncommitted changes}
         {--forget : Remove local state without contacting the runtime or running teardown hooks}';
 
@@ -87,10 +90,16 @@ class RemoveCommand extends Command
             ? "Forget the [{$manifest->name}] instance? Its worktree and data will be destroyed, but container [{$manifest->container}] will be left behind."
             : "Remove the [{$manifest->name}] instance? Its container, worktree, and data will be destroyed.";
 
-        if (! $this->option('force') && ! confirm($confirmation, false)) {
-            info('Nothing removed.');
+        if (! $this->option('force')) {
+            if ($this->refusesWithoutTerminal('remove', $this->forcedRemedy($manifest->name))) {
+                return self::FAILURE;
+            }
 
-            return self::SUCCESS;
+            if (! confirm($confirmation, false)) {
+                info('Nothing removed.');
+
+                return self::SUCCESS;
+            }
         }
 
         try {
@@ -198,11 +207,16 @@ class RemoveCommand extends Command
             return self::FAILURE;
         }
 
-        if (! $this->option('force')
-            && ! confirm("The [{$name}] manifest is unreadable, so its container cannot be determined. Remove the instance directory anyway?", false)) {
-            info('Nothing removed.');
+        if (! $this->option('force')) {
+            if ($this->refusesWithoutTerminal('remove', $this->forcedRemedy($name))) {
+                return self::FAILURE;
+            }
 
-            return self::SUCCESS;
+            if (! confirm("The [{$name}] manifest is unreadable, so its container cannot be determined. Remove the instance directory anyway?", false)) {
+                info('Nothing removed.');
+
+                return self::SUCCESS;
+            }
         }
 
         try {
@@ -213,6 +227,10 @@ class RemoveCommand extends Command
             error($e->getMessage());
 
             return self::FAILURE;
+        }
+
+        if ((bool) $this->option('delete-branch')) {
+            warning('The instance branch could not be determined from the unreadable manifest, so no branch was deleted.');
         }
 
         warning('If the instance still has a container, delete it manually with [container delete <name>].');
@@ -269,15 +287,54 @@ class RemoveCommand extends Command
     }
 
     /**
-     * Offer to delete the instance's branch when it is safe to do so.
+     * Build the exact rerun command, preserving the caller's mode flags.
+     *
+     * Suggesting a bare --force rerun to a --forget or --discard-changes
+     * caller would name a semantically different removal.
+     */
+    protected function forcedRemedy(string $name): string
+    {
+        $flags = array_filter([
+            '--force',
+            $this->option('forget') ? '--forget' : null,
+            $this->option('discard-changes') ? '--discard-changes' : null,
+            $this->option('delete-branch') ? '--delete-branch' : null,
+        ]);
+
+        return "php artisan outpost:remove {$name} ".implode(' ', $flags);
+    }
+
+    /**
+     * Delete the instance's branch when requested, or offer to when it is safe.
+     *
+     * The instance is already gone by the time an explicitly requested
+     * deletion turns out to be unsafe, so that is reported as a loud
+     * warning rather than a failure.
      */
     protected function offerBranchDeletion(Git $git, string $branch): void
     {
+        $requested = (bool) $this->option('delete-branch');
+
+        // A forced removal without an explicit deletion request never
+        // touches branch state, so it cannot fail on an unhealthy repo.
+        if (! $requested && $this->option('force')) {
+            return;
+        }
+
         try {
-            if ($this->option('force')
-                || ! $git->branchExists($branch)
-                || $git->branchCheckedOut($branch)
-                || ! confirm("Delete the [{$branch}] branch too?", false)) {
+            if (! $git->branchExists($branch)) {
+                return;
+            }
+
+            if ($git->branchCheckedOut($branch)) {
+                if ($requested) {
+                    warning("The [{$branch}] branch was not deleted because it is checked out in another worktree.");
+                }
+
+                return;
+            }
+
+            if (! $requested && ! confirm("Delete the [{$branch}] branch too?", false)) {
                 return;
             }
 

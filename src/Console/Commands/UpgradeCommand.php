@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Zacksmash\Outpost\Certificates;
+use Zacksmash\Outpost\Console\Concerns\AcquiresProvisioningSlots;
 use Zacksmash\Outpost\Console\Concerns\RebuildsInstanceContainers;
 use Zacksmash\Outpost\Console\Concerns\ResolvesInstances;
 use Zacksmash\Outpost\Console\Concerns\ResolvesPathRepositoryMounts;
@@ -26,6 +27,7 @@ use Zacksmash\Outpost\Outposts;
 use Zacksmash\Outpost\PathRepositories;
 use Zacksmash\Outpost\Processes;
 use Zacksmash\Outpost\Provisioner;
+use Zacksmash\Outpost\ProvisioningSlots;
 use Zacksmash\Outpost\Secrets;
 use Zacksmash\Outpost\Supervisord;
 
@@ -38,6 +40,7 @@ use function Laravel\Prompts\spin;
 #[AsCommand(name: 'outpost:upgrade')]
 class UpgradeCommand extends Command
 {
+    use AcquiresProvisioningSlots;
     use RebuildsInstanceContainers;
     use ResolvesInstances;
     use ResolvesPathRepositoryMounts;
@@ -76,6 +79,7 @@ class UpgradeCommand extends Command
         Supervisord $supervisord,
         LifecycleHooks $hooks,
         LegacyRedisDump $legacyRedisDump,
+        ProvisioningSlots $slots,
     ): int {
         if ($this->option('all') && is_string($this->argument('name')) && $this->argument('name') !== '') {
             error('Choose an instance name or --all, not both.');
@@ -182,6 +186,10 @@ class UpgradeCommand extends Command
             foreach ($targets as $manifest) {
                 $state = $states[$manifest->container] ?? null;
 
+                // A slot per target rather than one across the whole loop,
+                // so waiting siblings get a turn between rebuilds.
+                $slot = $this->acquireProvisioningSlot($slots);
+
                 $this->rebuildInstanceContainer(
                     $manifest,
                     $outposts,
@@ -205,6 +213,8 @@ class UpgradeCommand extends Command
                 info($force
                     ? "Rebuilt [{$manifest->name}] from the current Outpost configuration using [{$image}]."
                     : ($state === null ? 'Recreated' : 'Upgraded')." [{$manifest->name}] to [{$image}].");
+
+                $slot?->release();
             }
         } catch (RuntimeException $e) {
             error($e->getMessage());
