@@ -59,7 +59,7 @@ function fakeHealthyDoctor(array $overrides = []): void
         processPattern('container', 'system', 'status', '--format', 'json') => Process::result('{"status":"running"}'),
         processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result('{"dns":{"domain":"outpost"}}'),
         processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\noutpost\n"),
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.8.0') => Process::result(fakeImageInspect()),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.8.1') => Process::result(fakeImageInspect()),
         processPattern('git', 'rev-parse', 'HEAD') => Process::result("abc123\n"),
     ]);
 }
@@ -75,7 +75,7 @@ it('passes a healthy supported environment', function () {
         ->and($checks['Platform']->detail)->toBe('macOS 27.0 on arm64')
         ->and($checks['Runtime version']->detail)->toContain('1.2.2')
         ->and($checks['Publication domain']->detail)->toContain('[outpost]')
-        ->and($checks['Base image']->detail)->toContain('[ghcr.io/zacksmash/outpost:0.8.0]');
+        ->and($checks['Base image']->detail)->toContain('[ghcr.io/zacksmash/outpost:0.8.1]');
 });
 
 it('warns when published configuration pins an older official image', function () {
@@ -110,7 +110,7 @@ it('accepts an intentional compatible custom image without a version warning', f
 
 it('rejects an image whose immutable identity cannot be recorded', function () {
     fakeHealthyDoctor([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.8.0') => Process::result(json_encode([
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.8.1') => Process::result(json_encode([
             ['variants' => [['config' => ['config' => ['Labels' => [
                 Runtime::IMAGE_RUNTIME_PATH_LABEL => Runtime::IMAGE_RUNTIME_PATH,
             ]]]]]],
@@ -128,7 +128,7 @@ it('rejects an installed image without the required runtime path contract', func
     $labels = $runtimePath === null ? [] : [Runtime::IMAGE_RUNTIME_PATH_LABEL => $runtimePath];
 
     fakeHealthyDoctor([
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.8.0') => Process::result(json_encode([
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.8.1') => Process::result(json_encode([
             ['variants' => [['config' => ['config' => ['Labels' => $labels]]]]],
         ], JSON_THROW_ON_ERROR)),
     ]);
@@ -155,7 +155,7 @@ it('points an incompatible custom image configuration at the current shared imag
     $check = collect($this->doctor->inspect())->keyBy('name')[Doctor::BASE_IMAGE_CHECK];
 
     expect($check->status)->toBe(DoctorCheck::FAIL)
-        ->and($check->remedy)->toContain('ghcr.io/zacksmash/outpost:0.8.0')
+        ->and($check->remedy)->toContain('ghcr.io/zacksmash/outpost:0.8.1')
         ->and($check->remedy)->toContain('outpost:build --force');
 });
 
@@ -271,7 +271,7 @@ it('reports domain, resolver, image, and project problems with fixes', function 
     fakeHealthyDoctor([
         processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result('{"dns":{"domain":"box"}}'),
         processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\nbox\n"),
-        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.8.0') => Process::result('', 'not found', 1),
+        processPattern('container', 'image', 'inspect', 'ghcr.io/zacksmash/outpost:0.8.1') => Process::result('', 'not found', 1),
         processPattern('git', 'rev-parse', 'HEAD') => Process::result('', 'unknown revision', 128),
     ]);
 
@@ -328,4 +328,82 @@ it('omits the secrets check when no secrets are declared', function () {
     $checks = collect($this->doctor->inspect())->keyBy('name');
 
     expect($checks->has(Doctor::SECRETS_CHECK))->toBeFalse();
+});
+
+it('omits the setup hooks check when neither playwright nor passport is used', function () {
+    fakeHealthyDoctor();
+
+    $checks = collect($this->doctor->inspect())->keyBy('name');
+
+    expect($checks->has('Setup hooks'))->toBeFalse();
+});
+
+it('warns when playwright is used without a browser setup hook', function () {
+    File::put($this->root.'/package.json', json_encode([
+        'devDependencies' => ['@playwright/test' => '^1.49'],
+    ], JSON_THROW_ON_ERROR));
+
+    fakeHealthyDoctor();
+
+    $checks = collect($this->doctor->inspect())->keyBy('name');
+
+    expect($checks['Setup hooks']->status)->toBe(DoctorCheck::WARNING)
+        ->and($checks['Setup hooks']->detail)->toContain('Playwright')
+        ->and($checks['Setup hooks']->remedy)->toContain("'browsers' => ['npx', 'playwright', 'install', 'chromium']");
+});
+
+it('warns when passport is used without a keys setup hook', function () {
+    File::put($this->root.'/composer.json', json_encode([
+        'require' => ['laravel/passport' => '^13.0'],
+    ], JSON_THROW_ON_ERROR));
+
+    fakeHealthyDoctor();
+
+    $checks = collect($this->doctor->inspect())->keyBy('name');
+
+    expect($checks['Setup hooks']->status)->toBe(DoctorCheck::WARNING)
+        ->and($checks['Setup hooks']->detail)->toContain('Passport')
+        ->and($checks['Setup hooks']->remedy)->toContain("'passport' => ['@php', 'artisan', 'passport:keys', '--force']");
+});
+
+it('warns only about the detected tool that lacks a setup hook', function () {
+    File::put($this->root.'/package.json', json_encode([
+        'devDependencies' => ['@playwright/test' => '^1.49'],
+    ], JSON_THROW_ON_ERROR));
+    File::put($this->root.'/composer.json', json_encode([
+        'require' => ['laravel/passport' => '^13.0'],
+    ], JSON_THROW_ON_ERROR));
+    config(['outpost.hooks.setup' => [
+        'browsers' => ['npx', 'playwright', 'install', 'chromium'],
+    ]]);
+
+    fakeHealthyDoctor();
+
+    $checks = collect($this->doctor->inspect())->keyBy('name');
+
+    expect($checks['Setup hooks']->status)->toBe(DoctorCheck::WARNING)
+        ->and($checks['Setup hooks']->detail)->toContain('Passport')
+        ->and($checks['Setup hooks']->detail)->not->toContain('Playwright')
+        ->and($checks['Setup hooks']->remedy)->not->toContain('chromium');
+});
+
+it('passes the setup hooks check when hooks cover the detected tools', function () {
+    File::put($this->root.'/package.json', json_encode([
+        'devDependencies' => ['@playwright/test' => '^1.49'],
+    ], JSON_THROW_ON_ERROR));
+    File::put($this->root.'/composer.json', json_encode([
+        'require' => ['laravel/passport' => '^13.0'],
+    ], JSON_THROW_ON_ERROR));
+    config(['outpost.hooks.setup' => [
+        'browsers' => ['npx', 'playwright', 'install', 'chromium'],
+        'passport' => ['@php', 'artisan', 'passport:keys', '--force'],
+    ]]);
+
+    fakeHealthyDoctor();
+
+    $checks = collect($this->doctor->inspect())->keyBy('name');
+
+    expect($checks['Setup hooks']->status)->toBe(DoctorCheck::PASS)
+        ->and($checks['Setup hooks']->detail)->toContain('Playwright')
+        ->and($checks['Setup hooks']->detail)->toContain('Passport');
 });

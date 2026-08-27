@@ -35,7 +35,7 @@ return [
     |
     */
 
-    'image' => env('OUTPOST_IMAGE', 'ghcr.io/zacksmash/outpost:0.8.0'),
+    'image' => env('OUTPOST_IMAGE', 'ghcr.io/zacksmash/outpost:0.8.1'),
 
     /*
     |--------------------------------------------------------------------------
@@ -219,6 +219,8 @@ return [
     'hooks' => [
         'setup' => [
             // 'search' => ['@php', 'artisan', 'scout:sync-index-settings'],
+            // 'browsers' => ['npx', 'playwright', 'install', 'chromium'],
+            // 'passport' => ['@php', 'artisan', 'passport:keys', '--force'],
         ],
         'verify' => [
             // 'generate' => ['npm', 'run', 'generate'],
