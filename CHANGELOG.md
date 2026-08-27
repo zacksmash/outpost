@@ -1,6 +1,21 @@
 # Release Notes
 
-## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.7.0...HEAD)
+## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.8.0...HEAD)
+
+## [v0.8.0](https://github.com/zacksmash/outpost/commits/main/compare/v0.7.0...v0.8.0) - 2026-08-27
+
+### Added
+
+- `outpost:recover <name>` recovers one wedged instance — killing its stale host `container exec` clients, stopping it, and starting it again — without touching sibling instances or restarting the whole runtime.
+- A provisioning concurrency limit: at most `max_concurrent_provisions` (default 3) instance creations, recreations, upgrades, and starts boot at once per project; later ones wait visibly for a slot, and a killed provision releases its slot immediately.
+- `outpost:exec --timeout=<seconds>` enforces a deadline inside the instance, killing the real command and exiting with code `124`, distinct from the inner command's own codes. No timeout remains the default.
+- `outpost:remove --delete-branch` deletes the instance branch after removal without prompting.
+
+### Changed
+
+- Non-interactive `outpost:remove` and `outpost:recover` without `--force` now fail loudly with the exact rerun command instead of silently declining the confirmation and exiting 0. Scripts passing `--no-interaction` must add `--force`.
+- The bare `outpost` command refuses a branch argument that matches an `outpost:*` subcommand (`outpost list`) unless a local branch by that name exists, suggesting the colon form.
+- Pinned the package and release image together at `ghcr.io/zacksmash/outpost:0.8.0`.
 
 ## [v0.7.0](https://github.com/zacksmash/outpost/commits/main/compare/v0.6.0...v0.7.0) - 2026-08-20
 
@@ -220,6 +235,7 @@ Outpost is now deliberately an isolated Laravel branch environment for parallel 
 ```bash
 composer update zacksmash/outpost --with-all-dependencies
 php artisan outpost:upgrade --all
+
 
 
 
