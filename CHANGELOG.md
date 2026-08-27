@@ -1,6 +1,17 @@
 # Release Notes
 
-## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.8.0...HEAD)
+## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.8.1...HEAD)
+
+## [v0.8.1](https://github.com/zacksmash/outpost/commits/main/compare/v0.8.0...v0.8.1) - 2026-08-27
+
+### Added
+
+- `outpost:doctor` gains a **Setup hooks** check: when the application depends on Playwright or Laravel Passport but no `hooks.setup` entry prepares them, doctor warns with the exact hook to add — so fresh instances land with a browser binary and encryption keys instead of failing their first test run. The row appears only when one of the tools is detected.
+- The config stub's `hooks.setup` section now ships the Playwright browser install and `passport:keys --force` entries as commented examples.
+
+### Changed
+
+- Pinned the package and release image together at `ghcr.io/zacksmash/outpost:0.8.1`.
 
 ## [v0.8.0](https://github.com/zacksmash/outpost/commits/main/compare/v0.7.0...v0.8.0) - 2026-08-27
 
@@ -235,6 +246,7 @@ Outpost is now deliberately an isolated Laravel branch environment for parallel 
 ```bash
 composer update zacksmash/outpost --with-all-dependencies
 php artisan outpost:upgrade --all
+
 
 
 
