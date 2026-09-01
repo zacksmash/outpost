@@ -28,7 +28,7 @@ If you only need to inspect a trusted branch, a Git worktree linked to [Laravel 
 ## Requirements
 
 - macOS 26 or newer on Apple silicon
-- Apple's `container` CLI 1.2.x, installed from its [signed releases](https://github.com/apple/container/releases)
+- Apple's `container` CLI 1.2.x–1.3.x, installed from its [signed releases](https://github.com/apple/container/releases)
 - A Laravel application in a Git repository with at least one commit
 - [`mkcert`](https://github.com/FiloSottile/mkcert), if you would like trusted HTTPS
 

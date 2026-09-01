@@ -20,7 +20,7 @@ Use this skill when a Laravel application needs an isolated, editable branch ins
 
 ### 1. Confirm and install
 
-Outpost requires macOS 26 or newer on Apple silicon, Apple `container` 1.2.x, and a Laravel Git repository with at least one commit.
+Outpost requires macOS 26 or newer on Apple silicon, Apple `container` 1.2.x–1.3.x, and a Laravel Git repository with at least one commit.
 
 ```bash
 composer require zacksmash/outpost --dev

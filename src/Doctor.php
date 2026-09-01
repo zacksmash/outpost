@@ -37,7 +37,7 @@ class Doctor
     /**
      * The first Apple container CLI minor not yet verified by Outpost.
      */
-    public const string UNVERIFIED_RUNTIME_VERSION = '1.3.0';
+    public const string UNVERIFIED_RUNTIME_VERSION = '1.4.0';
 
     /**
      * Create a new environment doctor.
@@ -71,7 +71,7 @@ class Doctor
             $checks[] = DoctorCheck::failure(
                 self::RUNTIME_VERSION_CHECK,
                 $e->getMessage(),
-                'Install Apple container 1.2.x, then run: container system start',
+                'Install Apple container 1.3.x, then run: container system start',
             );
         }
 
@@ -180,15 +180,15 @@ class Doctor
             return DoctorCheck::failure(
                 self::RUNTIME_VERSION_CHECK,
                 "Apple container {$version} is older than the supported 1.2.x line.",
-                'Upgrade Apple container to 1.2.x, then restart it.',
+                'Upgrade Apple container to 1.3.x, then restart it.',
             );
         }
 
         if (version_compare($version, self::UNVERIFIED_RUNTIME_VERSION, '>=')) {
             return DoctorCheck::warning(
                 self::RUNTIME_VERSION_CHECK,
-                "Apple container {$version} is newer than the verified 1.2.x line.",
-                'If Outpost behaves unexpectedly, install the latest Apple container 1.2.x release.',
+                "Apple container {$version} is newer than the verified 1.3.x line.",
+                'If Outpost behaves unexpectedly, install the latest Apple container 1.3.x release.',
             );
         }
 

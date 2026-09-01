@@ -92,8 +92,8 @@ it('exits SUCCESS and uses warning styling for a warning-only run', function () 
     $doctor->shouldReceive('inspect')->once()->andReturn([
         DoctorCheck::warning(
             'Runtime version',
-            'Apple container 1.3.0 is newer than the verified 1.2.x line.',
-            'If Outpost behaves unexpectedly, install the latest Apple container 1.2.x release.',
+            'Apple container 1.4.0 is newer than the verified 1.3.x line.',
+            'If Outpost behaves unexpectedly, install the latest Apple container 1.3.x release.',
         ),
         DoctorCheck::pass('Platform', 'macOS 27.0 on arm64'),
     ]);

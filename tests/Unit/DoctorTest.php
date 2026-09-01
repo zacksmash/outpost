@@ -55,7 +55,7 @@ function fakeHealthyDoctor(array $overrides = []): void
         processPattern('uname', '-s') => Process::result("Darwin\n"),
         processPattern('uname', '-m') => Process::result("arm64\n"),
         processPattern('sw_vers', '-productVersion') => Process::result("27.0\n"),
-        processPattern('container', '--version') => Process::result("container CLI version 1.2.2 (build: release)\n"),
+        processPattern('container', '--version') => Process::result("container CLI version 1.3.1 (build: release)\n"),
         processPattern('container', 'system', 'status', '--format', 'json') => Process::result('{"status":"running"}'),
         processPattern('container', 'system', 'property', 'list', '--format', 'json') => Process::result('{"dns":{"domain":"outpost"}}'),
         processPattern('container', 'system', 'dns', 'list') => Process::result("DOMAIN\noutpost\n"),
@@ -73,7 +73,7 @@ it('passes a healthy supported environment', function () {
     expect($checks)->toHaveCount(10)
         ->and($checks->every(fn (DoctorCheck $check): bool => $check->status === DoctorCheck::PASS))->toBeTrue()
         ->and($checks['Platform']->detail)->toBe('macOS 27.0 on arm64')
-        ->and($checks['Runtime version']->detail)->toContain('1.2.2')
+        ->and($checks['Runtime version']->detail)->toContain('1.3.1')
         ->and($checks['Publication domain']->detail)->toContain('[outpost]')
         ->and($checks['Base image']->detail)->toContain('[ghcr.io/zacksmash/outpost:0.8.1]');
 });
@@ -225,12 +225,12 @@ it('fails unsupported platforms and old runtime versions', function () {
     expect($checks['Platform']->status)->toBe(DoctorCheck::FAIL)
         ->and($checks['Platform']->detail)->toContain('macOS 25.6 on x86_64')
         ->and($checks['Runtime version']->status)->toBe(DoctorCheck::FAIL)
-        ->and($checks['Runtime version']->remedy)->toContain('1.2.x');
+        ->and($checks['Runtime version']->remedy)->toContain('1.3.x');
 });
 
 it('warns without failing on a newer unverified runtime minor', function () {
     fakeHealthyDoctor([
-        processPattern('container', '--version') => Process::result("container CLI version 1.3.0 (build: release)\n"),
+        processPattern('container', '--version') => Process::result("container CLI version 1.4.0 (build: release)\n"),
     ]);
 
     $checks = collect($this->doctor->inspect())->keyBy('name');
