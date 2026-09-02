@@ -1,6 +1,13 @@
 # Release Notes
 
-## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.8.1...HEAD)
+## [Unreleased](https://github.com/zacksmash/outpost/commits/main/compare/v0.8.2...HEAD)
+
+## [v0.8.2](https://github.com/zacksmash/outpost/commits/main/compare/v0.8.1...v0.8.2) - 2026-09-02
+
+### Changed
+
+- Verified Apple `container` 1.3.x: `outpost:doctor` now passes on 1.3.x installs and only warns from an unverified 1.4.0 onward. The supported range is 1.2.x–1.3.x, and the 1.3.1 CLI ships security fixes worth taking.
+- Pinned the package and release image together at `ghcr.io/zacksmash/outpost:0.8.2`.
 
 ## [v0.8.1](https://github.com/zacksmash/outpost/commits/main/compare/v0.8.0...v0.8.1) - 2026-08-27
 
@@ -246,6 +253,7 @@ Outpost is now deliberately an isolated Laravel branch environment for parallel 
 ```bash
 composer update zacksmash/outpost --with-all-dependencies
 php artisan outpost:upgrade --all
+
 
 
 
