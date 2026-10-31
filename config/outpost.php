@@ -261,7 +261,9 @@ return [
     | When an instance runs a database service, it uses this database and
     | these credentials. They are baked into the base image by the
     | "outpost:build" command and written into each instance's
-    | .env file, so changing them requires an image rebuild.
+    | .env file, so changing them requires an image rebuild. Use
+    | throwaway values only: they end up in the image history and in
+    | every instance worktree, never in any secret store.
     |
     */
 

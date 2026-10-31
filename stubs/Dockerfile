@@ -1,3 +1,5 @@
+# check=skip=SecretsUsedInArgOrEnv
+
 # The Outpost base image.
 #
 # Every instance boots from this image and differs only by the generated
@@ -8,6 +10,9 @@
 
 FROM ubuntu:24.04
 
+# The database credentials are not secrets: they provision throwaway
+# local databases inside the instance and are written into each
+# instance's .env, so they are expected to live in the image.
 ARG DB_DATABASE=outpost
 ARG DB_USERNAME=outpost
 ARG DB_PASSWORD=password
