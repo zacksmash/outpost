@@ -119,7 +119,7 @@ return [
     |
     */
 
-    'https' => filter_var(env('OUTPOST_HTTPS', false), FILTER_VALIDATE_BOOL),
+    'https' => filter_var(env('OUTPOST_HTTPS', false), FILTER_VALIDATE_BOOLEAN),
 
     'tls' => [
         'path' => env('OUTPOST_TLS_PATH', '.outpost/tls'),
@@ -151,7 +151,7 @@ return [
     |
     */
 
-    'expose_services' => filter_var(env('OUTPOST_EXPOSE_SERVICES', true), FILTER_VALIDATE_BOOL),
+    'expose_services' => filter_var(env('OUTPOST_EXPOSE_SERVICES', true), FILTER_VALIDATE_BOOLEAN),
 
     /*
     |--------------------------------------------------------------------------
